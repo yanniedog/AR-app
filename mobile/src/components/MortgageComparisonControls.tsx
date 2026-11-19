@@ -2,12 +2,14 @@ import { canonicalPurpose, canonicalRepayment } from '../data/mortgageFacets';
 import { isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../data/mortgageFacetScope';
 import { publicCataloguePricingKey, type PublicCatalogueView } from '../data/publicRateIntegration';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { TextInput, useWindowDimensions, View } from 'react-native';
+import { ScrollView, TextInput, useWindowDimensions, View } from 'react-native';
 import { useMortgageComparison, mortgageComparisonValues, type MortgageComparisonInputs } from '../data/mortgageComparison';
 import { openMortgageComparisonProfile, saveMortgageComparisonFacets, saveMortgageComparisonInputs,
   clearSavedMortgageComparison, useMortgageComparisonProfile } from '../data/mortgageComparisonProfile';
 import { profileAttributeOptions } from '../data/profileRequirements';
 import { humanizeEnum } from '../data/format';
+import { DEFAULT_MORTGAGE_BROWSE_FACETS, effectiveMortgageBrowseAssumptions } from '../data/mortgageComparisonScenario';
+import { LIST_REPAYMENT_TERM_YEARS } from '../data/mortgageRepayment';
 import type { Filters } from '../data/selectors';
 import type { RateRow } from '../types';
 import { useStore } from '../data/store';
@@ -140,9 +142,12 @@ function mergeFacetOptions(
   return merged;
 }
 
-export function MortgageComparisonControls({ rows, catalogue, filters, unverified, invalid, collapsible = false, profile = false }: {
+export function MortgageComparisonControls({ rows, catalogue, filters, unverified, invalid, collapsible = false, profile = false,
+  open, onOpenChange }: {
   rows: RateRow[]; catalogue?: PublicCatalogueView; filters: Filters; unverified: number; invalid: boolean;
   collapsible?: boolean; profile?: boolean;
+  /** Controlled expansion for collapsible controls (e.g. opened from an empty state). */
+  open?: boolean; onOpenChange?: (open: boolean) => void;
 }) {
   const theme = useTheme();
   const liveValue = useMortgageComparison();
@@ -297,6 +302,9 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
   };
   const fields: NumericInputField[] = mode === 'lvr' ? ['loanAmount', 'lvr']
     : fundsType === 'offset' ? ['loanAmount', 'fundsAvailable', 'propertyValue'] : ['loanAmount', 'fundsAvailable'];
+  // Rates keeps each unreplaced default (purpose, repayment, LVR 80%) in force.
+  const assumed = profile ? null : effectiveMortgageBrowseAssumptions('Mortgage', withResolvedMode(draft), filters);
+  const shownFacets = (key: FacetKey): readonly string[] => profile || filters[key].length ? filters[key] : DEFAULT_MORTGAGE_BROWSE_FACETS[key];
   const fieldLabel = (field: NumericInputField) =>
     uiLabel(field === 'loanAmount' ? 'Loan amount' : field === 'propertyValue' ? 'Property value'
       : field === 'fundsAvailable' ? fundsType === 'offset' ? 'Offset balance' : 'Deposit' : 'LVR');
@@ -308,26 +316,35 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
   );
   const hasCustomFacets = filters.loanPurposes.length > 0 || filters.repaymentTypes.length > 0;
   const hasAnyCustom = hasCustomInputs || hasCustomFacets;
-  const [openedForEdit, setOpenedForEdit] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const openedForEdit = open ?? localOpen;
+  const setOpenedForEdit = (next: boolean) => { setLocalOpen(next); onOpenChange?.(next); };
   const isExpanded = !collapsible || openedForEdit;
-  const scenarioLabel = hasAnyCustom
+  const facetText = (key: FacetKey) => uiJoin(...shownFacets(key).flatMap((option, index) =>
+    index ? [uiLabel(' / '), humanizeEnum(option)] : [humanizeEnum(option)]));
+  const lvrText = values.lvr !== null ? uiJoin('LVR', ' ', uiRate(values.lvr / 100, 0))
+    : uiJoin('LVR', ' ', '≤', uiCount(80), '%');
+  const scenarioLabel = profile && hasAnyCustom
     ? uiJoin('Mortgage comparison', values.lvr === null ? null : uiJoin(' · ', 'LVR', ' ', uiRate(values.lvr / 100, 0)))
-    : uiJoin('Owner occupied', ' · ', 'Principal & interest', ' · ', 'LVR', ' ', '≤', uiCount(80), '%');
+    : uiJoin(facetText('loanPurposes'), ' · ', facetText('repaymentTypes'), ' · ', lvrText);
   const scopeStatus = (profile || pending ? values.invalid : invalid)
     ? <AppText color="danger">{uiLabel('Invalid comparison inputs')}</AppText>
     : unverified > 0 ? <AppText variant="small">{uiJoin('Eligibility unverified', ' · ', uiCount(unverified))}</AppText> : null;
   if (!isExpanded) {
+    const chips = [
+      facetText('loanPurposes'),
+      facetText('repaymentTypes'),
+      lvrText,
+      ...(values.amount !== null && values.amount > 0 && !values.invalid
+        ? [uiMoney(values.amount, Number.isInteger(values.amount) ? 0 : 2), uiJoin(uiCount(LIST_REPAYMENT_TERM_YEARS), ' ', 'years')] : []),
+    ];
     return (
       <View testID="mortgage-scenario-summary">
-        <Row
-          gap={8}
-          style={{ justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 }}
-        >
-          <AppText variant="small" color="textMuted" style={{ flex: 1 }}>
-            {scenarioLabel}
-          </AppText>
-          <Button title="Edit" variant="secondary" accessibilityLabel="Edit" onPress={() => setOpenedForEdit(true)} />
-        </Row>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ gap: 6, alignItems: 'center', paddingVertical: 2 }}>
+          <Button title="Edit" icon="options" variant="ghost" accessibilityLabel="Edit" onPress={() => setOpenedForEdit(true)} />
+          {chips.map((label, index) => <Chip key={index} label={label} onPress={() => setOpenedForEdit(true)} />)}
+        </ScrollView>
         {scopeStatus}
       </View>
     );
@@ -347,7 +364,8 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     {mode === 'funds' ? <SegmentedControl value={fundsType} options={[{ value: 'deposit', label: uiLabel('Deposit') }, { value: 'offset', label: uiLabel('Offset account') }]}
       onChange={changeFundsType} /> : null}
     <Row gap={8} style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>{fields.map(field => {
-      const fieldRequired = hasAnyCustom && values.lvr === null && !values.invalid && (
+      // Rates applies the default LVR until one is entered; the profile still requires it.
+      const fieldRequired = profile && hasAnyCustom && values.lvr === null && !values.invalid && (
         field === 'lvr'
           ? !draft.lvr.trim()
           : mode === 'funds' && !uiMortgageComparisonInput(draft, field).trim()
@@ -366,7 +384,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
           <TextInput value={uiMortgageComparisonInput(draft, field)} onChangeText={text => change(field, text)}
             keyboardType="decimal-pad" autoCapitalize="none" autoCorrect={false} maxLength={62}
             accessibilityLabel={fieldLabel(field)}
-            placeholder={uiLabel('%')}
+            placeholder={assumed && !draft.lvr.trim() ? uiJoin(uiCount(80), '%') : uiLabel('%')}
             style={{ flex: 1, minWidth: 0, minHeight: 48, color: theme.colors.text, padding: 0, fontSize: theme.font.body }} />
         </View>
       </View>;
@@ -381,21 +399,25 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
       ? <AppText variant="tiny" color="textMuted">{uiLabel('Updating')}</AppText> : null}
     <Row gap={8} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
     {groups.map(group => {
-      const groupIncomplete = hasAnyCustom && filters[group.key].length === 0;
+      const groupIncomplete = profile && hasAnyCustom && filters[group.key].length === 0;
       return <View key={group.key} style={{ gap: 4, flexBasis: Math.min(240, 170 * Math.max(1, fontScale)), flexGrow: 1, minWidth: 0 }}>
       <AppText variant="small" color={groupIncomplete ? 'warning' : 'text'} weight={groupIncomplete ? '700' : undefined}>
         {groupIncomplete ? uiJoin(group.label, ' · ', 'Required') : uiLabel(group.label)}
       </AppText>
       <Row gap={6} style={{ flexWrap: 'wrap' }}>{group.options.map(option => {
         const meaningOf = (value: string) => group.canonicalize(value) ?? value;
-        const selected = filters[group.key].some(item => meaningOf(item) === option);
+        const selected = shownFacets(group.key).some(item => meaningOf(item) === option);
         return <Chip key={option} label={humanizeEnum(option)} selected={selected}
           onPress={() => {
             if (dirty.current) commitDraft(draftRef.current);
             const scoped = profile ? filters : scopeMortgageFacets(useRatesSession.getState().sections.Mortgage.filters, filters.includeNonStandard);
+            // A shown default is replaced, not appended to, by another choice.
+            // The first explicit choice replaces the shown default; later choices add.
+            // Clearing every choice restores the default.
+            const explicit = scoped[group.key];
             saveMortgageComparisonFacets({
               loanPurposes: scoped.loanPurposes, repaymentTypes: scoped.repaymentTypes,
-              [group.key]: selected ? scoped[group.key].filter(item => meaningOf(item) !== option) : [...scoped[group.key], option],
+              [group.key]: selected ? explicit.filter(item => meaningOf(item) !== option) : [...explicit, option],
             });
           }} />;
       })}</Row>

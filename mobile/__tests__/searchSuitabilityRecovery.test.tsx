@@ -155,6 +155,12 @@ afterEach(() => {
   installMandatoryEligibility({ active: false, loading: false, rows: new WeakSet(), productKeys: new Set() });
 });
 
+function chooseBankSort(tree: any) {
+  act(() => tree.root.findByProps({ word: 'Sort' }).props.onPress());
+  const option = tree.root.findAll((node: any) => node.props.accessibilityLabel === 'Bank A–Z' && typeof node.props.onPress === 'function')[0];
+  act(() => option.props.onPress());
+}
+
 test('a closed suitability gate offers recovery instead of claiming no products match', () => {
   let tree: any;
   act(() => { tree = TestRenderer.create(<Search />); });
@@ -545,7 +551,7 @@ test('filter Cancel discards the real draft and preserves query/type/sort/offset
   try {
     const list = tree.root.findByType('FlashList' as any);
     act(() => tree.root.findByType('SearchBar' as any).props.onChangeText('Macquarie'));
-    act(() => tree.root.findByProps({ word: 'Bank' }).props.onPress());
+    chooseBankSort(tree);
     act(() => list.props.onScroll({ nativeEvent: { contentOffset: { y: 312 } } }));
     const initialRows = list.props.data, before = captureRatesSession();
     act(() => mockSurfaces.get('rates.results').actions['search.filters.open']());
@@ -653,7 +659,7 @@ test.each([
   mockState.prefs.includeNonStandard = true;
   let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
   try {
-    const controls = ['Filter', 'Sort', 'Compare', 'Bank', 'More'].map(word =>
+    const controls = ['Filter', 'Sort', 'Compare', 'Lenders', 'More'].map(word =>
       tree.root.findByProps({ word }));
     const toolbar = controls[0].parent;
     expect(controls.every(control => control.parent === toolbar)).toBe(true);
@@ -667,10 +673,9 @@ test.each([
     expect(actions.parent).toBe(toolbar);
     expect(actions.props.word).toBe('More');
     expect(actions.props.icon).toBe('ellipsis-horizontal');
-    expect(tree.root.findByProps({ testID: 'rates-task-controls' }).findAllByType('AppText' as any).map((node: any) =>
-      React.Children.toArray(node.props.children).join(''))).toEqual([
-        'Advertised',
-      ]);
+    // Every toolbar action carries a short visible label; the sort label lives on Sort.
+    expect(controls.map(control => control.props.label)).toEqual(['Filter', 'Advertised', 'Compare', 'Lenders', 'More']);
+    expect(tree.root.findByProps({ testID: 'rates-task-controls' }).findAllByType('AppText' as any)).toHaveLength(0);
     expect(tree.root.findByType('FlashList' as any).props.contentContainerStyle.paddingTop).toBe(0);
     act(() => controls[0].props.onPress());
     const filter = tree.root.findByType('FilterSheet' as any);
@@ -685,11 +690,14 @@ test.each([
     expect(done.props.icon).toBe('checkmark-circle');
     expect(done.props.accessibilityState).toEqual({ selected: true });
     expect(done.props.active).toBe(true);
+    // Lenders opens the filter sheet at its lender group and shows the lender filter count.
+    expect(controls[3].props.accessibilityLabel).toBe('Lenders');
+    expect(controls[3].props.badge).toBe(1);
     act(() => controls[3].props.onPress());
-    expect(useRatesSession.getState().sections.TD.sort).toBe('bank');
-    expect(controls[3].props.accessibilityLabel).toBe('Bank A–Z');
-    expect(controls[3].props.accessibilityState).toEqual({ selected: true });
-    act(() => controls[3].props.onPress());
+    const lenderSheet = tree.root.findByType('FilterSheet' as any);
+    expect(lenderSheet.props.visible).toBe(true);
+    expect(lenderSheet.props.focusLenders).toBe(true);
+    act(() => lenderSheet.props.onClose());
     expect(useRatesSession.getState().sections.TD.sort).toBe('rate');
     act(() => actions.props.onPress());
     expect(tree.root.findAllByType('SheetSurface' as any).some((node: any) => node.props.visible && node.props.title === 'Search')).toBe(true);
@@ -727,7 +735,7 @@ test.each([[411, 1], [360, 2]])('task controls remain outside a scrolled list at
   } finally { act(() => tree.unmount()); }
 });
 
-test.each([[360, 2], [320, 2], [360, 1.3]])('summary metadata reserves a whole line at %s dp / %s font scale without shrinking its label', (width, fontScale) => {
+test.each([[360, 2], [320, 2], [360, 1.3]])('the sort control names the active order at %s dp / %s font scale', (width, fontScale) => {
   mockDimensions = { ...mockDimensions, width, fontScale };
   mockParams = { section: 'Mortgage' };
   mockState.prefs.mortgageRateMetric = 'comparison';
@@ -735,19 +743,13 @@ test.each([[360, 2], [320, 2], [360, 1.3]])('summary metadata reserves a whole l
   let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
   try {
     const actions = tree.root.findByProps({ accessibilityLabel: 'Search actions' });
-    const summary = tree.root.findByProps({ testID: 'rates-task-controls' }).findAllByType('AppText' as any)
-      .find((node: any) => node.props.children === 'Comparison');
-    expect(summary).toBeDefined();
-    expect(summary.props.accessibilityLabel).toBe('Comparison rate');
-    expect(summary.parent.props.style).toMatchObject({ width: '100%', flexShrink: 0 });
-    expect(summary.parent).not.toBe(actions.parent);
+    const sort = actions.parent.findByProps({ word: 'Sort' });
+    expect(sort.props.label).toBe('Comparison');
+    expect(sort.props.accessibilityLabel).toBe('Sort · Comparison rate');
     expect(actions.parent.props.style.flexWrap).toBe('wrap');
-    expect(summary.parent.findAllByType('Button' as any)).toHaveLength(0);
-    expect(summary.props.numberOfLines).toBeUndefined();
-    expect(summary.props.adjustsFontSizeToFit).toBeUndefined();
-    expect(summary.props.allowFontScaling).not.toBe(false);
-    act(() => actions.parent.findByProps({ word: 'Bank' }).props.onPress());
+    chooseBankSort(tree);
     expect(useRatesSession.getState().sections.Mortgage.sort).toBe('bank');
+    expect(actions.parent.findByProps({ word: 'Sort' }).props.label).toBe('Bank');
     act(() => actions.props.onPress());
     expect(tree.root.findAllByType('SheetSurface' as any).some((node: any) => node.props.visible && node.props.title === 'Search')).toBe(true);
   } finally { act(() => tree.unmount()); }
@@ -794,8 +796,10 @@ test('the Rates icon key describes Home loan symbols without replacing the resul
     expect(menu.props.title).toBe('Icon key');
     const labels = menu.findAllByType('AppText' as any).map((node: any) => node.props.children);
     expect(labels).toEqual(expect.arrayContaining([
-      'Advertised or quoted rate', 'Comparison rate', 'Loan-to-value ratio (LVR)', 'Unresolved conditions', 'Freshness', 'Bank A–Z',
+      'Advertised or quoted rate', 'Comparison rate', 'Loan-to-value ratio (LVR)', 'Unresolved conditions', 'Lenders',
     ]));
+    // No row carries a freshness receipt, so the key omits symbols that never vary.
+    expect(labels).not.toContain('Freshness');
     act(() => menu.props.onClose());
     expect(tree.root.findByType('FlashList' as any)).toBe(results);
     act(() => more.props.onPress());
@@ -883,7 +887,7 @@ test('changing result scopes keeps the focused input and exact rate rows mounted
     }
     expect(list.props.data).toHaveLength(exactRows.length);
     for (const row of list.props.data) expect(exactRows).toContain(row);
-    act(() => tree.root.findByProps({ word: 'Bank' }).props.onPress());
+    chooseBankSort(tree);
     expect(useRatesSession.getState().sections.TD.sort).toBe('bank');
     expect(tree.root.findByType('SearchBar' as any)).toBe(input);
     expect(input.props.focused).toBe(true);
@@ -906,7 +910,7 @@ test('one visible tap commits the common sort preset, while advanced Cancel/Back
   let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
   try {
     const list = tree.root.findByType('FlashList' as any);
-    act(() => tree.root.findByProps({ word: 'Bank' }).props.onPress());
+    chooseBankSort(tree);
     expect(useRatesSession.getState().sections.TD.sort).toBe('bank');
     expect(tree.root.findAllByType('SheetSurface' as any).filter((node: any) => node.props.visible)).toHaveLength(0);
     act(() => list.props.onScroll({ nativeEvent: { contentOffset: { y: 312 } } }));
@@ -927,8 +931,9 @@ test('one visible tap commits the common sort preset, while advanced Cancel/Back
     expect(useRatesSession.getState().sections.TD.sort).toBe('rate');
     expect(useRatesSession.getState().sections.TD.scrollOffset).toBe(0);
     expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 0, animated: false });
-    act(() => tree.root.findByProps({ word: 'Bank' }).props.onPress());
-    act(() => tree.root.findByProps({ word: 'Bank' }).props.onPress());
+    chooseBankSort(tree);
+    act(() => tree.root.findByProps({ word: 'Sort' }).props.onPress());
+    act(() => tree.root.findAll((node: any) => node.props.accessibilityLabel === 'Advertised rate' && typeof node.props.onPress === 'function')[0].props.onPress());
     expect(useRatesSession.getState().sections.TD.sort).toBe('rate');
     expect(sortSheet().props.visible).toBe(false);
   } finally { act(() => tree.unmount()); }

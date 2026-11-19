@@ -18,7 +18,8 @@ export const PreparedProductCard = React.memo(function PreparedProductCard({ quo
   const fixed = previous.quoteOwner != null && previous.quoteOwner === next.quoteOwner && previous.row === next.row;
   const keys = new Set([...Object.keys(previous), ...Object.keys(next)]);
   for (const key of keys) {
-    if (fixed && key === 'rateScenario') continue;
+    // A stable payable rate can still produce a different interest-only payment.
+    if (fixed && key === 'rateScenario' && previous.rateScenario?.offsetBalance === next.rateScenario?.offsetBalance) continue;
     if (previous[key as keyof Props] !== next[key as keyof Props]) return false;
   }
   return true;

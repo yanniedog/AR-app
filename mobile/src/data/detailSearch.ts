@@ -2,6 +2,43 @@ import { descriptiveValue } from './descriptiveValue';
 import type { ProductDetail } from '../types';
 import { productFactsSearchText } from './productFacts';
 import { yieldToUi } from '../lib/yieldToUi';
+import { brandKeyForProvider, brandKeyForSearchTerm } from './bankBrand';
+
+/** True when `token` starts a word in `text` (both lower-case): "ing" matches
+ * "ING Bank" but not "lending". */
+export function hasWordPrefix(text: string, token: string): boolean {
+  if (!token) return true;
+  let at = text.indexOf(token);
+  while (at >= 0) {
+    if (at === 0 || !/[\p{L}\p{N}]/u.test(text[at - 1])) return true;
+    at = text.indexOf(token, at + 1);
+  }
+  return false;
+}
+
+function blobMatches(blob: string, tokens: readonly string[]): boolean {
+  return tokens.every(token => hasWordPrefix(blob, token));
+}
+
+export interface ParsedSearchQuery {
+  /** Canonical lender when the query names one by name, alias or short name. */
+  lender: string | null;
+  /** Remaining lower-case word tokens. */
+  tokens: string[];
+}
+
+/** A leading or trailing lender name/alias (CBA, CommBank, ING ...) scopes the
+ * query to that lender; every other token must start a word. */
+export function parseSearchQuery(query: string): ParsedSearchQuery {
+  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  for (let size = tokens.length; size >= 1; size -= 1) {
+    const head = brandKeyForSearchTerm(tokens.slice(0, size).join(' '));
+    if (head) return { lender: head, tokens: tokens.slice(size) };
+    const tail = brandKeyForSearchTerm(tokens.slice(tokens.length - size).join(' '));
+    if (tail) return { lender: tail, tokens: tokens.slice(0, tokens.length - size) };
+  }
+  return { lender: null, tokens };
+}
 
 export interface SearchIndexPayload {
   schema_version: number;
@@ -134,15 +171,15 @@ export function productKeysMatchingIndex(
   const hits = new Set<string>();
   const prefixHits = longestCachedPrefix(scope, q);
   if (prefixHits) {
-    // Adding characters/tokens can only narrow substring matches, so avoid a
+    // Adding characters/tokens can only narrow word-prefix matches, so avoid a
     // second full-index walk while the user continues typing the same query.
     for (const key of prefixHits) {
       const blob = index.products[key];
-      if (blob && tokens.every((t) => blob.includes(t))) hits.add(key);
+      if (blob && blobMatches(blob, tokens)) hits.add(key);
     }
   } else {
     for (const [key, blob] of Object.entries(index.products)) {
-      if (tokens.every((t) => blob.includes(t))) hits.add(key);
+      if (blobMatches(blob, tokens)) hits.add(key);
     }
   }
   memoSet(memo, new Set(hits));
@@ -163,12 +200,14 @@ export async function prepareRowSearchQueryCooperatively(
   control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
 ): Promise<((row: SearchRow) => boolean) | null> {
   if (control.cancelled?.()) return null;
-  const q = query.trim().toLowerCase();
+  const parsed = parseSearchQuery(query);
+  const q = parsed.tokens.join(' ');
   if (!q || !index?.products) return prepareRowSearchQuery(query, null);
   const scope = activateMemoScope(index);
   const memo = `${scope}:${q}`;
+  const inLender = lenderScope(parsed.lender);
   const cached = memoGet(memo);
-  if (cached) return row => cached.has(row.product_key);
+  if (cached) return row => inLender(row) && cached.has(row.product_key);
   const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
   const now = control.now ?? (() => performance.now());
   const tokens = q.split(/\s+/).filter(Boolean);
@@ -178,7 +217,7 @@ export async function prepareRowSearchQueryCooperatively(
   const prefixHits = longestCachedPrefix(scope, q);
   for (const key of prefixHits ?? ownProductKeys(index.products)) {
     const blob = index.products[key];
-    if (blob && tokens.every(token => blob.includes(token))) hits.add(key);
+    if (blob && blobMatches(blob, tokens)) hits.add(key);
     processed += 1;
     if (processed % 32 === 0 && now() - sliceStarted >= 6) {
       await yieldControl();
@@ -190,7 +229,11 @@ export async function prepareRowSearchQueryCooperatively(
   // An older scan may finish after another publication activated its cache.
   // Its complete matcher belongs to its caller, never to that newer scope.
   if (lastMemoScope === scope && lastMemoIndex === index) memoSet(memo, hits);
-  return row => hits.has(row.product_key);
+  return row => inLender(row) && hits.has(row.product_key);
+}
+
+function lenderScope(lender: string | null): (row: SearchRow) => boolean {
+  return lender ? row => brandKeyForProvider(row.provider) === lender : () => true;
 }
 
 /** Prepare once per filtering pass so indexed hits are not copied for every row. */
@@ -199,14 +242,18 @@ export function prepareRowSearchQuery(
   payloadIndex?: SearchIndexPayload | null,
   searchIndexSha?: string | null,
 ): (row: SearchRow, runtimeDetailText?: string) => boolean {
-  const q = query.trim();
-  if (!q) return () => true;
-  const needle = q.toLowerCase();
-  const hits = productKeysMatchingIndex(payloadIndex ?? null, q, searchIndexSha);
-  if (hits) return (row) => hits.has(row.product_key);
+  if (!query.trim()) return () => true;
+  const { lender, tokens } = parseSearchQuery(query);
+  const inLender = lenderScope(lender);
+  if (!tokens.length) return inLender;
+  const hits = productKeysMatchingIndex(payloadIndex ?? null, tokens.join(' '), searchIndexSha);
+  if (hits) return (row) => inLender(row) && hits.has(row.product_key);
+  // Without an index the remaining text stays one phrase, as before.
+  const phrase = [tokens.join(' ')];
   return (row, runtimeDetailText) => {
-    if (row.provider.toLowerCase().includes(needle) || row.product_name.toLowerCase().includes(needle)) return true;
-    return runtimeDetailText ? runtimeDetailText.includes(needle) : false;
+    if (!inLender(row)) return false;
+    if (blobMatches(row.provider.toLowerCase(), phrase) || blobMatches(row.product_name.toLowerCase(), phrase)) return true;
+    return runtimeDetailText ? blobMatches(runtimeDetailText, phrase) : false;
   };
 }
 

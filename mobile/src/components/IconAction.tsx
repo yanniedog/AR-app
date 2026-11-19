@@ -23,11 +23,13 @@ export interface IconActionProps {
   color?: keyof Palette;
   style?: ViewStyle;
   onLayout?: (event: LayoutChangeEvent) => void;
+  /** Visible short label under the icon, for toolbars where icons alone are ambiguous. */
+  label?: UiCopy;
 }
 
 /** One short press acts; holding names the icon without performing its action. */
 export function IconAction({ icon, word, onPress, accessibilityLabel, accessibilityState,
-  testID, disabled, active, badge, size = 21, color, style, onLayout }: IconActionProps) {
+  testID, disabled, active, badge, size = 21, color, style, onLayout, label }: IconActionProps) {
   const theme = useTheme();
   const held = useRef(false);
   const bubble = useWordBubble(word);
@@ -41,8 +43,9 @@ export function IconAction({ icon, word, onPress, accessibilityLabel, accessibil
       onLayout={onLayout} style={{ ...style, minWidth: typeof style?.minWidth === 'number' ? Math.max(48, style.minWidth) : 48,
         minHeight: typeof style?.minHeight === 'number' ? Math.max(48, style.minHeight) : 48, alignItems: 'center', justifyContent: 'center',
         borderRadius: 12, overflow: 'hidden', backgroundColor: active ? theme.colors.primaryMuted : style?.backgroundColor,
-        opacity: disabled ? 0.45 : 1 }}>
+        opacity: disabled ? 0.45 : 1, ...(label ? { paddingHorizontal: 6, gap: 1 } : null) }}>
       <AppIcon name={icon} size={size} color={theme.colors[color ?? (active ? 'primary' : 'textMuted')]} />
+      {label ? <AppText variant="tiny" numberOfLines={1} color={active ? 'primary' : 'textMuted'}>{label}</AppText> : null}
       {typeof badge === 'number' && Number.isFinite(badge) && badge > 0 ? <View style={{ position: 'absolute', right: 1, top: 0,
         minWidth: 16, paddingHorizontal: 3, borderRadius: 8, backgroundColor: theme.colors.primary }}>
         <AppText numberOfLines={1} style={{ fontSize: 10, color: theme.colors.onPrimary }}>{uiCount(Math.trunc(badge))}</AppText>

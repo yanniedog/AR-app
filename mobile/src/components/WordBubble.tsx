@@ -10,7 +10,7 @@ export const ICON_WORDS = [
   'Filter', 'Sort', 'Compare', 'Done', 'Save', 'Remove', 'History', 'Share',
   'Search', 'Clear', 'Bank', 'Comparison', 'Advertised', 'Ongoing', 'LVR',
   'Term', 'Balance', 'Variable', 'Fixed', 'Eligibility', 'Unknown', 'Sources',
-  'Details', 'Selected', 'Calculate', 'Alerts', 'Fees', 'Bonus', 'Conditional', 'More', 'Tier',
+  'Details', 'Selected', 'Calculate', 'Alerts', 'Fees', 'Bonus', 'Conditional', 'More', 'Tier', 'Lenders',
 ] as const;
 export type IconWord = typeof ICON_WORDS[number];
 type Owner = object;

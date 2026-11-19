@@ -430,7 +430,7 @@ function briefFromCohort(input: BriefInput, sorted: CohortRate[]): NegotiationBr
 
   return {
     version: 1,
-    title: uiJoin('Bank-call brief', ' — ', uiProviderName({ provider: receipt.provider })),
+    title: uiJoin('Negotiation summary', ' — ', uiProviderName({ provider: receipt.provider })),
     evidenceDate: receipt.evidenceDate,
     scenario: scenarioData.facts,
     selectedProduct,

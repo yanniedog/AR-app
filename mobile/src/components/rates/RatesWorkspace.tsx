@@ -8,7 +8,7 @@ import { profileSectionCount } from '../../data/profile';
 import { checkDrillOutcome } from '../../lib/degradationLog';
 import { reconcilePublicCompareSelectionTokens } from '../../data/publicCompareSelectionTokens';
 import { publicScenarioForRow } from '../../data/publicRateIntegration';
-import { effectiveMortgageBrowseAssumptions, mortgageComparisonScenario } from '../../data/mortgageComparisonScenario';
+import { effectiveMortgageBrowseAssumptions, invalidMortgageComparisonField, mortgageComparisonScenario } from '../../data/mortgageComparisonScenario';
 import type { RateScenario } from '../../data/publicRateModel';
 import { ratesResultRowKey } from '../../data/ratesResultRowKey';
 import { publicOfferSelectionToken } from '../../data/publicOfferIdentity';
@@ -59,6 +59,7 @@ import {
   setMortgageComparisonInputs,
   mortgageComparisonRows,
   mortgageComparisonCriteriaReady,
+  mortgageComparisonValues,
   clearMortgageComparison,
 } from '../../data/mortgageComparison';
 import { EmptyState, IndeterminateProgressBar, LoadingRows, ScreenSkeleton } from '../../components/feedback';
@@ -126,8 +127,8 @@ const rowToken = (r: RateRow) => r.public_offer_id ? publicOfferSelectionToken(r
   r.rate_index == null ? r.product_key : `${r.rate_index}#${r.product_key}`;
 
 const SearchProductRow = React.memo(function SearchProductRow({ row, section, selectMode, selected, selectionToken, onToggleSelect,
-  onLogoRenderStateChange, comparisonUnverified, rateScenario, quoteOwner, auditCell, auditRevision, onAuditCellCommit }: {
-  row: RateRow; section: SectionKey; selectMode: boolean; selected: boolean; selectionToken: string;
+  onLogoRenderStateChange, comparisonUnverified, rateScenario, quoteOwner, auditCell, auditRevision, onAuditCellCommit, repaymentAmount }: {
+  row: RateRow; section: SectionKey; selectMode: boolean; selected: boolean; selectionToken: string; repaymentAmount: number | null;
   onToggleSelect: (token: string) => void;
   onLogoRenderStateChange?: (id: string, state: LogoRenderState) => void;
   comparisonUnverified: boolean; rateScenario: RateScenario; quoteOwner?: object | null;
@@ -138,7 +139,7 @@ const SearchProductRow = React.memo(function SearchProductRow({ row, section, se
     [auditCell, auditRevision, onAuditCellCommit, row]);
   const onPress = useCallback(() => selectMode ? onToggleSelect(selectionToken) : openProduct(row.product_key, row.rate_index, row.public_programme_id, 'rates-comparison'),
     [selectMode, onToggleSelect, row, selectionToken]);
-  return <PreparedProductCard quoteOwner={quoteOwner} row={row} section={section} comparisonUnverified={comparisonUnverified} rateScenario={rateScenario}
+  return <PreparedProductCard quoteOwner={quoteOwner} row={row} section={section} comparisonUnverified={comparisonUnverified} rateScenario={rateScenario} repaymentAmount={repaymentAmount}
     logoRenderStateId={`search:${row.rate_index ?? 'default'}#${row.product_key}`}
     onLogoRenderStateChange={onLogoRenderStateChange} selectMode={selectMode} selected={selected} onPress={onPress} />;
 });
@@ -206,8 +207,8 @@ export default function RatesWorkspace() {
     if (scoped !== current.filters) updateRatesSection('Mortgage', { filters: scoped }, true);
   }, [mortgageFilters, mortgageTask.filters]);
   // Do not price/filter the full Mortgage catalogue until LVR + purpose + repayment
-  // are set, except on cold launch when inputs and facets are both empty (default
-  // Owner-Occupied + Principal & Interest + <=80% LVR catalogue browse).
+  // resolve. Each criterion the user has not replaced keeps its default
+  // (Owner occupied, Principal & interest, LVR 80%); invalid inputs get none.
   const mortgageCriteriaReady = section !== 'Mortgage'
     || mortgageComparisonCriteriaReady(mortgageInputs, mortgageFilters);
   const mortgageAssumptions = useMemo(
@@ -315,11 +316,11 @@ export default function RatesWorkspace() {
     if (!isFocused || !deepSearchActive) return;
     // Index warming stays on the navigation deferral. Running it on the idle
     // turn forced a search-index pass during the first results paint.
-    if (section === 'Mortgage' && task.availability !== 'unlisted' && !mortgageCriteriaReady) return;
+    if (section === 'Mortgage' && task.availability !== 'unlisted' && !mortgageCriteriaReady && !isDefaultMortgageBrowse) return;
     return scheduleAfterNavigation(() => {
       void ensureSearchIndex();
     });
-  }, [deepSearchActive, ensureSearchIndex, coreKey, detailsKey, searchIndexSha, isFocused, section, mortgageCriteriaReady, task.availability]);
+  }, [deepSearchActive, ensureSearchIndex, coreKey, detailsKey, searchIndexSha, isFocused, section, mortgageCriteriaReady, isDefaultMortgageBrowse, task.availability]);
   // A cached core reports deep search unavailable until a refresh confirms the
   // same edition is live; that promotion changes only `source`, so retry on the
   // transition itself. Status is read, not depended on: other unavailable
@@ -355,9 +356,12 @@ export default function RatesWorkspace() {
   const [showIconKey, setShowIconKey] = useState(false);
   const [draftFilters, setDraftFilters] = useState<Filters>(filters);
   const [draftAvailability, setDraftAvailability] = useState<RateAvailability>(availability);
-  const openFilters = useCallback(() => {
+  const [filterFocusLenders, setFilterFocusLenders] = useState(false);
+  const openFilters = useCallback((focusLenders?: unknown) => {
+    setFilterFocusLenders(focusLenders === true);
     setDraftAvailability(availability); setDraftFilters({ ...filters, includeNonStandard: task.includeNonStandardOverride ?? useStore.getState().prefs.includeNonStandard }); setFilterOpen(true);
   }, [availability, filters, setFilterOpen, task.includeNonStandardOverride]);
+  const [scenarioOpen, setScenarioOpen] = useState(false);
   const cancelFilters = useCallback(() => setFilterOpen(false), [setFilterOpen]);
   const applyFilters = useCallback((draft: Filters, userApplied = false) => {
     const current = useRatesSession.getState().sections[section];
@@ -789,7 +793,7 @@ export default function RatesWorkspace() {
   }, [includeNonStandard, section]);
   const intentPending = Boolean(intentKey && consumedIntent.current !== intentKey) || !session.initialized;
   const searchPending = intentPending || (availability === 'unlisted' ? !catalogueDetails
-    : section === 'Mortgage' && !mortgageCriteriaReady ? false
+    : section === 'Mortgage' && !mortgageCriteriaReady && !isDefaultMortgageBrowse ? false
     : detailFiltersPending || searchIndexLoading || !publicPricing.ready || !preparedResults.ready);
   const presented = useRef<{ rows: typeof pageRows; section: SectionKey; availability: RateAvailability;
     core: typeof core; catalogue: typeof catalogue; revision: number; scenarioFor: typeof rowScenario;
@@ -802,7 +806,7 @@ export default function RatesWorkspace() {
   }, [searchPending, task.intentError, publicPricing.error, preparedResults.error, pageRows, section, availability,
     core, catalogue, suitabilityRevision, rowScenario, mortgageScope.unverifiedRows]);
   const previous = presented.current;
-  const retainingPrevious = section === 'Mortgage' && searchPending && mortgageCriteriaReady && previous != null && previous.rows.length > 0 &&
+  const retainingPrevious = section === 'Mortgage' && searchPending && (mortgageCriteriaReady || isDefaultMortgageBrowse) && previous != null && previous.rows.length > 0 &&
     previous.section === section && previous.availability === availability && previous.core === core &&
     previous.catalogue === catalogue && previous.revision === suitabilityRevision;
   const displayedPageRows = retainingPrevious ? previous.rows : pageRows;
@@ -1087,10 +1091,13 @@ export default function RatesWorkspace() {
     if (logoCallbacksActiveRef.current) onLogoRenderStateChangeRef.current(id, state);
   }, []);
   const { refFor: physicalCellRef, measure: measurePhysicalCells } = physicalVisibility;
+  const { amount: enteredLoanAmount, invalid: repaymentInputsInvalid, incompleteFunds } = mortgageComparisonValues(mortgageInputs);
+  const repaymentAmount = section === 'Mortgage' && availability === 'listed' && !repaymentInputsInvalid
+    && !incompleteFunds && enteredLoanAmount !== null && enteredLoanAmount > 0 ? enteredLoanAmount : null;
   const renderProduct = useCallback(({ item, target }: { item: ResultRow; target?: string }) => <View collapsable={false}
     ref={target === 'Cell' && !retainingPrevious ? physicalCellRef(item) : undefined}
     onLayout={target === 'Cell' && !retainingPrevious ? measurePhysicalCells : undefined}>{'product_key' in item ? (
-    <SearchProductRow row={item} section={section}
+    <SearchProductRow row={item} section={section} repaymentAmount={repaymentAmount}
       onLogoRenderStateChange={handleLogoRenderStateChange}
       quoteOwner={indexedPricing && !searchPending && !retainingPrevious ? mortgageIndex.index : null}
       rateScenario={displayedScenario(item)} comparisonUnverified={section === 'Mortgage' && displayedUnverified.has(item)}
@@ -1113,7 +1120,7 @@ export default function RatesWorkspace() {
         <AppText variant="small" color="textMuted" style={{ minHeight: COMPACT_ROW.lineHeight }}>{uiLabel('No listed rate')}</AppText>
       </View>
       <View style={{ width: COMPACT_ROW.action }} />
-    </TouchTarget>}</View>, [physicalCellRef, measurePhysicalCells, auditTarget.onCellCommit, listRevision, section, handleLogoRenderStateChange, selectMode, selected, selectionTokenFor, toggleSelect, theme.ledger.rule, fontScale, displayedUnverified, displayedScenario, retainingPrevious, indexedPricing, searchPending, mortgageIndex.index]);
+    </TouchTarget>}</View>, [physicalCellRef, measurePhysicalCells, auditTarget.onCellCommit, listRevision, section, handleLogoRenderStateChange, selectMode, selected, selectionTokenFor, toggleSelect, theme.ledger.rule, fontScale, displayedUnverified, displayedScenario, retainingPrevious, indexedPricing, searchPending, mortgageIndex.index, repaymentAmount]);
   usePerformanceAuditSurface({
     id: 'rates.results',
     work: { ...publicPricing.work, mortgageCriteriaReady, mortgageInputsInvalid, preparingMortgageDefaults,
@@ -1187,6 +1194,7 @@ export default function RatesWorkspace() {
     ],
   }, isFocused);
 
+  const invalidMortgageField = section === 'Mortgage' ? invalidMortgageComparisonField(mortgageInputs) : null;
   if (!core || intentPending) return <ScreenSkeleton />;
   const filterCount = availability === 'unlisted' ? filters.providers.length : activeFilterCount(effectiveFilters);
   const sortLabel = availability === 'unlisted' ? 'All product types · No listed rate' : sortOptions.find(option => option.key === sortKey)?.label ?? 'Rate';
@@ -1195,7 +1203,6 @@ export default function RatesWorkspace() {
       : sortLabel === 'Ongoing rate' ? uiLabel('Ongoing')
         : sortLabel === 'Headline rate' ? uiLabel('Headline')
           : sortLabel === 'Bank A–Z' ? uiLabel('Bank') : sortLabel;
-  const quickSortKey = sortKey === 'bank' ? 'rate' : 'bank';
   return (
     <Screen>
       <Stack.Screen options={{ title: 'Rates' }} />
@@ -1206,31 +1213,30 @@ export default function RatesWorkspace() {
           <View testID="rates-task-controls" style={{ gap: 8 }}>
             <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
             <SearchBar value={uiRatesQuery(task)} onChangeText={setQuery} placeholder="Search" accessibilityLabel="Search rates or banks" />
-            <Row gap={8} style={{ flexWrap: 'wrap' }}>
-              <IconAction icon="options" word="Filter" badge={filterCount || undefined}
+            <Row gap={2} style={{ flexWrap: 'wrap', justifyContent: 'space-between' }}>
+              <IconAction icon="options" word="Filter" label={uiLabel('Filter')} badge={filterCount || undefined}
                 accessibilityLabel={filterCount ? uiJoin('Temporary filters', ' (', uiCount(filterCount), ')') : uiLabel('Temporary filters')}
-                accessibilityState={{ expanded: filterOpen }} active={filterCount > 0} onPress={openFilters} />
-              <IconAction icon="swap-vertical" word="Sort" onPress={() => setSortOpen(true)}
+                accessibilityState={{ expanded: filterOpen }} active={filterCount > 0} onPress={() => openFilters(false)} />
+              <IconAction icon="swap-vertical" word="Sort" label={availability === 'unlisted' ? uiLabel('Sort') : compactSortLabel}
+                accessibilityLabel={availability === 'unlisted' ? uiLabel('Sort') : uiJoin('Sort', ' · ', sortLabel)} onPress={() => setSortOpen(true)}
                 accessibilityState={{ expanded: sortOpen }} disabled={availability === 'unlisted'} />
               <IconAction icon={selectMode ? 'checkmark-circle' : 'git-compare'} word={selectMode ? 'Done' : 'Compare'}
+                label={uiLabel(selectMode ? 'Done' : 'Compare')}
                 active={selectMode} accessibilityState={{ selected: selectMode }}
                 onPress={toggleCompareMode} disabled={availability === 'unlisted'} />
-              <IconAction icon="business-outline" word="Bank" accessibilityLabel="Bank A–Z"
-                active={sortKey === 'bank'} accessibilityState={{ selected: sortKey === 'bank' }}
-                disabled={availability === 'unlisted'} onPress={() => setSortKey(quickSortKey)} />
-              <IconAction icon="ellipsis-horizontal" word="More" onPress={() => { setShowIconKey(false); setToolsOpen(true); }}
+              <IconAction icon="business-outline" word="Lenders" label={uiLabel('Lenders')} accessibilityLabel="Lenders"
+                badge={filters.providers.length || undefined} active={filters.providers.length > 0}
+                accessibilityState={{ expanded: filterOpen && filterFocusLenders }} onPress={() => openFilters(true)} />
+              <IconAction icon="ellipsis-horizontal" word="More" label={uiLabel('More')} onPress={() => { setShowIconKey(false); setToolsOpen(true); }}
                 accessibilityLabel="Search actions" accessibilityState={{ expanded: toolsOpen }} />
             </Row>
-            <View style={{ width: '100%', flexShrink: 0, gap: 2 }}>
-              {searchPending || availability !== 'listed' || searchSub ? (
-                <AppText variant="tiny" color="textMuted">{uiJoin(
-                  searchPending ? uiJoin('Updating', retainingPrevious ? uiJoin(' · ', 'Previous results') : null)
-                    : availability !== 'listed' ? uiJoin(uiCount(resultRows.length), ' ', 'products') : null,
-                  searchSub ? uiJoin(searchPending || availability !== 'listed' ? ' · ' : null, 'Alert on') : null,
-                )}</AppText>
-              ) : null}
-              <AppText variant="tiny" color="textMuted" accessibilityLabel={sortLabel}>{compactSortLabel}</AppText>
-            </View>
+            {searchPending || availability !== 'listed' || searchSub ? (
+              <AppText variant="tiny" color="textMuted">{uiJoin(
+                searchPending ? uiJoin('Updating', retainingPrevious ? uiJoin(' · ', 'Previous results') : null)
+                  : availability !== 'listed' ? uiJoin(uiCount(resultRows.length), ' ', 'products') : null,
+                searchSub ? uiJoin(searchPending || availability !== 'listed' ? ' · ' : null, 'Alert on') : null,
+              )}</AppText>
+            ) : null}
             {path.length ? <Button title="Clear scope" variant="ghost" onPress={() => updateRatesSection(section, { path: [], hierarchyScoped: false }, true)} /> : null}
             {searchIndexUnavailable ? <Row><AppText variant="tiny" color="textMuted">{uiLabel("Name search")}</AppText>
               {searchIndexStatus === 'error' ? <Button title="Retry search" variant="ghost" onPress={() => void ensureSearchIndex()} /> : null}</Row> : null}
@@ -1250,7 +1256,8 @@ export default function RatesWorkspace() {
           data={displayedPageRows}
           ListHeaderComponent={availability === 'listed' ? <View style={{ gap: 8 }}>
             <SavedRequirementsSummary section={section} catalogueRows={summaryCatalogueRows} />
-            {section === 'Mortgage' ? <MortgageComparisonControls collapsible catalogue={catalogue} rows={core.sections.Mortgage.rates} filters={effectiveFilters}
+            {section === 'Mortgage' ? <MortgageComparisonControls collapsible open={scenarioOpen} onOpenChange={setScenarioOpen}
+              catalogue={catalogue} rows={core.sections.Mortgage.rates} filters={effectiveFilters}
               unverified={mortgageCriteriaReady || isDefaultMortgageBrowse ? unverifiedResultCount : 0} invalid={mortgageScope.invalid} /> : null}
             {mortgageSearchActive && catalogue.status !== 'unavailable' ? <><PublicPricingCoverage section={section} rows={pricingCandidates} scenario={scenario} scenarioForRow={rowScenario} compact
               pricingSummary={publicPricing.ready ? {
@@ -1330,6 +1337,9 @@ export default function RatesWorkspace() {
             ) : section === 'Mortgage' && availability === 'listed' && !mortgageCriteriaReady && !isDefaultMortgageBrowse ? (
               <View style={{ gap: theme.spacing(3), paddingTop: theme.spacing(4) }}>
                 <EmptyState title={mortgageInputsInvalid ? 'Invalid comparison inputs' : 'Inputs incomplete'} />
+                {invalidMortgageField ? <AppText variant="small" color="danger">{uiJoin(invalidMortgageField, ' · ', 'Invalid input')}</AppText> : null}
+                <Button title={invalidMortgageField ? uiJoin('Edit', ' ', invalidMortgageField) : uiLabel('Edit')} variant="secondary"
+                  onPress={() => { setScenarioOpen(true); listRef.current?.scrollToOffset({ offset: 0, animated: true }); }} />
               </View>
             ) : searchPending ? (
               <LoadingRows />
@@ -1374,6 +1384,7 @@ export default function RatesWorkspace() {
           loanPurposes: effectiveFilters.loanPurposes,
           repaymentTypes: effectiveFilters.repaymentTypes,
         } : undefined}
+        focusLenders={filterFocusLenders}
         resultNoun={draftAvailability === 'listed' ? 'rates' : 'products'}
         resultCount={draftAvailability === 'listed' ? draftResultCount : unlistedResultCount}
       >

@@ -12,6 +12,7 @@ import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { BankAvatar } from '../src/components/BankAvatar';
 import { EmptyState, ScreenSkeleton } from '../src/components/feedback';
 import { ComparisonDisclosures, PersonalCostComparisonDisclosure, publishedItemCount } from '../src/components/product/ComparisonDisclosures';
+import { uiDetailItem, uiProductFactValue } from '../src/lib/productUiFacts';
 import { CanonicalTermsComparison } from '../src/components/product/CanonicalTermsComparison';
 import { ProductEvidenceCriteriaComparison } from '../src/components/product/ProductEvidenceCriteriaComparison';
 import { ComparableProductFacts } from '../src/components/product/ComparableProductFacts';
@@ -27,6 +28,7 @@ import {
   formatRate,
   formatTerm,
   humanizeEnum,
+  toFraction,
 } from '../src/data/format';
 import { rankFraction, rankedRateLabelForRow } from '../src/data/selectors';
 import {
@@ -48,7 +50,7 @@ import {
   showCompactDetailRow,
   usesCompactCompareLayout,
 } from '../src/lib/comparePresentation';
-import type { ProductDetail, RateRow, SectionKey } from '../src/types';
+import type { DetailItem, ProductDetail, RateRow, SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 import { uiListedLvrRange } from '../src/lib/financialUiCopy';
 
@@ -56,6 +58,7 @@ const LABEL_W = 108;
 const COL_W = 136;
 const HEADER_H = 88;
 const ROW_H = 44;
+const TALL_ROW_H = 88;
 // Fit the 32px rate line, padded Best badge and 4px gap with breathing room.
 const RATE_ROW_H = 72;
 const CHANGE_ROW_H = 64;
@@ -70,6 +73,19 @@ interface AttrRow {
   get: (e: Entry) => UiCopy;
   /** When true, values use tabular numerals (rates). */
   tabular?: boolean;
+  /** Published item lists need more than two lines in the wide table. */
+  tall?: boolean;
+}
+
+/** Published items as label: value facts; an absent list stays Unknown. */
+function publishedItemValues(items: DetailItem[] | undefined, group: 'Fees' | 'Eligibility' | 'Features'): UiCopy {
+  if (!items?.length) return uiLabel('Unknown');
+  return uiJoin(...items.flatMap((item, index) => {
+    const fact = uiDetailItem(item, index, group);
+    const value = uiProductFactValue(fact);
+    const part = value === 'Included' ? fact.label : uiJoin(fact.label, ': ', value);
+    return index ? [uiLabel(' · '), part] : [part];
+  }));
 }
 
 function comparisonIssueCopy(issue: CompareSelectionIssue): { title: UiCopy } {
@@ -227,10 +243,24 @@ export default function Compare() {
   const fractions = entries.map((e) =>
     rankFraction(e.row, e.section, depositRankMetric, mortgageRateMetric),
   );
-  const valid = fractions.filter((f): f is number => f !== null);
-  const bestVal =
-    !comparisonLoading && valid.length === entries.length && valid.length
-      ? (lowerIsBetter ? Math.min(...valid) : Math.max(...valid)) : null;
+  // Compare like with like: a comparison rate never competes with an
+  // advertised-rate fallback for the best-rate badge.
+  const rankedMetricLabels = entries.map((entry) => rankedRateLabelForRow(
+    entry.row, entry.section, depositRankMetric, mortgageRateMetric));
+  const bestByMetric = new Map<string, number>();
+  if (!comparisonLoading) {
+    for (const label of new Set(rankedMetricLabels)) {
+      const peers = fractions.filter((_, index) => rankedMetricLabels[index] === label);
+      const known = peers.filter((f): f is number => f !== null);
+      if (peers.length >= 2 && known.length === peers.length) {
+        bestByMetric.set(label, lowerIsBetter ? Math.min(...known) : Math.max(...known));
+      }
+    }
+  }
+  const isBestEntry = (index: number) => {
+    const best = bestByMetric.get(rankedMetricLabels[index]);
+    return best !== undefined && fractions[index] === best;
+  };
   const bestTone = lowerIsBetter ? 'success' : 'primary';
   const bestHighlightBg =
     bestTone === 'success' ? `${theme.colors.success}33` : theme.colors.primaryMuted;
@@ -249,20 +279,20 @@ export default function Compare() {
     },
     {
       label: uiLabel("Comparison rate"),
-      get: (e) => (e.row.comparison_rate ? formatRate(e.row.comparison_rate) : '—'),
+      get: (e) => (toFraction(e.row.comparison_rate) !== null ? formatRate(e.row.comparison_rate) : 'Unknown'),
       tabular: true,
     },
-    { label: uiLabel("Type"), get: (e) => humanizeEnum(e.row.rate_type) || '—' },
-    { label: uiLabel("Term"), get: (e) => formatTerm(e.row) || '—' },
+    { label: uiLabel("Type"), get: (e) => humanizeEnum(e.row.rate_type) || 'Unknown' },
+    { label: uiLabel("Term"), get: (e) => formatTerm(e.row) || 'Unknown' },
     {
       label: uiLabel("Repayment"),
-      get: (e) => humanizeEnum(e.row.ribbon_repayment_type ?? e.row.repayment_type) || '—',
+      get: (e) => humanizeEnum(e.row.ribbon_repayment_type ?? e.row.repayment_type) || 'Unknown',
     },
     { label: uiLabel("Listed LVR"), get: (e) => uiListedLvrRange(e.row) },
-    { label: uiLabel("Balance"), get: (e) => formatBalanceRange(e.row.balance_min, e.row.balance_max) || '—' },
-    { label: uiLabel("Fees"), get: (e) => publishedItemCount(detailFor(e)?.fees) },
-    { label: uiLabel("Eligibility"), get: (e) => publishedItemCount(detailFor(e)?.eligibility) },
-    { label: uiLabel("Features"), get: (e) => publishedItemCount(detailFor(e)?.features) },
+    { label: uiLabel("Balance"), get: (e) => formatBalanceRange(e.row.balance_min, e.row.balance_max) || 'Unknown' },
+    { label: uiLabel("Fees"), get: (e) => publishedItemValues(detailFor(e)?.fees, 'Fees'), tall: true },
+    { label: uiLabel("Eligibility"), get: (e) => publishedItemValues(detailFor(e)?.eligibility, 'Eligibility'), tall: true },
+    { label: uiLabel("Features"), get: (e) => publishedItemValues(detailFor(e)?.features, 'Features'), tall: true },
     { label: uiLabel("Constraints"), get: (e) => publishedItemCount(detailFor(e)?.constraints) },
     // Calendar-day formatting: UTC-midnight parsing shows the previous day west of UTC.
     { label: uiLabel("Last updated"), get: (e) => uiDate(e.row.last_updated?.slice(0, 10) || core.run_date) },
@@ -340,7 +370,7 @@ export default function Compare() {
             <AppText variant="h3">{uiLabel("Differences")}</AppText>
             {entries.map((entry, idx) => {
               const fraction = fractions[idx];
-              const isBest = bestVal !== null && fraction === bestVal;
+              const isBest = isBestEntry(idx);
               const rankedRateLabel = rankedRateLabelForRow(
                 entry.row,
                 entry.section,
@@ -375,7 +405,7 @@ export default function Compare() {
                       {rankedRateLabel}
                     </AppText>
                     <AppText variant="rateHero" style={{ color: rateColorFor(entry.section) }}>
-                      {fraction === null ? uiLabel("—") : formatRate(fraction)}
+                      {fraction === null ? uiLabel("Unknown") : formatRate(fraction)}
                     </AppText>
                     {productHistoryAvailable ? (
                       <ProductRateChangeLine
@@ -448,7 +478,7 @@ export default function Compare() {
                 />
                 {labelCell(commonRankedRateLabel ?? 'Ranked rate', RATE_ROW_H, '700')}
                 {productHistoryAvailable ? labelCell('Recent move', CHANGE_ROW_H) : null}
-                {detailRows.map((r) => labelCell(r.label, ROW_H))}
+                {detailRows.map((r) => labelCell(r.label, r.tall ? TALL_ROW_H : ROW_H))}
               </View>
 
               {/* Horizontally scrollable product columns */}
@@ -462,7 +492,7 @@ export default function Compare() {
                 <View style={{ flexDirection: 'row' }}>
                   {entries.map((e, idx) => {
                     const f = fractions[idx];
-                    const isBest = bestVal !== null && f === bestVal;
+                    const isBest = isBestEntry(idx);
                     const entryRateColor = rateColorFor(e.section);
                     const entryHighlightBg = isBest ? bestHighlightBg : theme.colors.card;
                     return (
@@ -502,7 +532,7 @@ export default function Compare() {
                           <View style={styles.rateCell}>
                             {isBest ? <Badge label={uiLabel(lowerIsBetter ? "Lowest rate" : "Highest rate")} tone={bestTone} /> : null}
                             <AppText variant="rate" style={{ color: entryRateColor }}>
-                              {f === null ? uiLabel("—") : formatRate(f)}
+                              {f === null ? uiLabel("Unknown") : formatRate(f)}
                             </AppText>
                           </View>,
                           entryHighlightBg,
@@ -524,11 +554,11 @@ export default function Compare() {
                         {detailRows.map((r) =>
                           valueCell(
                             r.label,
-                            ROW_H,
+                            r.tall ? TALL_ROW_H : ROW_H,
                             <AppText
                               variant="small"
                               weight="600"
-                              numberOfLines={2}
+                              numberOfLines={r.tall ? 4 : 2}
                               style={r.tabular ? { fontVariant: ['tabular-nums'] } : undefined}
                             >
                               {r.get(e)}

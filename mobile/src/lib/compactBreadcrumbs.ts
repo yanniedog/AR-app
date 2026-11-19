@@ -13,7 +13,7 @@ const SHORT_LABELS: Record<string, string> = {
   'My scenario': 'Scenario',
   'What if rates change?': 'Projections',
   'Open calculation receipt': 'Receipt',
-  'Bank-call brief': 'Brief',
+  'Negotiation summary': 'Summary',
   'Open-source notices': 'Licences',
   'App health audit': 'Audit',
   'Your profile': 'Profile',

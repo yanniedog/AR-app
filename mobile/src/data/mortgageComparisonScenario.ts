@@ -16,7 +16,9 @@ export const DEFAULT_MORTGAGE_BROWSE_FACETS: Pick<Filters, 'loanPurposes' | 'rep
   repaymentTypes: ['PRINCIPAL_AND_INTEREST'],
 };
 
-/** Derives cold-launch default mortgage browse assumptions when comparison inputs and facets are both empty. */
+/** Each missing Mortgage criterion keeps its default (Owner occupied,
+ * Principal & interest, LVR 80%) until the user replaces it, so entering only
+ * a loan amount never empties the list. Invalid inputs receive no defaults. */
 export function effectiveMortgageBrowseAssumptions(
   section: SectionKey,
   inputs: MortgageComparisonInputs,
@@ -36,19 +38,38 @@ export function effectiveMortgageBrowseAssumptions(
     return { isDefaultBrowse: false, inputsInvalid: false, inputs, facets: filters, pricingFacets };
   }
   const inputsInvalid = mortgageComparisonInputsInvalid(inputs);
+  if (inputsInvalid) return { isDefaultBrowse: false, inputsInvalid, inputs, facets: filters, pricingFacets };
   const inputsEmpty = !inputs.loanAmount.trim()
     && !inputs.lvr.trim()
     && !(inputs.fundsAvailable ?? '').trim()
     && !(inputs.propertyValue ?? '').trim();
-  const facetsEmpty = filters.loanPurposes.length === 0 && filters.repaymentTypes.length === 0;
-  const isDefaultBrowse = inputsEmpty && facetsEmpty && !inputsInvalid;
-  return {
-    isDefaultBrowse,
-    inputsInvalid,
-    inputs: isDefaultBrowse ? DEFAULT_MORTGAGE_BROWSE_INPUTS : inputs,
-    facets: isDefaultBrowse ? DEFAULT_MORTGAGE_BROWSE_FACETS : filters,
-    pricingFacets,
+  const values = mortgageComparisonValues(inputs);
+  const effectiveInputs: MortgageComparisonInputs = inputsEmpty ? DEFAULT_MORTGAGE_BROWSE_INPUTS
+    : values.lvrFraction !== undefined ? inputs
+      // A partially entered funds scenario keeps its known ratio; otherwise 80%.
+      : { loanAmount: inputs.loanAmount, lvr: values.lvr !== null ? String(values.lvr) : DEFAULT_MORTGAGE_BROWSE_INPUTS.lvr, lvrMode: 'lvr' };
+  const isDefaultBrowse = effectiveInputs !== inputs
+    || pricingFacets.loanPurposes !== filters.loanPurposes || pricingFacets.repaymentTypes !== filters.repaymentTypes;
+  return { isDefaultBrowse, inputsInvalid, inputs: effectiveInputs, facets: pricingFacets, pricingFacets };
+}
+
+export type MortgageComparisonField = 'Loan amount' | 'LVR' | 'Deposit' | 'Offset balance' | 'Property value';
+
+/** The first entered value that prevents a comparison, if any. */
+export function invalidMortgageComparisonField(inputs: MortgageComparisonInputs): MortgageComparisonField | null {
+  const invalidMoney = (text: string | undefined, minimum = 0) => {
+    const value = (text ?? '').trim();
+    if (!value) return false;
+    const amount = calculatorAmount(value, MAX_CALCULATOR_MORTGAGE_AMOUNT);
+    return amount === null || amount <= minimum;
   };
+  if (invalidMoney(inputs.loanAmount)) return 'Loan amount';
+  if (inputs.lvrMode === 'funds') {
+    if (invalidMoney(inputs.fundsAvailable, -1)) return inputs.fundsType === 'offset' ? 'Offset balance' : 'Deposit';
+    if (inputs.fundsType === 'offset' && mortgageComparisonInputsInvalid(inputs)) return 'Property value';
+    return null;
+  }
+  return mortgageComparisonInputsInvalid(inputs) ? 'LVR' : null;
 }
 
 /** Resolves the effective Rates comparison scenario including cold-launch browse defaults for product/compare/receipt routes. */
@@ -64,7 +85,10 @@ export function ratesComparisonScenario(
     inputs,
     temporary ?? { loanPurposes: [], repaymentTypes: [] },
   );
-  return mortgageComparisonScenario(section, scenario, effective.inputs, effective.facets);
+  // Funds-mode pricing must retain explicitly missing inputs, even when Rates
+  // can use a fallback LVR to display products.
+  const pricingInputs = inputs.lvrMode === 'funds' ? inputs : effective.inputs;
+  return mortgageComparisonScenario(section, scenario, pricingInputs, effective.facets);
 }
 
 /** Ephemeral comparison inputs override pricing assumptions without saving them. */

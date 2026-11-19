@@ -49,7 +49,7 @@ it('preserves exact product keys and rate tiers when jumping back from a receipt
   } as RateRow;
   const crumbs = buildBreadcrumbs({ pathname: '/rate-receipt', section: 'Savings', product: { row, section: 'Mortgage' }, rateIndex: '7' });
   expect(crumbs.map((crumb) => crumb.label)).toEqual([
-    'Rates', 'Variable home loan', 'Bank-call brief',
+    'Rates', 'Variable home loan', 'Negotiation summary',
   ]);
   expect(crumbs.at(-2)?.target).toEqual({ href: { pathname: '/product/[key]', params: { key: 'bank/a%,b', ri: '7' } } });
 });

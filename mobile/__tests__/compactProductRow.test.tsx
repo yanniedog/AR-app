@@ -65,7 +65,8 @@ test.each([[320, 1], [360, 1], [411, 1], [320, 2], [360, 3]])('keeps a fixed thr
     const line2 = tree.root.findByProps({ testID: 'compact-product-line2' });
     const metrics = tree.root.findByProps({ testID: 'compact-product-metrics' });
     const facts = tree.root.findByProps({ testID: 'compact-product-facts' });
-    expect(name.props).toMatchObject({ numberOfLines: fontScale > 1 ? 2 : 1, weight: '600', children: exact.product_name });
+    expect(name.props).toMatchObject({ numberOfLines: fontScale > 1 ? 2 : 1, weight: '600' });
+    expect(String(name.props.children).endsWith(` · ${exact.product_name}`)).toBe(true);
     expect(line2.props.style).toMatchObject({ flexDirection: 'column' });
     for (const line of [metrics, facts]) {
       expect(line.props.style).toMatchObject({
@@ -112,7 +113,7 @@ test('preserves unknowns, tier index and conditional warnings in two-line layout
   const tree = render({ ...row, ribbon_deposit_kind: 'BONUS', ongoing_rate: undefined }, { section: 'Savings', showTierIndex: true });
   try {
     expect(mainTarget(tree).props.accessibilityLabel).toContain('Ongoing rate: Unknown');
-    expect(tree.root.findByProps({ testID: 'compact-product-name' }).props.children).toBe(row.product_name);
+    expect(String(tree.root.findByProps({ testID: 'compact-product-name' }).props.children).endsWith(row.product_name)).toBe(true);
     expect(tree.root.findByProps({ testID: 'compact-primary-rate' }).props.children).toBe('5.79%');
     expect(tree.root.findByProps({ testID: 'compact-tier-index' }).props.children).toBe('#4');
     expect(tree.root.findByProps({ testID: 'compact-status-0' }).props.name).toBe('flash-outline');
@@ -197,7 +198,7 @@ test('omits redundant BankAvatar when showLenderAction is false and keeps lender
   try {
     expect(selectingWithLender.root.findAllByType('BankAvatar')).toHaveLength(1);
     expect(selectingWithLender.root.findAllByType('Icon').some(node => node.props.name === 'square-outline')).toBe(true);
-    expect(selectingWithLender.root.findByProps({ testID: 'compact-product-name' }).props.children).toBe(row.product_name);
+    expect(String(selectingWithLender.root.findByProps({ testID: 'compact-product-name' }).props.children).endsWith(row.product_name)).toBe(true);
   } finally { act(() => selectingWithLender.unmount()); }
 });
 
@@ -301,7 +302,7 @@ test('fontScale updates preserve primary rate and product name cleanly', () => {
     mockDimensions = { ...mockDimensions, fontScale: 2 };
     act(() => tree.update(<ProductCard row={{ ...row }} section="Mortgage" />));
     expect(tree.root.findByProps({ testID: 'compact-primary-rate' }).props.children).toBe('5.80%');
-    expect(tree.root.findByProps({ testID: 'compact-product-name' }).props.children).toBe(row.product_name);
+    expect(String(tree.root.findByProps({ testID: 'compact-product-name' }).props.children).endsWith(row.product_name)).toBe(true);
   } finally { act(() => tree.unmount()); }
 });
 

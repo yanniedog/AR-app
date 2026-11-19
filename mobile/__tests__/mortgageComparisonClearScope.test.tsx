@@ -128,7 +128,8 @@ test('selecting the final facet flushes the latest amount and offset inputs befo
     act(() => chip.props.onPress());
     expect(useMortgageComparison.getState()).toEqual({ loanAmount: '650000', lvr: '', lvrMode: 'funds', fundsType: 'offset',
       fundsAvailable: '100000', propertyValue: '900000' });
-    expect(useRatesSession.getState().sections.Mortgage.filters.repaymentTypes).toEqual(['PRINCIPAL_AND_INTEREST']);
+    // Principal & interest is the shown default; pressing it keeps the default in force.
+    expect(useRatesSession.getState().sections.Mortgage.filters.repaymentTypes).toEqual([]);
     act(() => tree.root.findByProps({ accessibilityLabel: 'Clear comparison inputs' }).props.onPress());
     act(() => jest.advanceTimersByTime(250));
     expect(useMortgageComparison.getState()).toEqual({ loanAmount: '650000', lvr: '', lvrMode: 'funds', fundsType: 'offset', fundsAvailable: '100000', propertyValue: '900000' });

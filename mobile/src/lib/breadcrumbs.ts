@@ -102,7 +102,7 @@ export function buildBreadcrumbs({
       params: { key: product.row.product_key, ...(rateIndex != null ? { ri: rateIndex } : {}) },
     } };
     trail.push(productCrumb);
-    if (route === '/rate-receipt') trail.push({ label: 'Bank-call brief' });
+    if (route === '/rate-receipt') trail.push({ label: 'Negotiation summary' });
   } else {
     trail = ROUTES[route] ?? [{ label: 'Unavailable' }];
   }
