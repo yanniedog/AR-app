@@ -120,8 +120,7 @@ async function main() {
     } catch (error) {
       line = `results unreadable: ${String(error.message).split('\n')[0]}`;
     }
-    console.log(line);
-    console.log(active.length ? `in flight: ${active.join('; ')}` : 'in flight: none');
+    console.log(`${line} | in flight: ${active.length ? active.join('; ') : 'none'}`);
     return;
   }
   if (cmd === 'watch') {

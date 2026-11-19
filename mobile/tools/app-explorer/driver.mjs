@@ -461,9 +461,10 @@ class Explorer {
     if (url) {
       try {
         const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
+        result.status = res.status;
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const body = await res.text();
         fs.writeFileSync(path.join(this.out, 'debug-log.txt'), body);
-        result.status = res.status;
         result.bytes = Buffer.byteLength(body);
       } catch (error) {
         result.error = String(error.message || error);
@@ -487,6 +488,7 @@ class Explorer {
     let start = null;
     for (const sel of startSel) start = start || await this.find(sel, 3000);
     if (!start) return this.record('audit start', { error: `${kind} audit button not found` });
+    const priorUrls = new Set(this.current.nodes.map(n => `${n.text} ${n.desc}`).join('\n').match(/https:\/\/paste\.(?:rs|c-net\.org)\/[A-Za-z0-9._~-]+/g) || []);
     const t0 = Date.now();
     sh(`input tap ${centre(start).join(' ')}`);
     console.log(`Audit (${kind}) started`);
@@ -506,13 +508,13 @@ class Explorer {
         outcome = 'app crashed';
         await this.snapshot('audit crashed', { error: 'app process died during audit', auditElapsedMs: Date.now() - t0 });
         await this.relaunch();
-        await sleep(15000);
+        await this.record('relaunch after audit crash', {}, 60000);
         await this.openAudit();
         break;
       }
       const texts = nodes.map(n => `${n.text} ${n.desc}`);
-      const found = texts.join('\n').match(/https:\/\/paste\.(?:rs|c-net\.org)\/[A-Za-z0-9._~-]+/);
-      if (found) url = found[0];
+      const found = (texts.join('\n').match(/https:\/\/paste\.(?:rs|c-net\.org)\/[A-Za-z0-9._~-]+/g) || []).find(u => !priorUrls.has(u));
+      if (found) url = found;
       if (texts.some(t => /Audit runner failed/.test(t))) outcome = 'runner failed';
       if (texts.some(t => /Audit cancelled/.test(t))) outcome = 'cancelled';
       const counter = texts.join(' ').match(/([\d,]+) \/ ([\d,]+)/);
@@ -537,7 +539,8 @@ class Explorer {
       if (onAuditHome && !runningNow && Date.now() - t0 > 30000) {
         idleAtHome += 1;
         const hit = await this.scrollUntil({ contains: 'paste.' }, 10);
-        if (hit) url = (hit.text.match(/https:\/\/\S+/) || [])[0] || url;
+        const candidate = hit ? (hit.text.match(/https:\/\/\S+/) || [])[0] : null;
+        if (candidate && !priorUrls.has(candidate)) url = candidate;
         if (url) break;
         if (failedUpload || idleAtHome > 6) break;
         this.swipe('up', 0.9); this.swipe('up', 0.9);
@@ -556,9 +559,10 @@ class Explorer {
     if (url) {
       try {
         const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
+        audit.logStatus = res.status;
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const body = await res.text();
         fs.writeFileSync(path.join(this.out, 'audit-log.txt'), body);
-        audit.logStatus = res.status;
         audit.logBytes = Buffer.byteLength(body);
       } catch (error) {
         audit.logError = String(error.message || error);
@@ -676,7 +680,7 @@ function renderMarkdown(report, baseline) {
     '',
     `Mode ${report.mode} | ${report.steps.length} steps | crashes ${crashed.length} | step failures ${failed.length} | settle timeouts ${slow.length} | steps with JS/native errors ${withErrors.length}`,
     baseline ? `Baseline ${baseline.version}` : '',
-    report.audit ? `**Audit ${report.audit.kind}: outcome ${report.audit.outcome ?? 'completed'} | ${Math.round(report.audit.elapsedMs / 1000)} s | audit log ${report.audit.url ? `${report.audit.logBytes ?? '?'} bytes (audit-log.txt) ${report.audit.url}` : 'not uploaded'} | debug log ${report.audit.debugLog?.url ? `${report.audit.debugLog.bytes ?? '?'} bytes (debug-log.txt) ${report.audit.debugLog.url}` : report.audit.debugLog?.error ?? 'none'}**` : '',
+    report.audit ? `**Audit ${report.audit.kind}: outcome ${report.audit.outcome ?? 'completed'} | ${Math.round(report.audit.elapsedMs / 1000)} s | audit log ${report.audit.url ? (report.audit.logBytes ? `${report.audit.logBytes} bytes (audit-log.txt) ${report.audit.url}` : `fetch failed (${report.audit.logError ?? report.audit.logStatus}) ${report.audit.url}`) : 'not uploaded'} | debug log ${report.audit.debugLog?.url ? (report.audit.debugLog.bytes ? `${report.audit.debugLog.bytes} bytes (debug-log.txt) ${report.audit.debugLog.url}` : `fetch failed (${report.audit.debugLog.error ?? report.audit.debugLog.status}) ${report.audit.debugLog.url}`) : report.audit.debugLog?.error ?? 'none'}**` : '',
     '',
     '| # | step | settle ms | Δ vs base | jank | p90 ms | mem MB | notes |',
     '|---|---|---:|---:|---:|---:|---:|---|',
