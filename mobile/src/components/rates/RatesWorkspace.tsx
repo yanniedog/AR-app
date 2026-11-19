@@ -1224,7 +1224,7 @@ export default function RatesWorkspace() {
                 label={uiLabel(selectMode ? 'Done' : 'Compare')}
                 active={selectMode} accessibilityState={{ selected: selectMode }}
                 onPress={toggleCompareMode} disabled={availability === 'unlisted'} />
-              <IconAction icon="business-outline" word="Bank" label={uiLabel('Lenders')} accessibilityLabel="Lenders"
+              <IconAction icon="business-outline" word="Lenders" label={uiLabel('Lenders')} accessibilityLabel="Lenders"
                 badge={filters.providers.length || undefined} active={filters.providers.length > 0}
                 accessibilityState={{ expanded: filterOpen && filterFocusLenders }} onPress={() => openFilters(true)} />
               <IconAction icon="ellipsis-horizontal" word="More" label={uiLabel('More')} onPress={() => { setShowIconKey(false); setToolsOpen(true); }}

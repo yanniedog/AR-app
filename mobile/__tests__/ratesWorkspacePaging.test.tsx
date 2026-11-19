@@ -1043,7 +1043,8 @@ test('multiple mortgage chips retain both public-only offers with exact row pric
   try {
     act(() => tree.root.findByProps({ accessibilityLabel: 'Edit' }).props.onPress());
     const chips = () => tree.root.findByProps({ testID: 'mortgage-comparison-controls' }).findAllByType('Chip');
-    for (const label of ['Owner occupied', 'Investor', 'Principal & interest', 'Interest only']) {
+    // The first explicit choice replaces each shown default; the next one adds.
+    for (const label of ['Investor', 'Owner occupied', 'Interest only', 'Principal & interest']) {
       act(() => chips().find((chip: any) => chip.props.label === label)!.props.onPress());
     }
     expect(tree.root.findByType('FlashList').props.data.map((row: any) => [row.public_offer_id, row.rate]))

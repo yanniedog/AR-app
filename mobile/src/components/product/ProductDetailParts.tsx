@@ -11,7 +11,7 @@ import { useStore } from '../../data/store';
 import { uiAccessBadge, uiConditionFact, uiListedLvrRange, uiLoanPurpose, uiRateStructure, uiRepayment, type FinancialFactRow } from '../../lib/financialUiCopy';
 import { scopedRateConditions } from '../../data/rateConditions';
 import { scopedFinancialConditionFacts } from '../../data/scopedFinancialConditionFacts';
-import { uiDetailItem, uiFeeCap, uiFeeDiscount, uiFeeValue, uiNormalizedProductFact, uiProductFactValue, type ProductPresentationFact } from '../../lib/productUiFacts';
+import { uiDetailItem, uiFeeCap, uiFeeDiscount, uiNormalizedProductFact, uiProductFactValue, type ProductPresentationFact } from '../../lib/productUiFacts';
 import { normalizedProductFacts } from '../../data/productFacts';
 import { uiCount, uiJoin, uiLabel, type UiCopy, type UiLabel, type UiText } from '../../lib/uiCopy';
 import type { DetailItem, NormalizedProductFact, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
@@ -82,19 +82,32 @@ export function AccessNotice({ name, productDetails: detail, loading, provider }
 }
 export function SectionTitle({ text }: { text: UiCopy; icon?: keyof typeof Ionicons.glyphMap }) { return <AppText variant="small" weight="700">{text}</AppText>; }
 function feeValues(items: readonly DetailItem[]): UiText {
-  return items.length ? uiJoin(...items.flatMap((item, index) => index ? [uiLabel(' · '), uiFeeValue(item)] : [uiFeeValue(item)])) : uiLabel('Unknown');
+  // The Fees surface's own facts, so conditions stay qualified (Conditions: Unverified).
+  const values = items.map((item, index) => uiProductFactValue(uiDetailItem(item, index, 'Fees')));
+  return values.length ? uiJoin(...values.flatMap((value, index) => index ? [uiLabel(' · '), value] : [value])) : uiLabel('Unknown');
+}
+function isOffset(key: string | undefined): boolean {
+  return (key ?? '').trim().toUpperCase() === 'OFFSET';
+}
+/** Offset availability from the published feature value and its evidence state, never mere presence. */
+function offsetValue(detail: ProductDetailData | null): UiText {
+  const legacy = (detail?.features ?? []).find(item => isOffset(item.label ?? item.name));
+  if (legacy) {
+    const value = uiProductFactValue(uiDetailItem(legacy, 0, 'Features'));
+    return value === 'Included' ? uiLabel('Yes') : value;
+  }
+  const fact = normalizedProductFacts(detail).find(item => item.kind === 'feature'
+    && (isOffset(item.sourceType) || isOffset(item.canonicalKey.split(/[.:/]/).at(-1))));
+  return fact ? uiProductFactValue(uiNormalizedProductFact(fact)) : uiLabel('Unknown');
 }
 /** Headline cost facts from the published fee and feature lists. An absent fee is Unknown, never zero. */
 export function mortgageHeadlineFacts(detail: ProductDetailData | null): FinancialFactRow[] {
   const fees = detail?.fees ?? [];
-  const annual = fees.filter(fee => /\bannual\b/i.test(fee.name ?? '')
+  const annual = fees.filter(fee => (fee.label ?? '').toUpperCase() === 'ANNUAL_FEE' || /\bannual\b/i.test(fee.name ?? '')
     || (fee.label ?? '').toUpperCase() === 'PERIODIC' && String(fee.additionalValue ?? fee.accrualFrequency ?? '') === 'P1Y');
   const upfront = fees.filter(fee => (fee.label ?? '').toUpperCase() === 'UPFRONT');
-  const offset = (detail?.features ?? []).some(item => (item.label ?? item.name ?? '').trim().toUpperCase() === 'OFFSET')
-    || normalizedProductFacts(detail).some(fact => fact.kind === 'feature' && fact.value === true
-      && (fact.sourceType?.trim().toUpperCase() === 'OFFSET' || fact.canonicalKey.split(/[.:/]/).at(-1)?.toUpperCase() === 'OFFSET'));
   return [{ label: 'Annual fee', value: feeValues(annual) }, { label: 'Upfront fee', value: feeValues(upfront) },
-    { label: 'Offset account', value: uiLabel(offset ? 'Yes' : 'Unknown') }];
+    { label: 'Offset account', value: offsetValue(detail) }];
 }
 export function ProductSpecs({ row, section, productDetails }: { row: RateRow; section: SectionKey; productDetails: ProductDetailData | null }) {
   const [open, setOpen] = useState(true);

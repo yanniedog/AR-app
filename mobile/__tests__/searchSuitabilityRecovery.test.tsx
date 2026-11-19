@@ -551,7 +551,7 @@ test('filter Cancel discards the real draft and preserves query/type/sort/offset
   try {
     const list = tree.root.findByType('FlashList' as any);
     act(() => tree.root.findByType('SearchBar' as any).props.onChangeText('Macquarie'));
-    act(() => tree.root.findByProps({ word: 'Bank' }).props.onPress());
+    chooseBankSort(tree);
     act(() => list.props.onScroll({ nativeEvent: { contentOffset: { y: 312 } } }));
     const initialRows = list.props.data, before = captureRatesSession();
     act(() => mockSurfaces.get('rates.results').actions['search.filters.open']());
@@ -659,7 +659,7 @@ test.each([
   mockState.prefs.includeNonStandard = true;
   let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
   try {
-    const controls = ['Filter', 'Sort', 'Compare', 'Bank', 'More'].map(word =>
+    const controls = ['Filter', 'Sort', 'Compare', 'Lenders', 'More'].map(word =>
       tree.root.findByProps({ word }));
     const toolbar = controls[0].parent;
     expect(controls.every(control => control.parent === toolbar)).toBe(true);
@@ -931,8 +931,9 @@ test('one visible tap commits the common sort preset, while advanced Cancel/Back
     expect(useRatesSession.getState().sections.TD.sort).toBe('rate');
     expect(useRatesSession.getState().sections.TD.scrollOffset).toBe(0);
     expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 0, animated: false });
-    act(() => tree.root.findByProps({ word: 'Bank' }).props.onPress());
-    act(() => tree.root.findByProps({ word: 'Bank' }).props.onPress());
+    chooseBankSort(tree);
+    act(() => tree.root.findByProps({ word: 'Sort' }).props.onPress());
+    act(() => tree.root.findAll((node: any) => node.props.accessibilityLabel === 'Advertised rate' && typeof node.props.onPress === 'function')[0].props.onPress());
     expect(useRatesSession.getState().sections.TD.sort).toBe('rate');
     expect(sortSheet().props.visible).toBe(false);
   } finally { act(() => tree.unmount()); }

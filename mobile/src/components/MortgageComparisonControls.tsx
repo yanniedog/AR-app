@@ -412,11 +412,12 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
             if (dirty.current) commitDraft(draftRef.current);
             const scoped = profile ? filters : scopeMortgageFacets(useRatesSession.getState().sections.Mortgage.filters, filters.includeNonStandard);
             // A shown default is replaced, not appended to, by another choice.
-            // The shown default behaves as a selected chip; clearing every choice restores it.
-            const base = profile || scoped[group.key].length ? scoped[group.key] : DEFAULT_MORTGAGE_BROWSE_FACETS[group.key];
+            // The first explicit choice replaces the shown default; later choices add.
+            // Clearing every choice restores the default.
+            const explicit = scoped[group.key];
             saveMortgageComparisonFacets({
               loanPurposes: scoped.loanPurposes, repaymentTypes: scoped.repaymentTypes,
-              [group.key]: selected ? base.filter(item => meaningOf(item) !== option) : [...base, option],
+              [group.key]: selected ? explicit.filter(item => meaningOf(item) !== option) : [...explicit, option],
             });
           }} />;
       })}</Row>
