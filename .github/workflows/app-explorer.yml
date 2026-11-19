@@ -133,7 +133,7 @@ jobs:
   # Publishes results as data only: no repository code is checked out or run here.
   publish:
     needs: explore
-    if: always() && needs.explore.result != 'skipped'
+    if: always() && needs.explore.result != 'skipped' && needs.explore.result != 'cancelled'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
