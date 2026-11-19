@@ -7,17 +7,17 @@ description: Run the latest (or any) released AR-app APK on a real Android emula
 
 A cloud Android emulator (API 34, x86_64, KVM, 720x1600 @ 320dpi) runs the released `app-preview.apk` and drives it with adb. Every step records a screenshot, the visible UI as JSON, settle time, jank frames, memory and logcat errors. Results go to the orphan branch `explorer/run-<runId>`, fetched with plain git (Actions artifacts are not reachable from the Claude workspace; git and release assets are).
 
-It runs automatically after every successful `mobile-android-apk` release (full route crawl plus a full live audit, compared with the previous run), and on demand. Cost: standard runner on a public repo, so free; never switch to larger runners or paid services.
+It runs automatically once for every new release (a 30-minute schedule checks; full route crawl plus a full live audit, compared with the previous run), and on demand. Cost: standard runner on a public repo, so free; never switch to larger runners or paid services.
 
 ## Token discipline (important)
 
-Emulator runs take 10-120 minutes. Never poll in the conversation. Start any `run` or `watch` with Bash `run_in_background: true` and a long timeout (up to 7,200,000 ms), then do other work or end the turn; you are notified when it exits. Read `report.md` and `ui/*.json` first and open PNGs only for screens that matter.
+Emulator runs take 10-120 minutes and cost nothing in GitHub; waiting must cost nothing in tokens either. Never poll in the conversation and never keep a background wait alive across a reply (the workspace stops it). Dispatch with `run ... --no-wait`, then schedule one check-in with the session's send_later tool (about 45 min for crawl/script, 90 min for full or audit). At the check-in run `node scripts/app-explorer.mjs status` (one line); only if results are new, read `report.md` and the logs. If still in flight, schedule one more check-in. Read `report.md` and `ui/*.json` first and open PNGs only for screens that matter.
 
 ## Autonomous iteration loop
 
 1. Fix bugs or UX in a PR; it merges and `mobile-android-apk` releases the APK.
 2. The release automatically triggers `app-explorer` in `full` mode (crawl + live audit).
-3. `node scripts/app-explorer.mjs watch` in the background returns when that run's results branch appears.
+3. A 30-minute schedule in `app-explorer` runs mode full once per new `app-v` release (marker branch `explorer/tested/<tag>`). Schedule a send_later check-in about 2.5 h after the PR merges, then `status`.
 4. Read `report.md`, `audit-log.txt` (the exact uploaded audit log) and relevant screens; plan the next fixes; repeat.
 
 ## Commands (repo root)
@@ -43,7 +43,7 @@ node scripts/app-explorer.mjs list                        # recent runs
 - `ui/NNN-step.json`: visible labels with tap coordinates and flags (`tap`, `scroll`, `on`, `sel`, `off`). Read these first; they are cheap.
 - `screens/NNN-step.png`: open with the Read tool when layout or visual quality matters.
 - `logcat.txt`: ReactNativeJS and crash output per step.
-- Audit mode: `audit-log.txt` is the exact log the app uploaded to public hosting (paste.rs or paste.c-net.org), fetched by the runner; `audit.json` has the URL, outcome and duration; `screens/*audit-N-min*` show progression once a minute and `*audit-result-N*` the final result screen top to bottom. The audit is started from About > Diagnostics > App health audit with Public upload on, exactly as on a phone.
+- Audit mode: if the app crashes mid-audit the run stops, relaunches, records the recovery screen and reports `outcome app crashed` with the fatal lines in `report.md`; a counter frozen for 12 min reports `stalled`. Afterwards the harness always uploads the app's debug log (About > Debug log > Upload and copy link) and saves it as `debug-log.txt`. `audit-log.txt` is the exact log the app uploaded to public hosting (paste.rs or paste.c-net.org), fetched by the runner; `audit.json` has the URL, outcome and duration; `screens/*audit-N-min*` show progression once a minute and `*audit-result-N*` the final result screen top to bottom. The audit is started from About > Diagnostics > App health audit with Public upload on, exactly as on a phone.
 
 ## Script steps
 
