@@ -6,6 +6,7 @@
 //   node scripts/app-explorer.mjs fetch <runId|latest>
 //   node scripts/app-explorer.mjs watch [--after <runId>] [--timeout-min 115]
 //        waits quietly for the next results branch (e.g. the automatic post-release run), then prints it
+//   node scripts/app-explorer.mjs status      one line: newest results + runs in flight (for scheduled check-ins)
 //   node scripts/app-explorer.mjs list
 // Results land in .explorer/<runId>/ (report.md, report.json, screens/, ui/, logcat.txt).
 import { execFileSync } from 'node:child_process';
@@ -92,7 +93,8 @@ function latestRunId() {
 }
 
 function show(dir) {
-  console.log(fs.readFileSync(path.join(dir, 'report.md'), 'utf8'));
+  const md = path.join(dir, 'report.md');
+  console.log(fs.existsSync(md) ? fs.readFileSync(md, 'utf8') : '(no report.md: run ended before the driver finished)');
   console.log(`Results: ${dir}`);
 }
 
@@ -101,6 +103,24 @@ async function main() {
   const cmd = o._[0] || 'run';
   if (cmd === 'list') {
     for (const r of runs(15)) console.log(`${r.id}  ${r.event.padEnd(17)} ${r.status}/${r.conclusion ?? ''}  ${r.created_at}`);
+    return;
+  }
+  if (cmd === 'status') {
+    // One cheap line for scheduled check-ins: newest results plus any run in flight.
+    const active = runs(5).filter(r => r.status !== 'completed').map(r => `${r.id} ${r.status} since ${r.created_at}`);
+    let line = 'no results yet';
+    try {
+      const id = latestRunId();
+      const dir = fetchResults(id);
+      const r = JSON.parse(fs.readFileSync(path.join(dir, 'report.json'), 'utf8'));
+      const a = r.audit;
+      line = `results ${id}: app ${r.app?.versionName} | ${r.steps.length} steps | crashes ${r.steps.filter(s => !s.alive).length}`
+        + (a ? ` | audit ${a.outcome ?? 'completed'} ${Math.round(a.elapsedMs / 60000)} min | audit log ${a.logBytes ?? 0} B | debug log ${a.debugLog?.bytes ?? 0} B` : '')
+        + ` | ${dir}`;
+    } catch (error) {
+      line = `results unreadable: ${String(error.message).split('\n')[0]}`;
+    }
+    console.log(`${line} | in flight: ${active.length ? active.join('; ') : 'none'}`);
     return;
   }
   if (cmd === 'watch') {
