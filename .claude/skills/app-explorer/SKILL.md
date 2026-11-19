@@ -7,7 +7,7 @@ description: Run the latest (or any) released AR-app APK on a real Android emula
 
 A cloud Android emulator (API 34, x86_64, KVM, 720x1600 @ 320dpi) runs the released `app-preview.apk` and drives it with adb. Every step records a screenshot, the visible UI as JSON, settle time, jank frames, memory and logcat errors. Results go to the orphan branch `explorer/run-<runId>`, fetched with plain git (Actions artifacts are not reachable from the Claude workspace; git and release assets are).
 
-It runs automatically after every successful `mobile-android-apk` release (full route crawl plus a full live audit, compared with the previous run), and on demand. Cost: standard runner on a public repo, so free; never switch to larger runners or paid services.
+It runs automatically once for every new release (a 30-minute schedule checks; full route crawl plus a full live audit, compared with the previous run), and on demand. Cost: standard runner on a public repo, so free; never switch to larger runners or paid services.
 
 ## Token discipline (important)
 
@@ -17,7 +17,7 @@ Emulator runs take 10-120 minutes and cost nothing in GitHub; waiting must cost 
 
 1. Fix bugs or UX in a PR; it merges and `mobile-android-apk` releases the APK.
 2. The release automatically triggers `app-explorer` in `full` mode (crawl + live audit).
-3. The release's `mobile-android-apk` explore job dispatches `app-explorer` mode full. Schedule a send_later check-in about 2 h after the PR merges, then `status`.
+3. A 30-minute schedule in `app-explorer` runs mode full once per new `app-v` release (marker branch `explorer/tested/<tag>`). Schedule a send_later check-in about 2.5 h after the PR merges, then `status`.
 4. Read `report.md`, `audit-log.txt` (the exact uploaded audit log) and relevant screens; plan the next fixes; repeat.
 
 ## Commands (repo root)
