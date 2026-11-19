@@ -6,6 +6,8 @@ import { ProfileEditor } from '../src/components/ProfileEditor';
 import { CustomerProfilePanel } from '../src/components/CustomerProfilePanel';
 import { MortgageComparisonControls } from '../src/components/MortgageComparisonControls';
 import { ScreenScrollView } from '../src/components/Screen';
+import { UndoSnackbar } from '../src/components/Snackbar';
+import { useUndoSnackbar } from '../src/hooks/useUndoSnackbar';
 import { AppText, Button, Card, Disclosure } from '../src/components/ui';
 import { SECTION_ORDER } from '../src/constants';
 import {
@@ -32,6 +34,7 @@ export default function Profile() {
   const includeNonStandard = useStore(s => s.prefs.includeNonStandard);
   const comparison = useMortgageComparisonProfile(state => state.profile);
   const [comparisonOpen, setComparisonOpen] = useState(false);
+  const { snack, showUndo, undo } = useUndoSnackbar();
   const comparisonFilters = useMemo(() => scopeMortgageFacets({
     ...EMPTY_FILTERS, ...comparison.facets, includeNonStandard,
   }, includeNonStandard), [comparison.facets, includeNonStandard]);
@@ -97,6 +100,7 @@ export default function Profile() {
   });
 
   return (
+    <View style={{ flex: 1 }}>
     <ScreenScrollView
       contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
       onLayout={() => setLayoutReady(true)}
@@ -119,7 +123,11 @@ export default function Profile() {
           <Button
             title={uiJoin('Clear all saved requirements',' (',uiCount(count),')')}
             variant="ghost"
-            onPress={() => setPref('profileFilters', { ...EMPTY_PROFILE })}
+            onPress={() => {
+              const previous = profileFilters;
+              setPref('profileFilters', { ...EMPTY_PROFILE });
+              showUndo('Removed', () => setPref('profileFilters', previous));
+            }}
           />
         </View>
       ) : null}
@@ -131,5 +139,7 @@ export default function Profile() {
         <CustomerProfilePanel />
       </> : null}
     </ScreenScrollView>
+    <UndoSnackbar snack={snack} onUndo={undo} />
+    </View>
   );
 }

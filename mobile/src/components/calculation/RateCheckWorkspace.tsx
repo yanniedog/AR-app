@@ -685,12 +685,13 @@ export function RateCheckWorkspace() {
 
   if (!core) return <ScreenSkeleton />;
 
-  const enteredSwitch = isMortgage ? resolveSwitchCosts(scenario.mortgageSwitch) : null;
+  const enteredSwitch = isMortgage ? resolveSwitchCosts(scenario.mortgageSwitch, currentProductDetail, leadingTargetDetail) : null;
   const switchCostEntered = !!enteredSwitch
     && (enteredSwitch.fees.some(fee => fee.source === 'entered') || !!scenario.mortgageSwitch.cashback.trim());
   const bestIndex = candidates.findIndex(c => !c.unavailableReason && (c.perMonth != null || c.total != null));
   const best = bestIndex >= 0 ? candidates[bestIndex] : undefined;
-  const breakEvenMonths = switchCostEntered && enteredSwitch && best?.perMonth != null && best.perMonth > 0 && enteredSwitch.netSwitchCost > 0
+  // Break-even only when the cost model supports a complete switching-cost claim.
+  const breakEvenMonths = switchCostEntered && enteredSwitch?.costClaimsAvailable && best?.perMonth != null && best.perMonth > 0 && enteredSwitch.netSwitchCost > 0
     ? Math.ceil(enteredSwitch.netSwitchCost / best.perMonth) : null;
   const inputsCollapsed = inputsOpen === false && !inputIssueKey;
   const inputSummary = isMortgage
@@ -1041,11 +1042,11 @@ export function RateCheckWorkspace() {
         <AppText variant="tiny" color="textMuted">{uiLabel("Illustrative")}</AppText>
         <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <AppText variant="tiny" color="textMuted">{uiLabel("Excluded")}</AppText>
-          <AppText variant="tiny">{switchCostEntered ? uiJoin('Fees', ' · ', 'Tax') : uiLabel("Fees · Tax · Switching costs")}</AppText>
+          <AppText variant="tiny">{switchCostEntered && enteredSwitch?.costClaimsAvailable ? uiJoin('Fees', ' · ', 'Tax') : uiLabel("Fees · Tax · Switching costs")}</AppText>
         </Row>
         {switchCostEntered && enteredSwitch ? <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <AppText variant="tiny" color="textMuted">{uiLabel("Switching costs")}</AppText>
-          <AppText variant="tiny">{formatDollars(enteredSwitch.netSwitchCost)}</AppText>
+          <AppText variant="tiny">{enteredSwitch.costClaimsAvailable ? formatDollars(enteredSwitch.netSwitchCost) : uiJoin(formatDollars(enteredSwitch.netSwitchCost), ' · ', 'Partial')}</AppText>
         </Row> : null}
         {isMortgage ? <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <AppText variant="tiny" color="textMuted">{uiLabel("Variable rate")}</AppText>

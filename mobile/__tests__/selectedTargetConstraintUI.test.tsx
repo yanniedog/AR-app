@@ -154,6 +154,21 @@ test('variable mortgage rate check states the held rate and leads with the best 
   } finally { act(() => tree.unmount()); }
 });
 
+test('a partial switching cost is shown as partial and claims no break-even', () => {
+  const scenario = mortgageScenario('465000'); scenario.mortgageSwitch.applicationFees = '500';
+  prepare('Mortgage', [{ ...publicNabLoan, provider: 'Broad Bank', product_key: 'broad', rate_index: 4 }], [], scenario, '4');
+  delete mockParams.target; delete mockParams.ri;
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<RateCheckWorkspace />) as InspectableRenderer; });
+  try {
+    const visible = texts(tree);
+    expect(visible).toContain('Best gap');
+    expect(visible.some(text => text.startsWith('Break-even'))).toBe(false);
+    expect(visible).toContain('$500 · Partial');
+    expect(visible).toContain('Fees · Tax · Switching costs');
+  } finally { act(() => tree.unmount()); }
+});
+
 test.each([
   ['490000', EMPTY_PROFILE],
   ['490000', { ...EMPTY_PROFILE, lvrTiers: ['lvr_90-95%'] }],

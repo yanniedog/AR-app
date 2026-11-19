@@ -150,7 +150,7 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
       persistTrackedRates(trackedRates);
       // Saving watches the rate: with alerts already allowed, subscribe as well.
       if (get().prefs.notificationsEnabled && savedRates.some((item) => !previousIds.has(item.id))) {
-        get().subscribeProduct(bound.product_key, bound.rate_index ?? null, bound);
+        get().subscribeProduct(bound.product_key, selectedScope === 'product' ? null : bound.rate_index ?? null, bound);
       }
       hapticSelection();
     },

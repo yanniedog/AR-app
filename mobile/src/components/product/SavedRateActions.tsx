@@ -19,7 +19,6 @@ export function SavedRateActions({ row, section }: { row: RateRow; section: Sect
   const saved = useStore(s => s.savedRates);
   const trackedRates = useStore(s => s.trackedRates);
   const runDate = useStore(s => s.core?.run_date);
-  const { subscribed, toggle: toggleAlert } = useRateAlertToggle(row);
   const setTrackedRateRelevantDate = useStore(s => s.setTrackedRateRelevantDate);
   const [editing, setEditing] = useState(false);
   const [dateValue, setDateValue] = useState('');
@@ -27,6 +26,7 @@ export function SavedRateActions({ row, section }: { row: RateRow; section: Sect
     && row.public_offer_id && value.offerId === row.public_offer_id)
     ?? saved?.find(value => value.productKey === row.product_key && value.scope === 'rate' && !value.offerId && value.rateIndex === row.rate_index)
     ?? saved?.find(value => value.productKey === row.product_key && value.scope === 'product');
+  const { subscribed, toggle: toggleAlert } = useRateAlertToggle(row, ref?.scope);
   if (!ref) return null;
   const tracked = trackedRates?.find(value => value.id === ref.id);
   const currentRate = toFraction(row.rate);

@@ -1,7 +1,7 @@
 import { usePublicRateCatalogue } from '../../src/data/publicRateCatalogue';
 import { publicOfferSelectionToken } from '../../src/data/publicOfferIdentity';
 import { publicComparisonCore, publicRateScenario, resolveLocalCurrentRate } from '../../src/data/publicRateIntegration';
-import { uiCount, uiDate, uiJoin, uiLabel, uiMoney, uiNumber, uiProductName, uiProviderName, uiSectionName, type UiCopy } from "../../src/lib/uiCopy";
+import { uiCount, uiDate, uiJoin, uiLabel, uiNumber, uiProductName, uiProviderName, uiSectionName, type UiCopy } from "../../src/lib/uiCopy";
 import { mandatoryEligibleRows } from '../../src/data/eligibilityGate';
 import { useIsFocused, useScrollToTop } from '@react-navigation/native';
 import { router } from 'expo-router';
@@ -18,7 +18,8 @@ import { SegmentedControl } from '../../src/components/controls';
 import { IconAction } from '../../src/components/IconAction';
 import { useRateAlertToggle } from '../../src/hooks/useRateAlertToggle';
 import { SECTION_ORDER, SECTIONS } from '../../src/constants';
-import { calculatorAmount, calculatorYears, computeLvr, MAX_CALCULATOR_DEPOSIT_AMOUNT, monthlyRepayment } from '../../src/data/calc';
+import { computeLvr } from '../../src/data/calc';
+import { savedPositionEstimate, type RatePosition } from '../../src/lib/savedPositionEstimate';
 import { toggleCompareSelection, resolveCompareSelections } from '../../src/data/compareSelection';
 import { formatRate, toFraction } from '../../src/data/format';
 import {
@@ -60,13 +61,6 @@ function compareToken(productKey: string, rateIndex: number | null, offerId?: st
   return offerId ? publicOfferSelectionToken(productKey, offerId) : rateIndex == null ? productKey : `${rateIndex}#${productKey}`;
 }
 
-interface RatePosition {
-  section: SectionKey;
-  currentRate: number;
-  matchedRate: number | null;
-  gapRate: number | null;
-  ready: boolean;
-}
 
 function positionHeadline(position: RatePosition): UiCopy {
   if (!position.ready) return 'Matching';
@@ -97,8 +91,8 @@ function AddMyRate({ initial, onAdd }: { initial: SectionKey; onAdd: (section: S
   );
 }
 
-function SavedAlertAction({ row }: { row: RateRow }) {
-  const { subscribed, toggle } = useRateAlertToggle(row);
+function SavedAlertAction({ row, scope }: { row: RateRow; scope: SavedRateRef['scope'] }) {
+  const { subscribed, toggle } = useRateAlertToggle(row, scope);
   return (
     <IconAction word="Alerts" icon={subscribed ? 'notifications' : 'notifications-outline'} active={subscribed}
       accessibilityLabel={uiJoin(subscribed ? 'Disable alerts' : 'Enable alerts', ' · ', uiProviderName(row), ' · ', uiProductName(row))}
@@ -284,6 +278,7 @@ export default function MyRates() {
           section,
           currentRate,
           matchedRate: null,
+          matchedRow: null,
           gapRate: null,
           ready: false,
         }];
@@ -313,6 +308,7 @@ export default function MyRates() {
         section,
         currentRate,
         matchedRate,
+        matchedRow: match ?? null,
         gapRate,
         ready: true,
       }];
@@ -501,20 +497,7 @@ export default function MyRates() {
     });
   }, [items, removeSavedRate, restoreSavedRate, showUndo, trackedById]);
 
-  const mortgageLoan = computeLvr(scenario.mortgage).loan;
-  const mortgageYears = calculatorYears(scenario.mortgage.years);
-  const positionAmount = (position: RatePosition): UiCopy | null => {
-    if (!position.ready || position.matchedRate == null || position.gapRate == null || position.gapRate <= 0) return null;
-    if (position.section === 'Mortgage') {
-      if (!mortgageLoan || !mortgageYears) return null;
-      const months = Math.round(mortgageYears * 12);
-      const perMonth = monthlyRepayment(mortgageLoan, position.currentRate, months)
-        - monthlyRepayment(mortgageLoan, position.matchedRate, months);
-      return uiJoin(uiMoney(perMonth), ' / ', 'mo', ' · ', uiMoney(perMonth * 12), ' / ', 'yr');
-    }
-    const balance = calculatorAmount((position.section === 'TD' ? scenario.termDeposit : scenario.savings).balance, MAX_CALCULATOR_DEPOSIT_AMOUNT);
-    return balance ? uiJoin(uiMoney(balance * position.gapRate), ' / ', 'yr') : null;
-  };
+  const positionAmount = (position: RatePosition) => savedPositionEstimate(position, scenario);
 
   const removeUnavailable = () => {
     const refs = [...unavailableRefs];
@@ -586,7 +569,7 @@ export default function MyRates() {
                 key={position.section}
                 onPress={() => openRateEditor(position.section)}
                 accessibilityRole="button"
-                accessibilityLabel={uiJoin('Calculate', ' · ', uiSectionName(position.section), amount ? uiJoin(' · ', amount) : null)}
+                accessibilityLabel={uiJoin('Calculate', ' · ', uiSectionName(position.section), amount ? uiJoin(' · ', amount.text) : null)}
               >
                 <Card variant="outlined" style={{ gap: theme.spacing(3) }}>
                   <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
@@ -607,7 +590,9 @@ export default function MyRates() {
                       </View>
                     ) : null}
                   </Row>
-                  {amount ? <AppText variant="h3" style={{ color: theme.colors.success }}>{amount}</AppText> : null}
+                  {amount ? amount.unavailable
+                    ? <AppText variant="tiny" color="textMuted">{amount.text}</AppText>
+                    : <AppText variant="h3" style={{ color: theme.colors.success }}>{amount.text}</AppText> : null}
                   <AppText variant="body" weight="700">{positionHeadline(position)}</AppText>
                   {position.ready ? (
                     <AppText variant="tiny" color="textMuted">{uiJoin('Observed',': ',uiDate(core.run_date))}</AppText>
@@ -683,7 +668,7 @@ export default function MyRates() {
                         logoRenderStateId={`saved:${ref.id}`} onLogoRenderStateChange={savedLogos.onLogoRenderStateChange}
                         onPress={() => { if (selectMode) toggleSelection(token); else openSavedProduct(row); }} />
                     </View>
-                    {selectMode ? null : <SavedAlertAction row={row} />}
+                    {selectMode ? null : <SavedAlertAction row={row} scope={ref.scope} />}
                   </Row>
                 </SwipeableRow>;
               })}
