@@ -47,12 +47,12 @@ async function dispatch(o) {
     inputs.script = JSON.stringify(steps);
   }
   if (o.routes) inputs.routes = o.routes;
-  const before = new Set(runs(20).map(r => r.id));
+  inputs.nonce = `cli-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const body = JSON.stringify({ ref: o.ref || 'main', inputs });
   gh(['api', '-X', 'POST', `repos/${REPO}/actions/workflows/${WORKFLOW}/dispatches`, '--input', '-'], body);
   for (let i = 0; i < 30; i += 1) {
     await sleep(3000);
-    const fresh = runs(10).find(r => !before.has(r.id) && r.event === 'workflow_dispatch');
+    const fresh = runs(20).find(r => r.event === 'workflow_dispatch' && (r.display_title || r.name || '').includes(inputs.nonce));
     if (fresh) return fresh.id;
   }
   throw new Error('Dispatched, but the run did not appear within 90 s');

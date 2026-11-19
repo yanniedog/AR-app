@@ -202,7 +202,7 @@ export function summarize(nodes) {
 
 function screenSize() {
   const out = sh('wm size');
-  const m = /(\d+)x(\d+)\s*$/m.exec(out);
+  const m = /Override size: (\d+)x(\d+)/.exec(out) || /Physical size: (\d+)x(\d+)/.exec(out);
   return m ? [Number(m[1]), Number(m[2])] : [720, 1600];
 }
 
@@ -524,8 +524,8 @@ class Explorer {
         await sleep(300);
       }
       if (step.clear) sh('input keycombination 113 29 && input keyevent 67', { allowFail: true });
-      const escaped = String(step.type).replace(/ /g, '%s').replace(/(["'`$&|;<>()\\])/g, '\\$1');
-      sh(`input text "${escaped}"`);
+      const quoted = `'${String(step.type).replace(/ /g, '%s').replace(/'/g, `'\\''`)}'`;
+      sh(`input text ${quoted}`);
       if (step.submit) sh('input keyevent 66');
       return this.record(label);
     }

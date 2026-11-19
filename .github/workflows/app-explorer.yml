@@ -1,4 +1,5 @@
 name: app-explorer
+run-name: app-explorer ${{ inputs.nonce || github.event_name }}
 
 # Runs a released APK on a KVM-accelerated Android emulator and records every
 # screen: screenshots, visible UI, settle time, jank, memory, JS/native errors.
@@ -23,6 +24,9 @@ on:
         default: ''
       routes:
         description: Comma-separated routes (crawl mode, blank for all)
+        default: ''
+      nonce:
+        description: Correlation id set by scripts/app-explorer.mjs
         default: ''
       fresh:
         description: Clear app data before the run
