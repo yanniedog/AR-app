@@ -26,7 +26,7 @@ export interface CalcInputs {
 }
 
 export const EMPTY_CALC: CalcInputs = {
-  mode: 'buy',
+  mode: 'refi',
   propertyValue: '',
   deposit: '',
   costs: '',
@@ -96,9 +96,9 @@ export function quickEstimateUnavailableReason(row: RateRow, section: SectionKey
 
 export function normalizeCalcInputs(value?: Partial<CalcInputs> | null): CalcInputs {
   const str = (v: unknown): string => (typeof v === 'string' ? v : '');
-  // Older saved scenarios may contain the refi-only field without a mode.
-  // An explicitly selected buying mode must never reuse that old loan balance.
-  const mode: CalcMode = value?.mode === 'refi' || value?.mode === undefined && str(value?.loanBalance).trim() ? 'refi' : 'buy';
+  // Refinancing is the default; only an explicitly selected buying mode stays buying,
+  // and buying never reuses an old loan balance.
+  const mode: CalcMode = value?.mode === 'buy' ? 'buy' : 'refi';
   return {
     mode,
     propertyValue: str(value?.propertyValue),
@@ -194,4 +194,12 @@ export function termDepositInterestDifference(
   if (![balance, currentRate, candidateRate, termMonths].every(Number.isFinite)) return 0;
   if (balance <= 0 || termMonths <= 0) return 0;
   return balance * (candidateRate - currentRate) * termMonths / 12;
+}
+
+/** Amortising monthly repayment for a balance at an annual rate fraction. */
+export function monthlyRepayment(balance: number, annualRate: number, months: number): number {
+  if (!(months > 0)) return 0;
+  const r = annualRate / 12;
+  if (r <= 0) return balance / months;
+  return (r * balance) / (1 - Math.pow(1 + r, -months));
 }

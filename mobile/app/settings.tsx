@@ -26,7 +26,7 @@ import {
   ToggleRow,
 } from '../src/components/settings/settingsUi';
 import { SECTIONS, SECTION_ORDER } from '../src/constants';
-import { uiCount, uiDate, uiJoin, uiLabel, uiSectionName, uiSubscriptionLabel } from '../src/lib/uiCopy';
+import { uiCount, uiDate, uiJoin, uiLabel, uiNumber, uiSectionName, uiSubscriptionLabel } from '../src/lib/uiCopy';
 import {
   coverageFailureProvenanceReported,
   coverageFailures,
@@ -515,7 +515,7 @@ export default function Settings() {
               {THRESHOLDS.map((bps) => (
                 <Chip
                   key={bps}
-                  label={uiJoin(uiCount(bps), ' ', 'bps')}
+                  label={uiJoin(uiNumber(bps / 100, 2), ' ', 'percentage points')}
                   selected={prefs.rateMoveThresholdBps === bps}
                   onPress={() => setPref('rateMoveThresholdBps', bps)}
                 />
