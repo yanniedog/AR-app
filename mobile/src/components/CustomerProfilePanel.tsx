@@ -48,7 +48,7 @@ export function CustomerProfileContent({ productKey, contract }: { productKey?: 
   const unavailable = saved.length - editable.length;
   return <View style={{ gap: 16 }}>
     {error ? <AppText variant="small" color="danger">{uiLabel("Unavailable")}</AppText> : busy ? <AppText variant="tiny">{uiLabel("Saving")}</AppText> : null}
-    <AppText variant="small">{uiLabel(requirements?.status === 'needs_inputs' ? 'Inputs incomplete' : 'Eligibility unverified')}</AppText>
+    {requirements ? <AppText variant="small">{uiLabel(requirements.status === 'needs_inputs' ? 'Inputs incomplete' : 'Eligibility unverified')}</AppText> : null}
     {reviewed ? <LedgerField label="Assessment date" value={uiInputIdentifier(assessmentDate)} onChangeText={setAssessmentDate} /> : null}
     {requirements?.needed.map(d => <CustomerAnswerEditor key={d.id} definition={d} answer={profile.answers[d.id]} productKey={productKey} disabled={busy} onSave={a => saveAnswer(d, a)} />)}
     {requirements?.deferred.length ? <AppText variant="small">{uiJoin('Unresolved inputs', ': ', uiCount(requirements.deferred.length))}</AppText> : null}

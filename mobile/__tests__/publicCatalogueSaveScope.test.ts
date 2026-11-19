@@ -25,3 +25,12 @@ it('uses a product save only after complete ready discovery establishes no exact
   useStore.getState().toggleSavedRate(row);
   expect(useStore.getState().savedRates[0]).toMatchObject({ scope: 'product', productKey: row.product_key, rateIndex: null });
 });
+
+it('subscribes a product-scoped save at product level when alerts are already on', () => {
+  mockCatalogue = { status: 'ready', allLoaded: true, getProduct: () => undefined };
+  useStore.setState(state => ({ subscriptions: [], prefs: { ...state.prefs, notificationsEnabled: true } }));
+  useStore.getState().toggleSavedRate(row);
+  expect(useStore.getState().savedRates[0]).toMatchObject({ scope: 'product' });
+  expect(useStore.getState().subscriptions).toEqual([expect.objectContaining({ kind: 'product', productKey: row.product_key, rateIndex: null })]);
+  useStore.setState(state => ({ subscriptions: [], prefs: { ...state.prefs, notificationsEnabled: false } }));
+});

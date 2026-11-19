@@ -139,6 +139,7 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
       const bound = catalogue ? bindCurrentPublicRow(row, catalogue) : row;
       // Discovery alone is not evidence that an indexed tier has no public offer.
       const selectedScope = scope === 'rate' && catalogue?.status === 'ready' && catalogue.allLoaded && !bound.public_offer_id ? 'product' : scope;
+      const previousIds = new Set(get().savedRates.map((item) => item.id));
       const savedRates = toggleSavedRateRefs(get().savedRates, bound, selectedScope);
       const trackedRates = normalizeTrackedRates(get().trackedRates, savedRates);
       set({
@@ -147,6 +148,10 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
         favorites: [...new Set(savedRates.map((item) => item.productKey))],
       });
       persistTrackedRates(trackedRates);
+      // Saving watches the rate: with alerts already allowed, subscribe as well.
+      if (get().prefs.notificationsEnabled && savedRates.some((item) => !previousIds.has(item.id))) {
+        get().subscribeProduct(bound.product_key, selectedScope === 'product' ? null : bound.rate_index ?? null, bound, selectedScope);
+      }
       hapticSelection();
     },
 
@@ -200,9 +205,11 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
       return savedRateExists(get().savedRates, productKey, rateIndex, offerId);
     },
 
-    subscribeProduct(productKey: string, rateIndex: number | null, labelRow: Parameters<AppState['subscribeProduct']>[2]) {
+    subscribeProduct(productKey: string, rateIndex: number | null, labelRow: Parameters<AppState['subscribeProduct']>[2], scope = 'rate') {
       const catalogue = get().manifest?.public_rate_catalogue ? getPublicRateCatalogueSnapshot(get().manifest) : undefined;
-      const row = catalogue ? bindCurrentPublicRow(labelRow, catalogue) : labelRow;
+      const row = scope === 'product'
+        ? { ...labelRow, public_offer_id: undefined, public_programme_id: undefined }
+        : catalogue ? bindCurrentPublicRow(labelRow, catalogue) : labelRow;
       if (catalogue && rateIndex != null && !row.public_offer_id) return false;
       if (productIsSubscribed(get().subscriptions, productKey, rateIndex, row.public_offer_id)) return false;
       set({
@@ -214,11 +221,12 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
       return true;
     },
 
-    unsubscribeProduct(productKey: string, rateIndex: number | null, selectedOfferId?: string) {
+    unsubscribeProduct(productKey: string, rateIndex: number | null, selectedOfferId?: string | null) {
       const catalogue = get().manifest?.public_rate_catalogue ? getPublicRateCatalogueSnapshot(get().manifest) : undefined;
       const row = catalogue ? Object.values(get().core?.sections ?? {}).flatMap(section => section.rates)
         .find(candidate => candidate.product_key === productKey && (candidate.rate_index ?? null) === rateIndex) : undefined;
-      const offerId = selectedOfferId ?? (row && catalogue ? bindCurrentPublicRow(row, catalogue).public_offer_id : undefined);
+      const offerId = selectedOfferId === undefined && row && catalogue
+        ? bindCurrentPublicRow(row, catalogue).public_offer_id : selectedOfferId ?? undefined;
       const id = productSubscriptionId(productKey, rateIndex, offerId);
       set({ subscriptions: dropSubscription(get().subscriptions, id) });
     },

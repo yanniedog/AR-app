@@ -7,6 +7,7 @@ import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
 import { publicRateScenario, resolveLocalCurrentRate, scenarioWithLocalCurrentRate, resolveRowPublicRate, payableRateForRow } from '../../data/publicRateIntegration';
 import { useResolvedPublicRankingRows } from '../../hooks/useResolvedPublicRankingRows';
 import { uiCount, uiDuration, uiInputNumber, uiJoin, uiLabel, uiMoney, uiPercentage, uiProductName, uiProviderName, uiSectionName, type UiCopy, type UiText } from "../../lib/uiCopy";
+import { resolveSwitchCosts } from '../../data/staySwitchProjection';
 import { uiAccessBadge, uiListedLvr, uiTargetConstraint } from "../../lib/financialUiCopy";
 import { fontStyle } from '../../theme/fonts';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -87,7 +88,7 @@ interface Candidate {
   perMonth: number | null; // mortgage: initial repayment difference per month
   total: number | null; // deposits: simple annual or published-maturity difference
   totalLabel: UiCopy;
-  unavailableReason: string | null;
+  unavailableReason: UiCopy | null;
 }
 
 function verifiedSelectedDetails(row:RateRow,section:SectionKey,context:RateConditionContext):boolean {
@@ -130,6 +131,8 @@ export function RateCheckWorkspace() {
   const [targetDetailsTerminalKey,setTargetDetailsTerminalKey]=useState<string|null>(null);
   const [targetDetailsRetry,setTargetDetailsRetry]=useState<{key:string;count:number}|null>(null);
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
+  // null until the stored scenario loads; complete stored inputs start collapsed.
+  const [inputsOpen, setInputsOpen] = useState<boolean | null>(null);
   const [leftFields, setLeftFields] = useState<ReadonlySet<string>>(() => new Set());
   const appliedCheckIntent = useRef('');
   const renderRevisionTracker = useRef(new OpaquePerformanceAuditRenderRevision());
@@ -377,6 +380,11 @@ export function RateCheckWorkspace() {
   // Empty fields are flagged once they have been left, not before any input.
   const shownInputIssues = issues.filter(issue => !issue.emptyField || leftFields.has(issue.emptyField)).map(issue => issue.message);
   const inputIssueKey = inputIssues.join('|');
+  useEffect(() => {
+    if (scenarioStorageStatus !== 'ready') return;
+    if (inputsOpen === null) setInputsOpen(!!inputIssueKey);
+    else if (!inputsOpen && inputIssueKey) setInputsOpen(true);
+  }, [inputIssueKey, inputsOpen, scenarioStorageStatus]);
 
   const candidates = useMemo<Candidate[]>(() => {
     if (!comparisonsReady || inputIssueKey || currentRate === null || balance <= 0 || (isLoan && months <= 0)) return [];
@@ -406,10 +414,7 @@ export function RateCheckWorkspace() {
         continue;
       }
       if (isLoan) {
-        if (!scenario.projections.mortgage.holdVariableRate && !isPublishedFixedRate(row)) {
-          out.push({ row, rate, projectionRate, perMonth: null, total: null, totalLabel: 'Rate only', unavailableReason: 'Rate assumption missing' });
-          continue;
-        }
+        // Initial repayments at today's rates: a variable rate is held by definition.
         const perMonth = monthlyPayment(balance, currentRate, months) - monthlyPayment(balance, projectionRate, months);
         const fixedMonths = isPublishedFixedRate(row) ? advertisedTermMonths(row) : null;
         out.push({
@@ -424,9 +429,10 @@ export function RateCheckWorkspace() {
           unavailableReason: null,
         });
       } else {
-        const unavailableReason = quickEstimateUnavailableReason(row, section)
-          ?? (section === 'Savings' && !scenario.projections.savings.holdVariableRate
-            ? 'Rate assumption missing' : null);
+        const unavailableReason: UiCopy | null = quickEstimateUnavailableReason(row, section)
+          ? section === 'TD' && advertisedTermMonths(row) == null ? 'Maturity unpublished' : 'Eligibility / rate conditions unverified'
+          : section === 'Savings' && !scenario.projections.savings.holdVariableRate
+            ? 'Rate assumption missing' : null;
         if (unavailableReason) {
           out.push({ row, rate, projectionRate, perMonth: null, total: null, totalLabel: 'Rate only', unavailableReason });
           continue;
@@ -679,6 +685,19 @@ export function RateCheckWorkspace() {
 
   if (!core) return <ScreenSkeleton />;
 
+  const enteredSwitch = isMortgage ? resolveSwitchCosts(scenario.mortgageSwitch, currentProductDetail, leadingTargetDetail) : null;
+  const switchCostEntered = !!enteredSwitch
+    && (enteredSwitch.fees.some(fee => fee.source === 'entered') || !!scenario.mortgageSwitch.cashback.trim());
+  const bestIndex = candidates.findIndex(c => !c.unavailableReason && (c.perMonth != null || c.total != null));
+  const best = bestIndex >= 0 ? candidates[bestIndex] : undefined;
+  // Break-even only when the cost model supports a complete switching-cost claim.
+  const breakEvenMonths = switchCostEntered && enteredSwitch?.costClaimsAvailable && best?.perMonth != null && best.perMonth > 0 && enteredSwitch.netSwitchCost > 0
+    ? Math.ceil(enteredSwitch.netSwitchCost / best.perMonth) : null;
+  const inputsCollapsed = inputsOpen === false && !inputIssueKey;
+  const inputSummary = isMortgage
+    ? uiJoin(inputs.mode === 'refi' ? 'Loan balance' : 'Loan needed', ': ', formatDollars(balance), ' · ', 'Current rate', ': ', formatRate(currentRate), ' · ', 'Years left', ': ', uiInputNumber(inputs.years.trim()))
+    : uiJoin(section === 'TD' ? 'Deposit amount' : 'Balance', ': ', formatDollars(balance), ' · ', 'Current rate', ': ', formatRate(currentRate));
+
   const inputStyle = {
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -732,13 +751,48 @@ export function RateCheckWorkspace() {
         </View>
       ) : null}
 
+      {best && !profileFeaturesPending ? (
+        <Card variant="outlined" testID="rate-check-headline" style={{ marginBottom: 12, gap: 4 }}>
+          <AppText variant="small" weight="700" color="textMuted">{uiLabel(target.status === 'available' ? 'Selected rate' : 'Best gap')}</AppText>
+          {best.perMonth != null ? (
+            <AppText variant="h2" style={{ color: best.perMonth < 0 ? theme.colors.danger : theme.colors.success }}>
+              {uiJoin(formatDollars(best.perMonth), ' / ', 'mo', ' · ', formatDollars(best.perMonth * 12), ' / ', 'yr')}
+            </AppText>
+          ) : best.total != null ? (
+            <AppText variant="h2" style={{ color: best.total < 0 ? theme.colors.danger : theme.colors.success }}>
+              {uiJoin(formatDollars(best.total), ' · ', best.totalLabel)}
+            </AppText>
+          ) : null}
+          <AppText variant="small" numberOfLines={2}>
+            {uiJoin(uiProviderName(best.row), ' · ', uiProductName(best.row), ' · ', formatRate(best.projectionRate))}
+          </AppText>
+          {breakEvenMonths != null ? (
+            <AppText variant="tiny" color="textMuted">{uiJoin('Break-even', ': ', uiDuration(breakEvenMonths, 'months'))}</AppText>
+          ) : null}
+        </Card>
+      ) : null}
       <PublicPricingCoverage section={section} rows={unpricedRows} scenario={scenario} compact
         pricingSummary={pricedCatalogue.ready ? publicPricing : null} />
+      {inputsCollapsed ? (
+        <Card variant="outlined" style={{ marginBottom: 16 }}>
+          <Row gap={8} style={{ alignItems: 'center' }}>
+            <AppText variant="small" style={{ flex: 1 }}>{inputSummary}</AppText>
+            <Button title="Edit" variant="secondary" accessibilityLabel={uiJoin('Edit', ' ', 'Inputs')} onPress={() => setInputsOpen(true)} />
+          </Row>
+          {lvr !== null ? (
+            <Row gap={8} style={{ alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+              <AppText variant="tiny" weight="700">{uiJoin("Scenario LVR",": ",uiPercentage(lvr))}</AppText>
+              {lvrBand ? <Badge label={uiListedLvr({lvr_tier:lvrBand})} tone="success" />
+                : <AppText variant="tiny" color="textFaint">{uiLabel('Outside tracked LVR bands')}</AppText>}
+            </Row>
+          ) : null}
+        </Card>
+      ) : (
       <Card style={{ marginBottom: 16 }}>
         <LocalRateEditor section={section} scenario={scenario} editable={scenarioStorageStatus === 'ready'} onChange={patch => updateScenario(previous => ({ ...previous, localRates: { ...previous.localRates, [scenarioSectionKey]: { ...previous.localRates[scenarioSectionKey], ...patch } } }))}>
           {field('Current rate (%)', (section === 'Mortgage' ? inputs.currentRate : depositInputs.currentRate), currentRate => section === 'Mortgage' ? upd({ currentRate }) : updateScenario(previous => ({ ...previous, [scenarioSectionKey]: { ...previous[scenarioSectionKey], currentRate } })), CALCULATOR_FIELDS.currentRate)}
         </LocalRateEditor>
-        <CompactToggle label="Variable rate held" value={scenario.projections[scenarioSectionKey].holdVariableRate} onChange={holdVariableRate => updateScenario(previous => ({ ...previous, projections: { ...previous.projections, [scenarioSectionKey]: { ...previous.projections[scenarioSectionKey], holdVariableRate } } }))} />
+        {section === 'Savings' ? <CompactToggle label="Variable rate held" value={scenario.projections[scenarioSectionKey].holdVariableRate} onChange={holdVariableRate => updateScenario(previous => ({ ...previous, projections: { ...previous.projections, [scenarioSectionKey]: { ...previous.projections[scenarioSectionKey], holdVariableRate } } }))} /> : null}
         {section === 'Savings' ? <SavingsQualificationEditor inputs={scenario.projections.savings} editable={scenarioStorageStatus === 'ready'} onChange={patch => updateScenario(previous => ({ ...previous, projections: { ...previous.projections, savings: { ...previous.projections.savings, ...patch } } }))} /> : null}
         {isMortgage ? (
           <>
@@ -847,7 +901,13 @@ export function RateCheckWorkspace() {
             ))}
           </View>
         ) : null}
+        {!inputIssueKey && scenarioStorageStatus === 'ready' ? (
+          <View style={{ marginTop: 12 }}>
+            <Button title="Done" variant="secondary" onPress={() => setInputsOpen(false)} />
+          </View>
+        ) : null}
       </Card>
+      )}
 
       <AppText variant="small" weight="700" color="textMuted" style={{ marginBottom: 8 }}>
         {inputIssues.length
@@ -945,7 +1005,7 @@ export function RateCheckWorkspace() {
                     <>
                       <AppText variant="body" weight="800">{uiLabel("Rate only")}</AppText>
                       <AppText variant="tiny" color="textFaint" style={{ textAlign: 'right' }}>
-                        {targetDetailsMissing ? targetDetailsFailed ? uiLabel("Sources unverified"):uiLabel("Loading") : targetConstraint && targetConstraintContradicted(targetConstraint) ? uiTargetConstraint(targetConstraint) : section === 'TD' && advertisedTermMonths(c.row) == null ? uiLabel("Maturity unpublished") : uiLabel("Eligibility / rate conditions unverified")}
+                        {targetDetailsMissing && !targetDetailsFailed ? uiLabel("Loading") : targetConstraint && targetConstraintContradicted(targetConstraint) ? uiTargetConstraint(targetConstraint) : c.unavailableReason}
                       </AppText>
                     </>
                   ) : section === 'Mortgage' && c.perMonth != null ? (
@@ -982,8 +1042,16 @@ export function RateCheckWorkspace() {
         <AppText variant="tiny" color="textMuted">{uiLabel("Illustrative")}</AppText>
         <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <AppText variant="tiny" color="textMuted">{uiLabel("Excluded")}</AppText>
-          <AppText variant="tiny">{uiLabel("Fees · Tax · Switching costs")}</AppText>
+          <AppText variant="tiny">{switchCostEntered && enteredSwitch?.costClaimsAvailable ? uiJoin('Fees', ' · ', 'Tax') : uiLabel("Fees · Tax · Switching costs")}</AppText>
         </Row>
+        {switchCostEntered && enteredSwitch ? <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <AppText variant="tiny" color="textMuted">{uiLabel("Switching costs")}</AppText>
+          <AppText variant="tiny">{enteredSwitch.costClaimsAvailable ? formatDollars(enteredSwitch.netSwitchCost) : uiJoin(formatDollars(enteredSwitch.netSwitchCost), ' · ', 'Partial')}</AppText>
+        </Row> : null}
+        {isMortgage ? <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <AppText variant="tiny" color="textMuted">{uiLabel("Variable rate")}</AppText>
+          <AppText variant="tiny">{uiLabel("Held")}</AppText>
+        </Row> : null}
         <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <AppText variant="tiny" color="textMuted">{uiLabel("Conditions")}</AppText>
           <AppText variant="tiny">{uiLabel("Unverified")}</AppText>
@@ -1001,13 +1069,7 @@ export function RateCheckWorkspace() {
         </Row>}
       </Card>
       {target.status === 'available' ? <PublicCostComparison section={section} target={target.row} scenario={calculationScenario} /> : null}
-      <Card style={{ marginBottom: 16, gap: 10 }}>
-        <Button
-          title="Projection"
-          icon="analytics-outline"
-          onPress={() => void openProjections()}
-          disabled={scenarioStorageStatus !== 'ready'}
-        />
+      <View style={{ marginVertical: 12, gap: 10 }}>
         {scenarioStorageStatus === 'loading' || scenarioStorageStatus === 'idle' ? (
           <AppText variant="tiny" color="textMuted">{uiLabel("Loading")}</AppText>
         ) : null}
@@ -1024,7 +1086,7 @@ export function RateCheckWorkspace() {
             ) : null}
           </>
         ) : null}
-      </Card>
+      </View>
 
       {isMortgage ? (
         <View style={{ marginBottom: 16 }}>
@@ -1042,7 +1104,7 @@ export function RateCheckWorkspace() {
         </View>
       ) : null}
 
-      <Button title="Calculation receipt" variant="secondary" onPress={() => router.push('/calculation-receipt')} />
+      <Button title="Open calculation receipt" variant="ghost" onPress={() => router.push('/calculation-receipt')} />
     </ScreenScrollView>
   );
 }

@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { Alert, Modal, TextInput, View } from 'react-native';
 
 import { toFraction } from '../../data/format';
-import { ensurePermissions } from '../../data/notifications';
 import { useStore } from '../../data/store';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { useRateAlertToggle } from '../../hooks/useRateAlertToggle';
 import { uiDate, uiInputNumber, uiJoin, uiLabel, uiNumber } from '../../lib/uiCopy';
 import { fontStyle } from '../../theme/fonts';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -19,13 +19,6 @@ export function SavedRateActions({ row, section }: { row: RateRow; section: Sect
   const saved = useStore(s => s.savedRates);
   const trackedRates = useStore(s => s.trackedRates);
   const runDate = useStore(s => s.core?.run_date);
-  const notificationsEnabled = useStore(s => s.prefs.notificationsEnabled);
-  // Subscribe to changes as well as reading the store's exact-scope predicate.
-  useStore(s => s.subscriptions);
-  const isProductSubscribed = useStore(s => s.isProductSubscribed);
-  const subscribeProduct = useStore(s => s.subscribeProduct);
-  const unsubscribeProduct = useStore(s => s.unsubscribeProduct);
-  const setPref = useStore(s => s.setPref);
   const setTrackedRateRelevantDate = useStore(s => s.setTrackedRateRelevantDate);
   const [editing, setEditing] = useState(false);
   const [dateValue, setDateValue] = useState('');
@@ -33,10 +26,9 @@ export function SavedRateActions({ row, section }: { row: RateRow; section: Sect
     && row.public_offer_id && value.offerId === row.public_offer_id)
     ?? saved?.find(value => value.productKey === row.product_key && value.scope === 'rate' && !value.offerId && value.rateIndex === row.rate_index)
     ?? saved?.find(value => value.productKey === row.product_key && value.scope === 'product');
+  const { subscribed, toggle: toggleAlert } = useRateAlertToggle(row, ref?.scope);
   if (!ref) return null;
   const tracked = trackedRates?.find(value => value.id === ref.id);
-  const rateIndex = row.rate_index ?? null;
-  const subscribed = notificationsEnabled && isProductSubscribed(row.product_key, rateIndex, row.public_offer_id);
   const currentRate = toFraction(row.rate);
   const changeBps = tracked?.observedRate != null && currentRate != null
     ? Math.round((currentRate - tracked.observedRate) * 10_000) : 0;
@@ -45,15 +37,6 @@ export function SavedRateActions({ row, section }: { row: RateRow; section: Sect
     ? uiJoin(tracked.relevantDateKind === 'term-maturity' ? 'Matures' : 'Fixed rate ends', ': ', uiDate(tracked.relevantDate)) : null;
   const supportsDate = section === 'TD' || tracked?.relevantDateKind === 'fixed-rate-end'
     || row.rate_type?.toUpperCase().includes('FIXED') || row.ribbon_rate_structure?.toLowerCase() === 'fixed';
-  const toggleAlert = async () => {
-    if (isProductSubscribed(row.product_key, rateIndex, row.public_offer_id) && notificationsEnabled) {
-      unsubscribeProduct(row.product_key, rateIndex, row.public_offer_id);
-      return;
-    }
-    if (!(await ensurePermissions())) { Alert.alert('Notifications disabled'); return; }
-    if (!notificationsEnabled) setPref('notificationsEnabled', true);
-    if (!isProductSubscribed(row.product_key, rateIndex, row.public_offer_id)) subscribeProduct(row.product_key, rateIndex, row);
-  };
   const saveDate = async () => {
     try {
       await setTrackedRateRelevantDate(ref.id, dateValue.trim() || null, dateValue.trim() ? dateKind : null);
