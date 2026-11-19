@@ -26,9 +26,10 @@ import { isLocalAppHealthAudit } from '../src/lib/appHealthTransportGuard';
 import { logSwallowedError, runStoreRetry } from '../src/lib/degradationLog';
 import { openBrowse, scalarRouteParam } from '../src/lib/nav';
 import { auditActionString } from '../src/lib/performanceAuditActionParams';
-import { effectiveBankInsights } from '../src/lib/proAccess';
+import { effectiveBankInsights, effectiveHistoryRibbon } from '../src/lib/proAccess';
 import { yieldToPaintFrames } from '../src/lib/yieldToUi';
-import { isSectionKey, type HistoryWindow } from '../src/types';
+import { isSectionKey } from '../src/lib/sectionKey';
+import type { HistoryWindow } from '../src/types';
 
 export default function Research() {
   const { focus: focusRaw, section: sectionRaw } = useLocalSearchParams<{ focus?: string | string[]; section?: string | string[] }>();
@@ -61,6 +62,9 @@ function ResearchDashboard({ requestedSection }: { requestedSection: string | un
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
+  // The store loads the prebuilt history asset only when this pref allows it;
+  // otherwise the trend uses the history already in core and bank insights.
+  const prebuiltHistoryAllowed = useStore((s) => effectiveHistoryRibbon(s.prefs));
   const defaultSection = useStore((s) => s.prefs.defaultSection);
   const ensureHistoryBanks = useStore((s) => s.ensureHistoryBanks);
   const retryHistoryBanks = useStore((s) => s.retryHistoryBanks);
@@ -100,7 +104,7 @@ function ResearchDashboard({ requestedSection }: { requestedSection: string | un
   const interestSections = useMemo(() => orderedInterestSections(interests), [interests]);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const showBankInsights = effectiveBankInsights();
-  const prebuiltHistoryEnabled = hasHistoryAsset && shouldEnsurePrebuiltBankHistory(true, includeNonStandard);
+  const prebuiltHistoryEnabled = hasHistoryAsset && shouldEnsurePrebuiltBankHistory(prebuiltHistoryAllowed, includeNonStandard);
 
   useEffect(() => {
     setActiveSection((current) => resolveInterestSection(interests, current));

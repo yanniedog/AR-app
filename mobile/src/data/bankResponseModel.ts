@@ -177,6 +177,7 @@ export function bankResponseStatus(row: CompactBankResponseRow, decisionBps: num
   if (!decisionBps) return null;
   if (row.movePp == null) return row.evidence.reason === 'no-recorded-move' ? 'none' : null;
   const moveBps = row.movePp * 100;
+  if (moveBps === 0) return 'none';
   if (Math.sign(moveBps) !== Math.sign(decisionBps)) return 'opposite';
   return Math.abs(moveBps) + 0.5 >= Math.abs(decisionBps) ? 'full' : 'partial';
 }

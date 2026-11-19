@@ -19,7 +19,7 @@ const W = 340, H = 225, L = 44, R = 12, T = 12, B = 40;
 const SYNCHRONOUS_CHART_POINTS = 256;
 const timestamp = (date: string) => Date.parse(`${date}T00:00:00Z`);
 /** Comparison lines stay grey; dash patterns tell them apart without colour. */
-const COMPARISON_DASHES = [undefined, '6 3', '2 3', '8 3 2 3', '4 4'];
+const COMPARISON_DASHES = ['6 3', '2 3', '8 3 2 3', '4 4', '1 4'];
 const EMPTY_SAVED: ReadonlySet<string> = new Set();
 const NO_COMPARISON: { provider: string; i: number; dash: string | undefined }[] = [];
 

@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { SECTION_KEYS, type SectionKey } from '../../types';
-import { bankRateSnapshotsInRange, buildBankRateChart, focusBankRateChart, type BankRateChartModel, type BankRateRange, type RateStatistic } from '../../data/bankRateOverview';
+import { buildBankRateChart, type BankRateChartModel, type RateStatistic } from '../../data/bankRateOverview';
+import { bankRateSnapshotsInRange, focusBankRateChart, type BankRateRange } from '../../data/bankRateChartView';
 import { isBigFourProvider } from '../../data/bankGroups';
 import { useSavedProviders } from '../../hooks/useSavedProviders';
 import { profileSelectionCount } from '../../data/profile';

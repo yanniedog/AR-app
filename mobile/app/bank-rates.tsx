@@ -1,6 +1,6 @@
 import { useIsFocused } from '@react-navigation/native';
 import { useLocalSearchParams } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import { BankRatesPanel, type BankRatesAuditState } from '../src/components/passthrough/BankRatesPanel';
 import { ScreenSkeleton } from '../src/components/feedback';
@@ -8,7 +8,7 @@ import { ScreenScrollView } from '../src/components/Screen';
 import { normalizeInterests, resolveInterestSection } from '../src/data/interests';
 import { useStore } from '../src/data/store';
 import { scalarRouteParam } from '../src/lib/nav';
-import { isSectionKey } from '../src/types';
+import { isSectionKey } from '../src/lib/sectionKey';
 import { useNavigationContentReady } from '../src/hooks/useNavigationContentReady';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 
@@ -23,6 +23,7 @@ export default function BankRates() {
   const coreSha = useStore(s => s.manifest?.files.core.sha256);
   const requested = scalarRouteParam(useLocalSearchParams<{ section?: string | string[] }>().section);
   const [chosenSection, setChosenSection] = useState(() => isSectionKey(requested) ? requested : activeSection);
+  useEffect(() => { if (isSectionKey(requested)) setChosenSection(requested); }, [requested]);
   const section = resolveInterestSection(interests, chosenSection);
   const [laidOut, setLaidOut] = useState(false);
   const [chart, setChart] = useState<BankRatesAuditState | null>(null);

@@ -1,5 +1,5 @@
 import { isBigFourProvider, orderProviders, savedProviders } from '../src/data/bankGroups';
-import { bankRateSnapshotsInRange } from '../src/data/bankRateOverview';
+import { bankRateSnapshotsInRange } from '../src/data/bankRateChartView';
 import { bankResponseStatus, type CompactBankResponseRow } from '../src/data/bankResponseModel';
 import { marketPulse } from '../src/data/bankInsightsQuery';
 
@@ -25,7 +25,7 @@ test('saved providers resolve through current product keys', () => {
 
 test('the 1Y range keeps the trailing year ending at the newest snapshot', () => {
   const snapshots = { '2025-01-01': 1, '2025-06-01': 2, '2026-06-01': 3 };
-  expect(Object.keys(bankRateSnapshotsInRange(snapshots, '1Y'))).toEqual(['2026-06-01']);
+  expect(Object.keys(bankRateSnapshotsInRange(snapshots, '1Y'))).toEqual(['2025-06-01', '2026-06-01']);
   expect(bankRateSnapshotsInRange(snapshots, 'All')).toBe(snapshots);
 });
 
@@ -41,6 +41,7 @@ test('pass-through status compares the first move with the RBA change', () => {
   expect(bankResponseStatus(row(null, 'no-recorded-move'), -25)).toBe('none');
   expect(bankResponseStatus(row(null, 'history-gap'), -25)).toBeNull();
   expect(bankResponseStatus(row(-0.25), 0)).toBeNull();
+  expect(bankResponseStatus(row(0), -25)).toBe('none');
 });
 
 test('market pulse counts banks by direction so the totals agree', () => {
