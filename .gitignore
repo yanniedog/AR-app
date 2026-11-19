@@ -26,3 +26,4 @@ tmp/
 
 # Local agent memory (machine-specific issue/event log; not product code)
 .projectmem/
+.explorer/

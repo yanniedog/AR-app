@@ -1,0 +1,165 @@
+name: app-explorer
+run-name: app-explorer ${{ inputs.nonce || github.event_name }}
+
+# Runs a released APK on a KVM-accelerated Android emulator and records every
+# screen: screenshots, visible UI, settle time, jank, memory, JS/native errors.
+# Results are pushed to the orphan branch explorer/run-<run_id> so they can be
+# fetched with plain git (scripts/app-explorer.mjs). No secrets, no publication.
+# Cost: standard GitHub-hosted runner on a public repo only (free); no larger
+# runners, no paid services. Every APK release triggers crawl + full audit.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag or latest
+        default: latest
+      mode:
+        description: crawl, script, audit or full (crawl then audit)
+        default: crawl
+      audit:
+        description: Audit kind for audit mode (live or local)
+        default: live
+      script:
+        description: JSON array of steps (script mode)
+        default: ''
+      routes:
+        description: Comma-separated routes (crawl mode, blank for all)
+        default: ''
+      nonce:
+        description: Correlation id set by scripts/app-explorer.mjs
+        default: ''
+      fresh:
+        description: Clear app data before the run
+        type: boolean
+        default: true
+  workflow_run:
+    workflows: [mobile-android-apk]
+    types: [completed]
+  pull_request:
+    paths:
+      - '.github/workflows/app-explorer.yml'
+      - 'mobile/tools/app-explorer/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-explorer-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  explore:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag || 'latest' }}
+      # Releases get the full crawl plus audit; PR self-tests stay a short crawl.
+      MODE: ${{ inputs.mode || (github.event_name == 'workflow_run' && 'full') || 'crawl' }}
+      SCRIPT_JSON: ${{ inputs.script }}
+      ROUTES: ${{ inputs.routes }}
+      AUDIT: ${{ inputs.audit || 'live' }}
+      FRESH: ${{ github.event_name != 'workflow_dispatch' || inputs.fresh }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Resolve and download APK
+        id: apk
+        run: |
+          set -euo pipefail
+          if [ "$TAG" = latest ]; then
+            TAG=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=30" \
+              -q '[.[] | select(.draft|not) | select(.tag_name|startswith("app-v")) | select(any(.assets[]; .name=="app-preview.apk"))][0].tag_name')
+          fi
+          test -n "$TAG"
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p app-preview.apk -O app.apk
+          test -s app.apk
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: Previous crawl baseline
+        run: |
+          set -uo pipefail
+          prev=$(git ls-remote --heads origin 'explorer/run-*' | awk '{print $2}' | sed 's#refs/heads/##' | sort -t- -k2 -n | tail -n 1)
+          if [ -n "$prev" ] && git fetch --depth 1 origin "$prev" 2>/dev/null; then
+            git show FETCH_HEAD:report.json > baseline.json 2>/dev/null || rm -f baseline.json
+          fi
+      - name: Payload reachability from runner
+        run: |
+          set -uo pipefail
+          url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json
+          code=$(curl -sSL -o manifest.json -w '%{http_code}' "$url" || echo 000)
+          bytes=$(stat -c %s manifest.json 2>/dev/null || echo 0)
+          run_date=$(node -e 'try{console.log(require("./manifest.json").run_date??"")}catch{console.log("")}')
+          printf '{"manifestStatus":%s,"manifestBytes":%s,"runDate":"%s"}\n' "$code" "$bytes" "$run_date" > payload-check.json
+          cat payload-check.json
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run on emulator
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 4096M
+          disk-size: 6G
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          disable-animations: true
+          emulator-boot-timeout: 900
+          script: bash mobile/tools/app-explorer/ci-run.sh
+      - name: Write run facts
+        if: always()
+        env:
+          TAG_RESOLVED: ${{ steps.apk.outputs.tag }}
+        run: |
+          set -euo pipefail
+          test -f explorer-out/report.json || { echo 'No report produced'; exit 1; }
+          cat explorer-out/report.md >> "$GITHUB_STEP_SUMMARY"
+          printf '{"runId":%s,"tag":"%s","event":"%s","mode":"%s"}\n' "$GITHUB_RUN_ID" "$TAG_RESOLVED" "$GITHUB_EVENT_NAME" "$MODE" > explorer-out/run.json
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: explorer-out
+          path: explorer-out/
+          retention-days: 3
+          if-no-files-found: error
+
+  # Publishes results as data only: no repository code is checked out or run here.
+  publish:
+    needs: explore
+    if: always() && needs.explore.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: explorer-out
+          path: explorer-out
+      - name: Push results branch and prune old ones
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          branch="explorer/run-$GITHUB_RUN_ID"
+          cd explorer-out
+          git init -q -b "$branch"
+          git config user.name github-actions
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -qm "app-explorer run $GITHUB_RUN_ID"
+          git push -q "$remote" "HEAD:refs/heads/$branch"
+          echo "Results: branch $branch"
+          git ls-remote --heads "$remote" 'explorer/run-*' | awk '{print $2}' | sed 's#refs/heads/##' \
+            | sort -t- -k2 -n | head -n -20 | while read -r b; do git push -q "$remote" --delete "$b" || true; done
