@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
 import { publicRateReason, publicRateText, publicReferenceScope } from '../../data/publicRatePresentation';
 import { publicRateScenario, resolveLocalCurrentRate } from '../../data/publicRateIntegration';
 import { rateDecimal, decimalText } from '../../data/publicRateDecimal';
 import { selectPublicReference } from '../../data/publicRateLocal';
 import { useStore } from '../../data/store';
+import { humanizeEnum } from '../../data/format';
 import { ensurePermissions } from '../../data/notifications';
 import type { LocalRateInputs, UserRateScenario } from '../../data/userRateScenario';
 import { EMPTY_LOCAL_RATE_INPUTS } from '../../data/userRateScenario';
@@ -64,13 +65,13 @@ export function LocalRateEditor({ section, scenario, onChange, editable, childre
           return <View key={condition.field} style={{ gap: 4 }}>
             <AppText variant="tiny" color="textMuted">{label}</AppText>
             {options.length ? <View style={{ gap: 4 }}>
-              {options.map(value => <Pressable key={value} accessibilityRole="radio" accessibilityLabel={uiOpaqueEnum(value.toUpperCase())}
+              {options.map(value => <Pressable key={value} accessibilityRole="radio" accessibilityLabel={humanizeEnum(value.toUpperCase())}
                 accessibilityState={{ checked: currentValue === value, disabled: !editable }} disabled={!editable}
                 style={{ minHeight: 48, padding: 8, borderWidth: 1, borderColor: currentValue === value ? theme.colors.primary : theme.colors.border, borderRadius: theme.radius.md }}
                 onPress={() => setScope(condition.field, value)}>
-                <AppText variant="small">{uiOpaqueEnum(value.toUpperCase())}</AppText>
+                <AppText variant="small">{humanizeEnum(value.toUpperCase())}</AppText>
               </Pressable>)}
-              {currentValue != null && !options.includes(String(currentValue)) ? <AppText variant="tiny" color="textMuted">{uiJoin('Selected', ': ', uiOpaqueEnum(String(currentValue).toUpperCase()), ' · ', 'Reference scope', ': ', 'Unmet')}</AppText> : null}
+              {currentValue != null && !options.includes(String(currentValue)) ? <AppText variant="tiny" color="textMuted">{uiJoin('Selected', ': ', humanizeEnum(String(currentValue).toUpperCase()), ' · ', 'Reference scope', ': ', 'Unmet')}</AppText> : null}
             </View> : <TextInput value={condition.field.startsWith('term') ? uiInputNumber(typeof currentValue === 'string' ? currentValue : '') : uiInputIdentifier(typeof currentValue === 'string' ? currentValue : '')} editable={editable} onChangeText={value => setScope(condition.field, value)}
               keyboardType={condition.field.startsWith('term') ? 'decimal-pad' : 'default'} accessibilityLabel={label} placeholder="Unknown" placeholderTextColor={theme.colors.textFaint} style={inputStyle} />}
           </View>;
@@ -86,7 +87,10 @@ export function LocalRateEditor({ section, scenario, onChange, editable, childre
       <CompactToggle label="Reference alerts" value={local.referenceChangeAlerts} onChange={referenceChangeAlerts => {
         if (!editable) return;
         if (!referenceChangeAlerts) { onChange({ referenceChangeAlerts }); return; }
-        void ensurePermissions().then(allowed => { if (allowed) { useStore.getState().setPref('notificationsEnabled', true); onChange({ referenceChangeAlerts: true }); } });
+        void ensurePermissions().then(allowed => {
+          if (!allowed) { Alert.alert('Notifications disabled'); return; }
+          useStore.getState().setPref('notificationsEnabled', true); onChange({ referenceChangeAlerts: true });
+        });
       }} />
       {result.status !== 'exact' && catalogue.status === 'ready' && catalogue.allLoaded ? result.reasonCodes.map(reason => <AppText variant="tiny" color="textMuted" key={reason}>{publicRateReason(reason)}</AppText>) : null}
       {selected?.freshness.lastSuccessAt ? <AppText variant="tiny" color="textMuted">{uiJoin('Last successful check', ': ', uiDate(selected.freshness.lastSuccessAt))}</AppText> : null}
@@ -105,7 +109,7 @@ export function LocalRateEditor({ section, scenario, onChange, editable, childre
                 onPress={() => { if (editable) onChange({ referenceId: reference.referenceId }); setSelecting(false); }}>
                 <AppText weight="600">{uiPublicReferenceName(reference)}</AppText>
                 <AppText variant="tiny" color="textMuted">{publicReferenceScope(reference)}</AppText>
-                <AppText variant="tiny" color="textMuted">{uiJoin(provider ? uiPublicProviderName(provider) : uiIdentifier(reference.providerId), ' · ', uiOpaqueEnum(reference.freshness.state.toUpperCase()),
+                <AppText variant="tiny" color="textMuted">{uiJoin(provider ? uiPublicProviderName(provider) : uiIdentifier(reference.providerId), ' · ', humanizeEnum(reference.freshness.state.toUpperCase()),
                   reference.effectiveFrom ? uiJoin(' · ', 'Effective from', ': ', uiDate(reference.effectiveFrom)) : null, reference.effectiveTo ? uiJoin(' · ', 'Effective to', ': ', uiDate(reference.effectiveTo)) : null)}</AppText>
               </Pressable>;
             })}

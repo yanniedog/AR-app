@@ -55,14 +55,16 @@ describe('depositToReachLvr', () => {
 });
 
 describe('normalizeCalcInputs', () => {
-  it('recognises a legacy existing balance only when no mode was recorded', () => {
+  it('defaults to refinancing unless buying was explicitly selected', () => {
     expect(normalizeCalcInputs({ loanBalance: '500000' }).mode).toBe('refi');
+    expect(normalizeCalcInputs({}).mode).toBe('refi');
+    expect(EMPTY_CALC.mode).toBe('refi');
     expect(normalizeCalcInputs({ mode: 'buy', loanBalance: '500000' }).mode).toBe('buy');
   });
   it('coerces partial/garbage input to a safe shape', () => {
     expect(normalizeCalcInputs(null)).toEqual(EMPTY_CALC);
     expect(normalizeCalcInputs({ mode: 'refi', propertyValue: 5 as unknown as string }).mode).toBe('refi');
-    expect(normalizeCalcInputs({ mode: 'weird' as never }).mode).toBe('buy');
+    expect(normalizeCalcInputs({ mode: 'weird' as never }).mode).toBe('refi');
   });
 });
 

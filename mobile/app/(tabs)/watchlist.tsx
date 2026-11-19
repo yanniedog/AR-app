@@ -1,7 +1,7 @@
 import { usePublicRateCatalogue } from '../../src/data/publicRateCatalogue';
 import { publicOfferSelectionToken } from '../../src/data/publicOfferIdentity';
 import { publicComparisonCore, publicRateScenario, resolveLocalCurrentRate } from '../../src/data/publicRateIntegration';
-import { uiCount, uiDate, uiJoin, uiLabel, uiNumber, uiSectionName, type UiCopy } from "../../src/lib/uiCopy";
+import { uiCount, uiDate, uiJoin, uiLabel, uiNumber, uiProductName, uiProviderName, uiSectionName, type UiCopy } from "../../src/lib/uiCopy";
 import { mandatoryEligibleRows } from '../../src/data/eligibilityGate';
 import { useIsFocused, useScrollToTop } from '@react-navigation/native';
 import { router } from 'expo-router';
@@ -13,9 +13,13 @@ import { ProductCard } from '../../src/components/ProductCard';
 import { Screen, ScreenScrollView } from '../../src/components/Screen';
 import { UndoSnackbar } from '../../src/components/Snackbar';
 import { SwipeableRow } from '../../src/components/SwipeableRow';
-import { AppText, Button, Card, Disclosure, Row, SectionHeading } from '../../src/components/ui';
+import { AppText, Button, Card, Row, SectionHeading } from '../../src/components/ui';
+import { SegmentedControl } from '../../src/components/controls';
+import { IconAction } from '../../src/components/IconAction';
+import { useRateAlertToggle } from '../../src/hooks/useRateAlertToggle';
 import { SECTION_ORDER, SECTIONS } from '../../src/constants';
 import { computeLvr } from '../../src/data/calc';
+import { savedPositionEstimate, type RatePosition } from '../../src/lib/savedPositionEstimate';
 import { toggleCompareSelection, resolveCompareSelections } from '../../src/data/compareSelection';
 import { formatRate, toFraction } from '../../src/data/format';
 import {
@@ -57,13 +61,6 @@ function compareToken(productKey: string, rateIndex: number | null, offerId?: st
   return offerId ? publicOfferSelectionToken(productKey, offerId) : rateIndex == null ? productKey : `${rateIndex}#${productKey}`;
 }
 
-interface RatePosition {
-  section: SectionKey;
-  currentRate: number;
-  matchedRate: number | null;
-  gapRate: number | null;
-  ready: boolean;
-}
 
 function positionHeadline(position: RatePosition): UiCopy {
   if (!position.ready) return 'Matching';
@@ -72,6 +69,35 @@ function positionHeadline(position: RatePosition): UiCopy {
   }
   if (position.gapRate <= 0) return 'No better matched rate';
   return uiJoin('Gap',': ',uiNumber(position.gapRate*100,2),' ','percentage points');
+}
+
+function unavailableRefTitle(ref: SavedRateRef): UiCopy {
+  const [provider, , , ...name] = ref.productKey.split('|');
+  const productName = name.join('|').trim();
+  return provider?.trim() && productName
+    ? uiJoin('Choose product', ': ', uiProviderName({ provider }), ' · ', uiProductName({ product_name: productName }))
+    : 'Choose product';
+}
+
+const ADD_SECTION_OPTIONS = SECTION_ORDER.map(value => ({ value, label: uiSectionName(value, true) }));
+
+function AddMyRate({ initial, onAdd }: { initial: SectionKey; onAdd: (section: SectionKey) => void }) {
+  const [section, setSection] = useState<SectionKey>(initial);
+  return (
+    <View style={{ gap: 8 }}>
+      <SegmentedControl options={ADD_SECTION_OPTIONS} value={section} onChange={setSection} />
+      <Button title="Add my rate" onPress={() => onAdd(section)} />
+    </View>
+  );
+}
+
+function SavedAlertAction({ row, scope }: { row: RateRow; scope: SavedRateRef['scope'] }) {
+  const { subscribed, toggle } = useRateAlertToggle(row, scope);
+  return (
+    <IconAction word="Alerts" icon={subscribed ? 'notifications' : 'notifications-outline'} active={subscribed}
+      accessibilityLabel={uiJoin(subscribed ? 'Disable alerts' : 'Enable alerts', ' · ', uiProviderName(row), ' · ', uiProductName(row))}
+      accessibilityState={{ checked: subscribed }} onPress={() => void toggle()} />
+  );
 }
 
 let auditSavedFixtureSnapshot: {
@@ -88,7 +114,6 @@ export default function MyRates() {
   // Latch after first preparation so blur (web continues rendering inactive
   // tabs) does not unmount ScreenScrollView and reset scroll offset.
   const contentReady = useNavigationContentReady(focused, { latchAfterReady: true });
-  const [positionsOpen, setPositionsOpen] = useState(false);
   const core = useStore((s) => s.core);
   const manifest = useStore((s) => s.manifest);
   const publicCatalogue = usePublicRateCatalogue(manifest);
@@ -101,6 +126,7 @@ export default function MyRates() {
   const restoreSavedRate = useStore((s) => s.restoreSavedRate);
   const subscriptions = useStore((s) => s.subscriptions);
   const setActiveSection = useStore((s) => s.setActiveSection);
+  const activeSection = useStore((s) => s.activeSection);
   const ensureDetails = useStore((s) => s.ensureDetails);
   const detailsLoading = useStore((s) => s.detailsLoading);
   const detailsProducts = useStore((s) => s.details?.products ?? null);
@@ -252,6 +278,7 @@ export default function MyRates() {
           section,
           currentRate,
           matchedRate: null,
+          matchedRow: null,
           gapRate: null,
           ready: false,
         }];
@@ -281,6 +308,7 @@ export default function MyRates() {
         section,
         currentRate,
         matchedRate,
+        matchedRow: match ?? null,
         gapRate,
         ready: true,
       }];
@@ -469,6 +497,15 @@ export default function MyRates() {
     });
   }, [items, removeSavedRate, restoreSavedRate, showUndo, trackedById]);
 
+  const positionAmount = (position: RatePosition) => savedPositionEstimate(position, scenario);
+
+  const removeUnavailable = () => {
+    const refs = [...unavailableRefs];
+    const tracked = refs.map(ref => trackedById.get(ref.id));
+    refs.forEach(ref => removeSavedRate(ref.id));
+    showUndo('Removed', () => refs.forEach((ref, index) => restoreSavedRate(ref, tracked[index])));
+  };
+
   if (!core) return <ScreenSkeleton />;
   if (!contentReady) {
     return (
@@ -490,15 +527,16 @@ export default function MyRates() {
             <Button
               title="Remove unavailable save"
               variant="secondary"
-              onPress={() => unavailableRefs.forEach((ref) => removeSavedRate(ref.id))}
+              onPress={removeUnavailable}
             />
           ) : null}
           {emptyState === 'hiddenByProfile' ? (
             <Button title="Edit profile" variant="secondary" onPress={() => router.push('/profile')} />
           ) : null}
-          <Button title="Rate check" onPress={() => openRateEditor('Mortgage')} />
-          <Button title="Rates" variant="secondary" onPress={() => router.push('/(tabs)/browse')} />
+          <AddMyRate initial={activeSection} onAdd={openRateEditor} />
+          <Button title="Browse rates" variant="secondary" onPress={() => router.push('/(tabs)/browse')} />
         </View>
+        <UndoSnackbar snack={snack} onUndo={undo} />
       </Screen>
     );
   }
@@ -521,6 +559,64 @@ export default function MyRates() {
           </Card>
         ) : null}
 
+        <View style={{ gap: 8 }}>
+          <SectionHeading title="Your entered rates" />
+          {positions.length ? positions.map((position) => {
+            const meta = SECTIONS[position.section];
+            const amount = positionAmount(position);
+            return (
+              <Pressable
+                key={position.section}
+                onPress={() => openRateEditor(position.section)}
+                accessibilityRole="button"
+                accessibilityLabel={uiJoin('Calculate', ' · ', uiSectionName(position.section), amount ? uiJoin(' · ', amount.text) : null)}
+              >
+                <Card variant="outlined" style={{ gap: theme.spacing(3) }}>
+                  <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                    <AppText variant="small" weight="700">{uiSectionName(position.section)}</AppText>
+                    <AppText variant="small" color="primary" weight="700">{uiLabel("Calculate")}</AppText>
+                  </Row>
+                  <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: theme.spacing(4) }}>
+                    <View>
+                      <AppText variant="tiny" color="textMuted">{uiLabel("Current entered rate")}</AppText>
+                      <AppText variant="h3">{formatRate(position.currentRate)}</AppText>
+                    </View>
+                    {position.matchedRate != null ? (
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <AppText variant="tiny" color="textMuted">{uiLabel("Matched observed rate")}</AppText>
+                        <AppText variant="h3" style={{ color: meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit }}>
+                          {formatRate(position.matchedRate)}
+                        </AppText>
+                      </View>
+                    ) : null}
+                  </Row>
+                  {amount ? amount.unavailable
+                    ? <AppText variant="tiny" color="textMuted">{amount.text}</AppText>
+                    : <AppText variant="h3" style={{ color: theme.colors.success }}>{amount.text}</AppText> : null}
+                  <AppText variant="body" weight="700">{positionHeadline(position)}</AppText>
+                  {position.ready ? (
+                    <AppText variant="tiny" color="textMuted">{uiJoin('Observed',': ',uiDate(core.run_date))}</AppText>
+                  ) : null}
+                  {position.section === 'Mortgage' && mortgageRateMetric === 'comparison' ? (
+                    <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                      <AppText variant="tiny" color="textMuted">{uiLabel("Match / gap basis")}</AppText>
+                      <AppText variant="tiny">{uiLabel("Comparison / advertised")}</AppText>
+                    </Row>
+                  ) : null}
+                </Card>
+              </Pressable>
+            );
+          }) : (
+            <Card variant="outlined">
+              <AddMyRate initial={activeSection} onAdd={openRateEditor} />
+            </Card>
+          )}
+          <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <AppText variant="tiny" color="textMuted">{uiLabel("Entered rates")}</AppText>
+            <AppText variant="tiny">{uiLabel("This device")}</AppText>
+          </Row>
+        </View>
+
         <SectionHeading
           title="Saved rates"
           action={items.length >= 2 ? (
@@ -536,12 +632,12 @@ export default function MyRates() {
             <AppText variant="small" color="textMuted">
               {uiJoin('Unavailable tiers',': ',uiCount(unavailableRefs.length))}
             </AppText>
-            {unavailableRefs.map(ref => <Button key={ref.id} title="Choose product"
+            {unavailableRefs.map(ref => <Button key={ref.id} title={unavailableRefTitle(ref)}
               variant="ghost" onPress={() => openProduct(ref.productKey)} />)}
             <Button
               title="Remove unavailable saves"
               variant="secondary"
-              onPress={() => unavailableRefs.forEach((ref) => removeSavedRate(ref.id))}
+              onPress={removeUnavailable}
             />
           </View>
         ) : null}
@@ -565,74 +661,21 @@ export default function MyRates() {
               <View testID="saved-product-rows">
               {sectionItems.map(({ ref, row, section }) => {
                 const token = compareToken(row.product_key, row.rate_index ?? null, row.public_offer_id);
-                return <SwipeableRow key={ref.id} onDelete={() => remove(ref.id)} deleteLabel="Stop watching">
-                  <ProductCard row={row} section={section} selectMode={selectMode} selected={selected.includes(token)}
-                    logoRenderStateId={`saved:${ref.id}`} onLogoRenderStateChange={savedLogos.onLogoRenderStateChange}
-                    onPress={() => { if (selectMode) toggleSelection(token); else openSavedProduct(row); }} />
+                return <SwipeableRow key={ref.id} onDelete={() => remove(ref.id)} deleteLabel="Remove">
+                  <Row style={{ alignItems: 'center' }}>
+                    <View style={{ flex: 1 }}>
+                      <ProductCard row={row} section={section} selectMode={selectMode} selected={selected.includes(token)}
+                        logoRenderStateId={`saved:${ref.id}`} onLogoRenderStateChange={savedLogos.onLogoRenderStateChange}
+                        onPress={() => { if (selectMode) toggleSelection(token); else openSavedProduct(row); }} />
+                    </View>
+                    {selectMode ? null : <SavedAlertAction row={row} scope={ref.scope} />}
+                  </Row>
                 </SwipeableRow>;
               })}
               </View>
             </View>
           );
         })}
-        <Disclosure title="Your entered rates" open={positionsOpen} onToggle={() => setPositionsOpen(open => !open)}>
-        {positions.length ? positions.map((position) => {
-          const meta = SECTIONS[position.section];
-          return (
-            <Card
-              key={position.section}
-              variant="outlined"
-              style={{ gap: theme.spacing(3) }}
-            >
-              <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                <AppText variant="small" weight="700">{uiSectionName(position.section)}</AppText>
-                <Pressable
-                  onPress={() => openRateEditor(position.section)}
-                  accessibilityRole="button"
-                  accessibilityLabel={uiJoin('Edit',' ',uiSectionName(position.section),' ','Rate')}
-                  style={{ minHeight: 48, minWidth: 48, justifyContent: 'center', alignItems: 'flex-end' }}
-                >
-                  <AppText variant="small" color="primary" weight="700">{uiLabel("Edit")}</AppText>
-                </Pressable>
-              </Row>
-              <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: theme.spacing(4) }}>
-                <View>
-                  <AppText variant="tiny" color="textMuted">{uiLabel("Current entered rate")}</AppText>
-                  <AppText variant="h3">{formatRate(position.currentRate)}</AppText>
-                </View>
-                {position.matchedRate != null ? (
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <AppText variant="tiny" color="textMuted">{uiLabel("Matched observed rate")}</AppText>
-                    <AppText variant="h3" style={{ color: meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit }}>
-                      {formatRate(position.matchedRate)}
-                    </AppText>
-                  </View>
-                ) : null}
-              </Row>
-              <AppText variant="body" weight="700">{positionHeadline(position)}</AppText>
-              {position.ready ? (
-                <AppText variant="tiny" color="textMuted">{uiJoin('Observed',': ',uiDate(core.run_date))}
-                </AppText>
-              ) : null}
-              {position.section === 'Mortgage' && mortgageRateMetric === 'comparison' ? (
-                <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                  <AppText variant="tiny" color="textMuted">{uiLabel("Match / gap basis")}</AppText>
-                  <AppText variant="tiny">{uiLabel("Comparison / advertised")}</AppText>
-                </Row>
-              ) : null}
-            </Card>
-          );
-        }) : (
-          <Card variant="outlined" style={{ gap: theme.spacing(3) }}>
-            <Button title="Add my rate" onPress={() => openRateEditor('Mortgage')} />
-          </Card>
-        )}
-        <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-          <AppText variant="tiny" color="textMuted">{uiLabel("Entered rates")}</AppText>
-          <AppText variant="tiny">{uiLabel("This device")}</AppText>
-        </Row>
-
-        </Disclosure>
       </ScreenScrollView>
       <UndoSnackbar snack={snack} onUndo={undo} />
 
