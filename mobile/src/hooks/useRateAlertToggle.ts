@@ -15,17 +15,21 @@ export function useRateAlertToggle(row: RateRow, scope: 'rate' | 'product' = 'ra
   const subscribeProduct = useStore(s => s.subscribeProduct);
   const unsubscribeProduct = useStore(s => s.unsubscribeProduct);
   const setPref = useStore(s => s.setPref);
-  const rateIndex = scope === 'product' ? null : row.rate_index ?? null;
-  const subscribed = notificationsEnabled && isProductSubscribed(row.product_key, rateIndex, row.public_offer_id);
+  const product = scope === 'product';
+  const rateIndex = product ? null : row.rate_index ?? null;
+  // Product scope uses the product-wide identity throughout: no tier, no offer.
+  const offerId = product ? undefined : row.public_offer_id;
+  const subscribed = notificationsEnabled && isProductSubscribed(row.product_key, rateIndex, offerId);
   const toggle = useCallback(async () => {
-    if (notificationsEnabled && isProductSubscribed(row.product_key, rateIndex, row.public_offer_id)) {
-      unsubscribeProduct(row.product_key, rateIndex, row.public_offer_id);
+    if (notificationsEnabled && isProductSubscribed(row.product_key, rateIndex, offerId)) {
+      unsubscribeProduct(row.product_key, rateIndex, offerId);
       return;
     }
     if (!(await ensurePermissions())) { Alert.alert('Notifications disabled'); return; }
     if (!notificationsEnabled) setPref('notificationsEnabled', true);
-    if (isProductSubscribed(row.product_key, rateIndex, row.public_offer_id)) return;
-    if (subscribeProduct(row.product_key, rateIndex, row) === false) Alert.alert('Alert unavailable');
-  }, [isProductSubscribed, notificationsEnabled, rateIndex, row, setPref, subscribeProduct, unsubscribeProduct]);
+    if (isProductSubscribed(row.product_key, rateIndex, offerId)) return;
+    const subscribeRow = product ? { ...row, public_offer_id: undefined, public_programme_id: undefined } : row;
+    if (subscribeProduct(row.product_key, rateIndex, subscribeRow) === false) Alert.alert('Alert unavailable');
+  }, [isProductSubscribed, notificationsEnabled, offerId, product, rateIndex, row, setPref, subscribeProduct, unsubscribeProduct]);
   return { subscribed, toggle };
 }

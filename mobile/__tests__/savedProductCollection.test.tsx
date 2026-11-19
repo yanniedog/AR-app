@@ -317,3 +317,35 @@ test('empty Saved offers Add my rate by section and Browse rates', () => {
   } finally { act(() => tree.unmount()); }
 });
 
+
+test('product-scoped save on an indexed offer row toggles the product-wide alert', async () => {
+  const base = mockState.core.sections.TD.rates[1];
+  const row = { ...base, public_offer_id: 'offer-x', public_programme_id: 'programme-x' };
+  const ref = makeSavedRateRef(row, 'product');
+  mockState.savedRates = [ref]; mockState.trackedRates = [makeTrackedRate(ref)];
+  mockState.subscriptions = [makeProductSubscription(row, null)];
+  expect(mockState.subscriptions[0].offerId).toBeUndefined();
+  mockState.isProductSubscribed.mockImplementation((key: string, index: number | null, offer?: string) =>
+    isProductSubscribed(mockState.subscriptions, key, index, offer));
+  mockState.unsubscribeProduct.mockImplementation((key: string, index: number | null, offer?: string) => {
+    mockState.subscriptions = mockState.subscriptions.filter((sub: { id: string }) => sub.id !== productSubscriptionId(key, index, offer));
+  });
+  mockState.subscribeProduct.mockImplementation((_key: string, index: number | null, selected: typeof row) => {
+    mockState.subscriptions = [...mockState.subscriptions, makeProductSubscription(selected, index)];
+    return true;
+  });
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  const tree = mount(<SavedRateActions row={row} section="TD" />);
+  try {
+    expect(tree.root.findByType(IconAction).props.active).toBe(true);
+    await act(async () => { tree.root.findByType(IconAction).props.onPress(); });
+    expect(mockState.unsubscribeProduct).toHaveBeenCalledWith(row.product_key, null, undefined);
+    expect(mockState.subscriptions).toHaveLength(0);
+    act(() => tree.update(<WordBubbleProvider><SavedRateActions row={row} section="TD" /></WordBubbleProvider>));
+    await act(async () => { tree.root.findByType(IconAction).props.onPress(); });
+    expect(mockState.subscribeProduct).toHaveBeenCalledWith(row.product_key, null, expect.objectContaining({ public_offer_id: undefined }));
+    act(() => tree.update(<WordBubbleProvider><SavedRateActions row={row} section="TD" /></WordBubbleProvider>));
+    expect(tree.root.findByType(IconAction).props.active).toBe(true);
+    expect(alert).not.toHaveBeenCalled();
+  } finally { act(() => tree.unmount()); alert.mockRestore(); }
+});
