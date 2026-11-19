@@ -108,20 +108,23 @@ async function settle(timeoutMs) {
   let prev = null;
   let last = { nodes: [] };
   let stableSince = null;
+  let firstSeen = start;
   while (Date.now() - start < timeoutMs) {
+    const dumpStarted = Date.now();
     last = await dumpUi();
     const fp = fingerprint(last.nodes);
     const loading = looksLoading(last.nodes);
+    if (fp !== prev) firstSeen = dumpStarted;
     if (fp === prev && !loading && last.nodes.length > 0) {
       stableSince ??= Date.now();
       if (Date.now() - stableSince >= 600) {
-        return { ...last, settleMs: stableSince - start, timedOut: false };
+        return { ...last, settleMs: Math.max(0, firstSeen - start), timedOut: false };
       }
     } else {
       stableSince = null;
     }
     prev = fp;
-    await sleep(250);
+    await sleep(150);
   }
   return { ...last, settleMs: Date.now() - start, timedOut: true };
 }
@@ -206,15 +209,21 @@ function memoryKb() {
 }
 
 function drainLogcat() {
-  const out = adb(['logcat', '-d', '-v', 'time', 'ReactNativeJS:V', 'ReactNative:W', 'AndroidRuntime:E', 'ActivityManager:W', '*:S'], { allowFail: true }) || '';
+  const pid = appPid().split(/\s+/)[0];
+  const tagged = adb(['logcat', '-d', '-v', 'time', 'ReactNativeJS:V', 'ReactNative:W', 'AndroidRuntime:E', '*:S'], { allowFail: true }) || '';
+  const own = pid ? adb(['logcat', '-d', '-v', 'time', `--pid=${pid}`, '*:W'], { allowFail: true }) || '' : '';
   adb(['logcat', '-c'], { allowFail: true });
-  return out;
+  const lines = new Set();
+  for (const line of `${tagged}\n${own}`.split('\n')) {
+    if (line && !line.startsWith('---------')) lines.add(line);
+  }
+  return [...lines].sort().join('\n');
 }
 
 function classifyLog(text) {
   const lines = text.split('\n').filter(Boolean);
   return {
-    errors: lines.filter(l => /\bE\/|FATAL|Exception|Error:/i.test(l)).slice(0, 30),
+    errors: lines.filter(l => /\s(E|F)\/|FATAL EXCEPTION|ReactNativeJS.*(Error|Exception)/.test(l)).slice(0, 30),
     warnings: lines.filter(l => /\bW\//.test(l)).length,
   };
 }
@@ -278,7 +287,26 @@ class Explorer {
     const component = (sh(`cmd package resolve-activity --brief ${PKG} | tail -n 1`, { allowFail: true }) || '').trim();
     const out = sh(`am start -W -n ${component.includes('/') ? component : `${PKG}/.MainActivity`}`, { allowFail: true }) || '';
     const total = Number((/TotalTime: (\d+)/.exec(out) || [])[1] || 0);
-    return this.record(name, { activityStartMs: total }, this.args.coldTimeoutMs);
+    const step = await this.record(name, { activityStartMs: total }, this.args.coldTimeoutMs);
+    await this.recoverData();
+    return step;
+  }
+
+  /** If the app lands on its data-unavailable screen, record it, retry once and wait for data. */
+  async recoverData() {
+    const retry = findNode(this.current.nodes, 'Try again');
+    if (!retry || !findNode(this.current.nodes, { contains: 'Data unavailable' })) return;
+    this.dataUnavailable = (this.dataUnavailable || 0) + 1;
+    const [x, y] = centre(retry);
+    sh(`input tap ${x} ${y}`);
+    const t0 = Date.now();
+    let recovered = false;
+    while (Date.now() - t0 < this.args.coldTimeoutMs) {
+      const nodes = (await dumpUi()).nodes;
+      if (!findNode(nodes, { contains: 'Data unavailable' }) && !looksLoading(nodes) && nodes.length) { recovered = true; break; }
+      await sleep(1000);
+    }
+    await this.record('retry after data unavailable', { recovered, waitedMs: Date.now() - t0, error: recovered ? undefined : 'data still unavailable after retry' }, this.args.coldTimeoutMs);
   }
 
   async open(route, name) {
@@ -422,8 +450,12 @@ function renderMarkdown(report, baseline) {
   const failed = report.steps.filter(s => s.error);
   const slow = report.steps.filter(s => s.settleTimedOut);
   const withErrors = report.steps.filter(s => s.log.errors.length);
+  const unavailable = report.steps.filter(s => s.visible?.some(v => /Data unavailable/.test(v)));
   const lines = [
     `# App explorer: ${report.app?.versionName ?? '?'} (${report.app?.versionCode ?? '?'})`,
+    '',
+    unavailable.length ? `**Data unavailable on ${unavailable.length} of ${report.steps.length} steps**` : '',
+    report.network ? `Runner payload check: manifest HTTP ${report.network.manifestStatus}, ${report.network.manifestBytes} bytes, run_date ${report.network.runDate ?? '?'}` : '',
     '',
     `Mode ${report.mode} | ${report.steps.length} steps | crashes ${crashed.length} | step failures ${failed.length} | settle timeouts ${slow.length} | steps with JS/native errors ${withErrors.length}`,
     baseline ? `Baseline ${baseline.version}` : '',
@@ -441,7 +473,7 @@ function renderMarkdown(report, baseline) {
       s.log.errors.length && `${s.log.errors.length} errors`,
       s.activityStartMs && `start ${s.activityStartMs}ms`,
     ].filter(Boolean).join('; ');
-    lines.push(`| ${s.n} | ${s.name} | ${s.settleMs} | ${delta == null ? '' : (delta > 0 ? '+' : '') + delta} | ${s.frames.janky}/${s.frames.frames} | ${s.frames.p90} | ${s.memKb ? Math.round(s.memKb / 1024) : ''} | ${notes} |`);
+    lines.push(`| ${s.n} | ${s.name} | ${s.settleMs} | ${delta == null ? '' : (delta > 0 ? '+' : '') + delta} | ${s.frames.frames ? `${s.frames.janky}/${s.frames.frames}` : ''} | ${s.frames.frames ? s.frames.p90 : ''} | ${s.memKb ? Math.round(s.memKb / 1024) : ''} | ${notes} |`);
   }
   if (withErrors.length) {
     lines.push('', '## Errors');
@@ -467,7 +499,9 @@ async function main() {
   sh(`pm grant ${PKG} android.permission.POST_NOTIFICATIONS`, { allowFail: true });
   if (args.fresh) sh(`pm clear ${PKG}`, { allowFail: true });
   const ex = new Explorer(args);
-  const meta = { mode: args.mode, app: appVersion(), device: { size: ex.size, sdk: sh('getprop ro.build.version.sdk').trim() }, startedAt: new Date().toISOString() };
+  let network;
+  try { network = JSON.parse(fs.readFileSync('payload-check.json', 'utf8')); } catch { network = undefined; }
+  const meta = { network, mode: args.mode, app: appVersion(), device: { size: ex.size, sdk: sh('getprop ro.build.version.sdk').trim() }, startedAt: new Date().toISOString() };
   let script = [];
   if (args.mode === 'script') {
     const raw = args.scriptJson ?? fs.readFileSync(args.script, 'utf8');

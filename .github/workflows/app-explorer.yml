@@ -77,6 +77,15 @@ jobs:
           if [ -n "$prev" ] && git fetch --depth 1 origin "$prev" 2>/dev/null; then
             git show FETCH_HEAD:report.json > baseline.json 2>/dev/null || rm -f baseline.json
           fi
+      - name: Payload reachability from runner
+        run: |
+          set -uo pipefail
+          url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json
+          code=$(curl -sSL -o manifest.json -w '%{http_code}' "$url" || echo 000)
+          bytes=$(stat -c %s manifest.json 2>/dev/null || echo 0)
+          run_date=$(node -e 'try{console.log(require("./manifest.json").run_date??"")}catch{console.log("")}')
+          printf '{"manifestStatus":%s,"manifestBytes":%s,"runDate":"%s"}\n' "$code" "$bytes" "$run_date" > payload-check.json
+          cat payload-check.json
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
