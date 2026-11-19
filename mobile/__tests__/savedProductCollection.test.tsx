@@ -327,11 +327,12 @@ test('product-scoped save on an indexed offer row toggles the product-wide alert
   expect(mockState.subscriptions[0].offerId).toBeUndefined();
   mockState.isProductSubscribed.mockImplementation((key: string, index: number | null, offer?: string) =>
     isProductSubscribed(mockState.subscriptions, key, index, offer));
-  mockState.unsubscribeProduct.mockImplementation((key: string, index: number | null, offer?: string) => {
-    mockState.subscriptions = mockState.subscriptions.filter((sub: { id: string }) => sub.id !== productSubscriptionId(key, index, offer));
+  mockState.unsubscribeProduct.mockImplementation((key: string, index: number | null, offer?: string | null) => {
+    mockState.subscriptions = mockState.subscriptions.filter((sub: { id: string }) => sub.id !== productSubscriptionId(key, index, offer ?? undefined));
   });
-  mockState.subscribeProduct.mockImplementation((_key: string, index: number | null, selected: typeof row) => {
-    mockState.subscriptions = [...mockState.subscriptions, makeProductSubscription(selected, index)];
+  mockState.subscribeProduct.mockImplementation((_key: string, index: number | null, selected: typeof row, scope: 'product' | 'rate') => {
+    const label = scope === 'product' ? { ...selected, public_offer_id: undefined, public_programme_id: undefined } : selected;
+    mockState.subscriptions = [...mockState.subscriptions, makeProductSubscription(label, index)];
     return true;
   });
   const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
@@ -339,11 +340,11 @@ test('product-scoped save on an indexed offer row toggles the product-wide alert
   try {
     expect(tree.root.findByType(IconAction).props.active).toBe(true);
     await act(async () => { tree.root.findByType(IconAction).props.onPress(); });
-    expect(mockState.unsubscribeProduct).toHaveBeenCalledWith(row.product_key, null, undefined);
+    expect(mockState.unsubscribeProduct).toHaveBeenCalledWith(row.product_key, null, null);
     expect(mockState.subscriptions).toHaveLength(0);
     act(() => tree.update(<WordBubbleProvider><SavedRateActions row={row} section="TD" /></WordBubbleProvider>));
     await act(async () => { tree.root.findByType(IconAction).props.onPress(); });
-    expect(mockState.subscribeProduct).toHaveBeenCalledWith(row.product_key, null, expect.objectContaining({ public_offer_id: undefined }));
+    expect(mockState.subscribeProduct).toHaveBeenCalledWith(row.product_key, null, row, 'product');
     act(() => tree.update(<WordBubbleProvider><SavedRateActions row={row} section="TD" /></WordBubbleProvider>));
     expect(tree.root.findByType(IconAction).props.active).toBe(true);
     expect(alert).not.toHaveBeenCalled();

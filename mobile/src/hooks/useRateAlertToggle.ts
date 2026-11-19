@@ -22,14 +22,16 @@ export function useRateAlertToggle(row: RateRow, scope: 'rate' | 'product' = 'ra
   const subscribed = notificationsEnabled && isProductSubscribed(row.product_key, rateIndex, offerId);
   const toggle = useCallback(async () => {
     if (notificationsEnabled && isProductSubscribed(row.product_key, rateIndex, offerId)) {
-      unsubscribeProduct(row.product_key, rateIndex, offerId);
+      unsubscribeProduct(row.product_key, rateIndex, product ? null : offerId);
       return;
     }
     if (!(await ensurePermissions())) { Alert.alert('Notifications disabled'); return; }
     if (!notificationsEnabled) setPref('notificationsEnabled', true);
     if (isProductSubscribed(row.product_key, rateIndex, offerId)) return;
-    const subscribeRow = product ? { ...row, public_offer_id: undefined, public_programme_id: undefined } : row;
-    if (subscribeProduct(row.product_key, rateIndex, subscribeRow) === false) Alert.alert('Alert unavailable');
+    const subscribed = product
+      ? subscribeProduct(row.product_key, null, row, 'product')
+      : subscribeProduct(row.product_key, rateIndex, row);
+    if (subscribed === false) Alert.alert('Alert unavailable');
   }, [isProductSubscribed, notificationsEnabled, offerId, product, rateIndex, row, setPref, subscribeProduct, unsubscribeProduct]);
   return { subscribed, toggle };
 }
