@@ -371,6 +371,8 @@ async function awaitAuditWorkWithTimeout<T>(
   }
 }
 
+const JOURNEY_UNMOUNT_GRACE_MS = 150;
+
 async function settleUiUnchecked(): Promise<void> {
   // Navigation commits and the readiness registry validate the destination.
   // Unrelated animations can hold InteractionManager after that work is done.
@@ -2676,6 +2678,8 @@ export async function runJourney(
       },
       settle: async () => {
         await outsideStepBudget(watchdog, () => settleUi());
+        // Let Fabric finish unmounting the left screen before the next route mounts.
+        await delay(JOURNEY_UNMOUNT_GRACE_MS);
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
       },
