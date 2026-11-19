@@ -6,6 +6,7 @@ import { useReducedMotion } from '../hooks/useReducedMotion';
 import { AppText } from './ui';
 import type { UiCopy } from '../lib/uiCopy';
 import { COMPACT_ROW } from './product/compactProductRow';
+import { FirstLoadProgress } from './FirstLoadProgress';
 
 export function EmptyState({
   icon = 'search',
@@ -175,6 +176,7 @@ export function ScreenSkeleton({ rows = 4 }: { rows?: number }) {
       accessibilityRole="progressbar"
       accessibilityLabel="Loading rates"
     >
+      <FirstLoadProgress />
       <ShimmerBox height={18} width="46%" borderRadius={theme.radius.sm} />
       <ShimmerBox height={12} width="72%" borderRadius={theme.radius.sm} />
       <View style={{ height: 4 }} />

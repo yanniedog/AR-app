@@ -171,6 +171,10 @@ export interface AppState {
   payloadProgress: PayloadProgressSnapshot | null;
   /** Transient snackbar after refresh completes (success / failure / Wi-Fi skip). */
   refreshOutcome: RefreshOutcomeKind | null;
+  /** Structured class of the last failed load with no usable data; cleared on success. */
+  loadFailure: import('./loadFailure').LoadFailure | null;
+  /** Single explicit or automatic recovery attempt from the unavailable state. */
+  retrying: boolean;
   /**
    * Rolling GH run_date that is still uploading. App keeps the last finalized
    * day fully usable until dates-index lists this date.
@@ -191,7 +195,7 @@ export interface AppState {
   subscriptions: Subscription[];
 
   bootstrap: (opts?: { skipRefresh?: boolean }) => Promise<void>;
-  retryDataLoad: () => Promise<void>;
+  retryDataLoad: (opts?: { automatic?: boolean }) => Promise<void>;
   loadSampleFallback: () => Promise<void>;
   /** Load core/manifest from disk cache if not already in memory (used by the headless task). */
   ensureCoreLoaded: () => Promise<void>;

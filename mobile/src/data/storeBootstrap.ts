@@ -149,7 +149,9 @@ export function createBootstrapActions(
           set({ status: 'idle', error: null });
           if (!opts.skipRefresh) {
             const refreshed = await get().refresh({});
-            if (!refreshed && get().status !== 'ready' && get().status !== 'error') {
+            // false also means another refresh already owns this load; that
+            // refresh settles the status itself.
+            if (!refreshed && !get().refreshing && get().status !== 'ready' && get().status !== 'error') {
               set({ status: 'error', error: noDataErrorMessage() });
             }
             return;
@@ -166,6 +168,7 @@ export function createBootstrapActions(
         set({
           status: 'error',
           error: msg,
+          loadFailure: { kind: 'error', httpStatus: null, at: new Date().toISOString() },
           coreAssetState: { status: 'error', data: get().coreIntegrity, error: msg },
         });
         return;
@@ -174,18 +177,31 @@ export function createBootstrapActions(
       if (!opts.skipRefresh) void get().refresh({});
     },
 
-    async retryDataLoad() {
+    async retryDataLoad(opts: { automatic?: boolean } = {}) {
+      // One recovery attempt at a time; the unavailable state stays steady
+      // (no error -> idle -> error flicker) until it settles.
+      if (get().retrying || get().refreshing) return;
+      const automatic = opts.automatic === true;
       logRetry('retryDataLoad', 'start');
-      debugLog.info('store', 'retryDataLoad');
-      set({ status: 'idle', error: null });
-      await get().bootstrap({ skipRefresh: true });
-      if (get().status !== 'ready') {
-        // An expired bundled/cached sample is intentionally not displayable,
-        // but Retry must still be able to recover online from an empty state.
-        set({ status: 'idle', error: null });
-        await get().refresh({ repairCache: true, manual: true });
-      } else {
-        await get().refresh({ repairCache: true, manual: true });
+      debugLog.info('store', `retryDataLoad automatic=${automatic}`);
+      set({ retrying: true });
+      try {
+        if (!get().core) {
+          // Only a verified downloaded edition is worth a cache bootstrap. An
+          // expired bundled/cached sample is intentionally not displayable, so
+          // recover online without leaving the unavailable state first.
+          const meta = await cache.readMeta().catch(() => null);
+          if (meta && meta.source !== 'sample') {
+            set({ status: 'idle', error: null });
+            await get().bootstrap({ skipRefresh: true });
+          }
+        }
+        await get().refresh({ repairCache: true, manual: !automatic });
+        if (!get().core && get().status !== 'error' && !get().refreshing) {
+          set({ status: 'error', error: get().error ?? noDataErrorMessage() });
+        }
+      } finally {
+        set({ retrying: false });
       }
       if (get().refreshOutcome === 'failure') {
         logRetry('retryDataLoad', 'failure', get().error ?? 'refresh failed');
@@ -255,6 +271,8 @@ export const bootstrapInitialState = {
   lastCheckedAt: null,
   payloadProgress: null,
   refreshOutcome: null,
+  loadFailure: null,
+  retrying: false,
   pendingIngestRunDate: null,
   hydrated: false,
   activeSection: DEFAULT_PREFS.defaultSection,

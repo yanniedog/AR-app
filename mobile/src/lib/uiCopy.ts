@@ -134,6 +134,7 @@ export const UI_LABELS = [
   'Lower', 'Balanced', 'Signal', 'Signals', 'Official releases', 'ABS CPI', 'ABS source',
   'RBA source', 'Release overdue', 'Source date', 'Observation date', 'Annual change',
   'Quarter', 'quarters', 'Locked', 'Data unavailable', 'Try again', 'Device lock required',
+  'Network error', 'Timed out', 'Server error', 'Publishing pending', 'App update required', 'Last attempt',
   'Device settings', 'Confirm app lock', 'Confirm unlock', 'Preparing', 'Uploading',
   'Verifying', 'Copying', 'Copy link', 'Retry verification', 'Upload another copy', 'Retry upload',
   'Add my rate', 'Add scenario', 'Amount added to offset', 'App health audit', 'Approximate',
@@ -580,6 +581,25 @@ export function uiDate(value: string | null | undefined): UiText {
     return known(publicationDateFormatter.format(date));
   }
   return known(date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }));
+}
+/** Local clock time of an actual failed load attempt; never its error message. */
+export function uiLoadAttemptTime(failure: Pick<import('../data/loadFailure').LoadFailure, 'at'> | null | undefined): UiText {
+  const time = failure ? Date.parse(failure.at) : Number.NaN;
+  if (!Number.isFinite(time)) return uiLabel('Unknown');
+  return known(new Date(time).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', second: '2-digit' }));
+}
+/** Status label for an actual classified load failure; HTTP status is a numeric fact. */
+export function uiLoadFailureStatus(failure: Pick<import('../data/loadFailure').LoadFailure, 'kind' | 'httpStatus'> | null | undefined): UiText {
+  switch (failure?.kind) {
+    case 'network': return uiLabel('Network error');
+    case 'timeout': return uiLabel('Timed out');
+    case 'server': return finite(failure.httpStatus) && Number.isInteger(failure.httpStatus) && failure.httpStatus >= 100 && failure.httpStatus <= 599
+      ? uiJoin('Server error', ' ', failure.httpStatus) : uiLabel('Server error');
+    case 'pending': return uiLabel('Publishing pending');
+    case 'update': return uiLabel('App update required');
+    case 'error': return uiLabel('Error');
+    default: return uiLabel('Unknown');
+  }
 }
 /** Opaque technical references are identifiers, never descriptions or error messages. */
 export function uiIdentifier(value: string | null | undefined): UiText {
