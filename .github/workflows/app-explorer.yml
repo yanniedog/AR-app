@@ -80,9 +80,9 @@ jobs:
     timeout-minutes: 150
     env:
       GH_TOKEN: ${{ github.token }}
-      TAG: ${{ inputs.tag || 'latest' }}
+      TAG: ${{ needs.pending.outputs.tag || inputs.tag || 'latest' }}
       # Releases dispatch mode full (mobile-android-apk explore job); PR self-tests stay a short crawl.
-      MODE: ${{ inputs.mode || 'crawl' }}
+      MODE: ${{ inputs.mode || (github.event_name == 'schedule' && 'full') || 'crawl' }}
       SCRIPT_JSON: ${{ inputs.script }}
       ROUTES: ${{ inputs.routes }}
       AUDIT: ${{ inputs.audit || 'live' }}
