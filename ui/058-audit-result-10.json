@@ -1,0 +1,213 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "App health audit",
+  "at": [
+   304,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "HTTP redirects",
+  "at": [
+   360,
+   227
+  ]
+ },
+ {
+  "label": "0",
+  "at": [
+   360,
+   275
+  ]
+ },
+ {
+  "label": "Rejected addresses",
+  "at": [
+   360,
+   355
+  ]
+ },
+ {
+  "label": "6",
+  "at": [
+   360,
+   403
+  ]
+ },
+ {
+  "label": "HTTP not attempted",
+  "at": [
+   360,
+   483
+  ]
+ },
+ {
+  "label": "6",
+  "at": [
+   360,
+   531
+  ]
+ },
+ {
+  "label": "HTTP attempt evidence missing",
+  "at": [
+   360,
+   611
+  ]
+ },
+ {
+  "label": "0",
+  "at": [
+   360,
+   659
+  ]
+ },
+ {
+  "label": "Unverified links",
+  "at": [
+   360,
+   739
+  ]
+ },
+ {
+  "label": "674",
+  "at": [
+   360,
+   787
+  ]
+ },
+ {
+  "label": "Executed",
+  "at": [
+   360,
+   867
+  ]
+ },
+ {
+  "label": "2,868 / 2,885",
+  "at": [
+   360,
+   915
+  ]
+ },
+ {
+  "label": "Verified upload",
+  "at": [
+   360,
+   1017
+  ]
+ },
+ {
+  "label": "Verified upload",
+  "at": [
+   186,
+   1017
+  ]
+ },
+ {
+  "label": "Uploaded",
+  "at": [
+   360,
+   1075
+  ]
+ },
+ {
+  "label": "https://paste.rs/rJQRi",
+  "at": [
+   360,
+   1131
+  ]
+ },
+ {
+  "label": "Copy link",
+  "flags": "tap",
+  "at": [
+   360,
+   1217
+  ]
+ },
+ {
+  "label": "Copy link",
+  "at": [
+   360,
+   1217
+  ]
+ },
+ {
+  "label": "Audit history",
+  "at": [
+   360,
+   1390
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

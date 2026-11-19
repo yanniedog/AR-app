@@ -1,0 +1,59 @@
+[
+ {
+  "label": "App health audit",
+  "at": [
+   184,
+   1182
+  ]
+ },
+ {
+  "label": "13%",
+  "at": [
+   628,
+   1183
+  ]
+ },
+ {
+  "label": "Estimated time: 04:58",
+  "at": [
+   360,
+   1250
+  ]
+ },
+ {
+  "label": "Checking",
+  "at": [
+   360,
+   1314
+  ]
+ },
+ {
+  "label": "App health audit",
+  "at": [
+   360,
+   1366
+  ]
+ },
+ {
+  "label": "376 / 2,858 Checks",
+  "at": [
+   187,
+   1446
+  ]
+ },
+ {
+  "label": "Cancel",
+  "flags": "tap",
+  "at": [
+   543,
+   1446
+  ]
+ },
+ {
+  "label": "Cancel",
+  "at": [
+   569,
+   1447
+  ]
+ }
+]
