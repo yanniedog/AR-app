@@ -67,11 +67,12 @@ describe('compact mobile UX contracts', () => {
 
   it('reports leader logos and the RBA chart layout from their rendered views', () => {
     const research = read('../app/research.tsx');
+    const rba = read('../app/rba.tsx');
 
     expect(research).toContain("id: 'leader-logos', kind: 'logo'");
     expect(research).toContain('onLeaderLogoReadiness={setLeaderLogoState}');
-    expect(research).toContain("id: 'rba-layout', kind: 'layout'");
-    expect(research).toContain('if (width > 0 && height > 0) setRbaLayoutReady(true)');
+    expect(rba).toContain("id: 'rba.layout', kind: 'layout'");
+    expect(rba).toContain('setLayoutReady(event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0)');
   });
 
   it('does not build hidden bank and product picker lists during calculator entry', () => {
