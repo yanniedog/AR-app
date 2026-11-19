@@ -8,6 +8,7 @@ import { Alert, Modal, StyleSheet, TextInput } from 'react-native';
 import MyRates from '../app/(tabs)/watchlist';
 import { ProductCard } from '../src/components/ProductCard';
 import { IconAction } from '../src/components/IconAction';
+import { SegmentedControl } from '../src/components/controls';
 import { SavedRateActions } from '../src/components/product/SavedRateActions';
 import { COMPACT_ROW } from '../src/components/product/compactProductRow';
 import { WordBubbleProvider } from '../src/components/WordBubble';
@@ -24,7 +25,7 @@ import { openProduct, openCompare } from '../src/lib/nav';
 import { useMortgageComparison, clearMortgageComparison } from '../src/data/mortgageComparison';
 import { rateConditionFixture } from '../testUtils/rateConditions';
 
-type Node = { props: Record<string, any>; parent: Node | null; children: unknown[];
+type Node = { type: unknown; props: Record<string, any>; parent: Node | null; children: unknown[];
   findAllByType(type: unknown): Node[]; findByType(type: unknown): Node; findAllByProps(props: Record<string, unknown>): Node[] };
 type Tree = ReactTestRenderer & { root: Node };
 let mockCatalogueOverride: PublicCatalogueView | undefined;
@@ -82,6 +83,9 @@ function mount(child: React.ReactElement): Tree {
   act(() => { tree = TestRenderer.create(<WordBubbleProvider>{child}</WordBubbleProvider>) as Tree; });
   return tree;
 }
+function cardsIn(node: Node): Node[] {
+  return (node as unknown as { findAll(test: (item: Node) => boolean): Node[] }).findAll(item => typeof item.props.logoRenderStateId === 'string' && !!item.props.row && item.parent?.props.logoRenderStateId !== item.props.logoRenderStateId);
+}
 function buttons(tree: Tree) { return tree.root.findAllByType('Button'); }
 function button(tree: Tree, title: string) { return buttons(tree).find(node => node.props.title === title)!; }
 function copy(tree: Tree) { return tree.root.findAllByType('AppText').map(node => String(node.props.children)).join('\n'); }
@@ -93,18 +97,20 @@ test('Saved collection contains only adjacent real shared56dp rows with exact Op
     expect(group.props.style).toBeUndefined();
     const swipeRows = group.findAllByType('SwipeableRow');
     expect(swipeRows).toHaveLength(3);
+    expect(group.findAllByType(SegmentedControl)).toHaveLength(0);
     swipeRows.forEach(node => {
-      expect(React.Children.toArray(node.props.children)).toHaveLength(1);
-      expect(node.props.children.type).toBe(ProductCard);
+      expect(cardsIn(node)).toHaveLength(1);
+      expect(node.findAllByProps({ word: 'Alerts' }).filter(item => item.type === IconAction)).toHaveLength(1);
     });
+    expect(swipeRows[0].props.deleteLabel).toBe('Remove');
     const rows = group.findAllByProps({ testID: 'compact-product-row' }).filter(node => node.parent?.props.testID !== 'compact-product-row');
     expect(rows).toHaveLength(3);
     rows.forEach(row => expect(StyleSheet.flatten(row.props.style)).toMatchObject({ minHeight: COMPACT_ROW.minHeight, paddingVertical: 3, paddingHorizontal: 0 }));
     expect(group.findAllByType('Button')).toHaveLength(0);
-    expect(group.findAllByType(IconAction)).toHaveLength(3); // Shared Save only; no second action row.
+    expect(group.findAllByType(IconAction)).toHaveLength(6); // Shared Save plus one inline alert bell per row.
     expect(copy(tree)).not.toContain('Last updated');
     expect(copy(tree)).not.toContain('Alert me');
-    const cards = swipeRows.map(node => node.props.children);
+    const cards = swipeRows.map(node => cardsIn(node)[0]);
     cards.forEach((card, index) => {
       expect(card.props.row.rate_index).toBe(mockState.savedRates[index].rateIndex);
       act(() => card.props.onPress());
@@ -118,9 +124,10 @@ test('Saved collection contains only adjacent real shared56dp rows with exact Op
     expect(audit.actions).not.toHaveProperty('saved.calculate.open');
     act(() => { audit.actions!['saved.product.open']({ savedId: mockState.savedRates[1].id }); });
     expect(openProduct).toHaveBeenLastCalledWith(cards[1].props.row.product_key, cards[1].props.row.rate_index);
-    act(() => tree.root.findByType('SectionHeading').props.action.props.onPress());
-    act(() => tree.root.findAllByType('SwipeableRow')[1].props.children.props.onPress());
-    expect(tree.root.findAllByType('SwipeableRow')[1].props.children.props.selected).toBe(true);
+    act(() => tree.root.findAllByType('SectionHeading').find(node => node.props.title === 'Saved rates')!.props.action.props.onPress());
+    act(() => cardsIn(tree.root.findAllByType('SwipeableRow')[1])[0].props.onPress());
+    expect(cardsIn(tree.root.findAllByType('SwipeableRow')[1])[0].props.selected).toBe(true);
+    expect(tree.root.findAllByType('SwipeableRow')[1].findAllByProps({ word: 'Alerts' })).toHaveLength(0);
   } finally { act(() => tree.unmount()); }
 });
 
@@ -280,4 +287,32 @@ test('entered rate position pricing is deferred until after initial mount intera
     expect(synchronousExpansion).not.toHaveBeenCalled();
     expect(cooperativeExpansion).toHaveBeenCalledTimes(1);
   } finally { act(() => tree.unmount()); synchronousExpansion.mockRestore(); cooperativeExpansion.mockRestore(); }
+});
+
+test('Saved row alert bell subscribes the exact row and reports a refused subscription', async () => {
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  mockState.subscribeProduct.mockReturnValue(false);
+  const tree = mount(<MyRates />);
+  try {
+    const swipe = tree.root.findAllByType('SwipeableRow')[0];
+    const row = cardsIn(swipe)[0].props.row;
+    const bell = swipe.findAllByProps({ word: 'Alerts' }).find(node => node.type === IconAction)!;
+    expect(bell.props.active).toBe(false);
+    await act(async () => { bell.props.onPress(); });
+    expect(mockState.subscribeProduct).toHaveBeenCalledWith(row.product_key, row.rate_index, row);
+    expect(alert).toHaveBeenCalledWith('Alert unavailable');
+  } finally { act(() => tree.unmount()); alert.mockRestore(); }
+});
+
+test('empty Saved offers Add my rate by section and Browse rates', () => {
+  mockState.savedRates = []; mockState.trackedRates = []; mockState.activeSection = 'Mortgage';
+  const tree = mount(<MyRates />);
+  try {
+    const titles = buttons(tree).map(node => node.props.title);
+    expect(titles).toEqual(expect.arrayContaining(['Add my rate', 'Browse rates']));
+    expect(titles).not.toContain('Rate check');
+    act(() => tree.root.findByType(SegmentedControl).props.onChange('TD'));
+    act(() => button(tree, 'Add my rate').props.onPress());
+    expect(mockState.setActiveSection).toHaveBeenCalledWith('TD');
+  } finally { act(() => tree.unmount()); }
 });

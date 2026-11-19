@@ -132,6 +132,28 @@ test('actual rate-check compares broad and conventional lenders at the same calc
   act(() => tree.unmount());
 });
 
+test('variable mortgage rate check states the held rate and leads with the best monthly and yearly gap', () => {
+  const scenario = mortgageScenario('465000'); scenario.projections.mortgage.holdVariableRate = false;
+  prepare('Mortgage', [{ ...publicNabLoan, provider: 'Broad Bank', product_key: 'broad', rate_index: 4 }], [], scenario, '4');
+  delete mockParams.target; delete mockParams.ri;
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<RateCheckWorkspace />) as InspectableRenderer; });
+  try {
+    const visible = texts(tree);
+    expect(visible).not.toContain('Rate only');
+    expect(visible).toContain('Best gap');
+    expect(visible.some(text => /^\$[\d,.k]+ \/ mo · \$[\d,.k]+ \/ yr$/.test(text))).toBe(true);
+    expect(visible).toContain('Variable rate'); expect(visible).toContain('Held');
+    expect(visible.some(text => text.startsWith('Loan balance: $465k · Current rate: 8.00%'))).toBe(true);
+    expect(tree.root.findAllByType(TextInput)).toHaveLength(0);
+    const pressable = (title: string) => (tree.root as unknown as { findAll(test: (node: { props: Record<string, any> }) => boolean): { props: Record<string, any> }[] })
+      .findAll(node => node.props.title === title && typeof node.props.onPress === 'function');
+    expect(pressable('Projection')).toHaveLength(0);
+    act(() => pressable('Edit')[0].props.onPress());
+    expect(tree.root.findAllByType(TextInput).length).toBeGreaterThan(0);
+  } finally { act(() => tree.unmount()); }
+});
+
 test.each([
   ['490000', EMPTY_PROFILE],
   ['490000', { ...EMPTY_PROFILE, lvrTiers: ['lvr_90-95%'] }],
@@ -277,7 +299,7 @@ test.each([
 });
 
 test('actual entered buying amounts including zero still derive the identical loan and LVR', () => {
-  prepare('Mortgage', [loan], [], normalizeUserRateScenario(undefined), '4');
+  prepare('Mortgage', [loan], [], normalizeUserRateScenario({ mortgage: { mode: 'buy' } }), '4');
   let tree!: InspectableRenderer; act(() => { tree = TestRenderer.create(<RateCheckWorkspace />) as InspectableRenderer; });
   try {
     for (const [label, value] of [

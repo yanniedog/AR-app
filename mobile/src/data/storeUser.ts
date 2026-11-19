@@ -139,6 +139,7 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
       const bound = catalogue ? bindCurrentPublicRow(row, catalogue) : row;
       // Discovery alone is not evidence that an indexed tier has no public offer.
       const selectedScope = scope === 'rate' && catalogue?.status === 'ready' && catalogue.allLoaded && !bound.public_offer_id ? 'product' : scope;
+      const previousIds = new Set(get().savedRates.map((item) => item.id));
       const savedRates = toggleSavedRateRefs(get().savedRates, bound, selectedScope);
       const trackedRates = normalizeTrackedRates(get().trackedRates, savedRates);
       set({
@@ -147,6 +148,10 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
         favorites: [...new Set(savedRates.map((item) => item.productKey))],
       });
       persistTrackedRates(trackedRates);
+      // Saving watches the rate: with alerts already allowed, subscribe as well.
+      if (get().prefs.notificationsEnabled && savedRates.some((item) => !previousIds.has(item.id))) {
+        get().subscribeProduct(bound.product_key, bound.rate_index ?? null, bound);
+      }
       hapticSelection();
     },
 
