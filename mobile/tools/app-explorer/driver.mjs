@@ -40,6 +40,25 @@ function parseArgs(argv) {
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+/** Fetch an uploaded log, following paste.rs share pointers whose body is only the canonical URL. */
+async function fetchUploadedLog(url) {
+  let current = url;
+  const hops = [];
+  for (let i = 0; i < 3; i += 1) {
+    const res = await fetch(current, { signal: AbortSignal.timeout(60000) });
+    if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
+    const body = await res.text();
+    const pointer = body.trim();
+    if (/^https:\/\/\S+$/.test(pointer) && pointer.length < 300) {
+      hops.push(current);
+      current = pointer;
+      continue;
+    }
+    return { body, status: res.status, contentUrl: current, hops };
+  }
+  throw new Error('too many share-link hops');
+}
+
 function adb(args, { allowFail = false, timeout = 60000, encoding = 'utf8' } = {}) {
   const res = spawnSync('adb', args, { encoding, timeout, maxBuffer: 64 * 1024 * 1024 });
   if (res.status !== 0 && !allowFail) {
@@ -460,10 +479,9 @@ class Explorer {
     const result = { url, uploadMs: Date.now() - t0 };
     if (url) {
       try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
-        result.status = res.status;
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const body = await res.text();
+        const { body, status, contentUrl } = await fetchUploadedLog(url);
+        result.status = status;
+        result.contentUrl = contentUrl;
         fs.writeFileSync(path.join(this.out, 'debug-log.txt'), body);
         result.bytes = Buffer.byteLength(body);
       } catch (error) {
@@ -558,10 +576,9 @@ class Explorer {
     const audit = { kind, url, outcome, elapsedMs, visibleOutcome: final.step.visible.slice(0, 20) };
     if (url) {
       try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
-        audit.logStatus = res.status;
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const body = await res.text();
+        const { body, status, contentUrl } = await fetchUploadedLog(url);
+        audit.logStatus = status;
+        audit.logContentUrl = contentUrl;
         fs.writeFileSync(path.join(this.out, 'audit-log.txt'), body);
         audit.logBytes = Buffer.byteLength(body);
       } catch (error) {
