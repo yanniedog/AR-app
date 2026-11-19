@@ -15,3 +15,15 @@ test('only a retained exact fixed-quote owner may suppress a scenario-only graph
   act(() => tree.update(render('650003', null, true))); expect(mockCard).toHaveBeenCalledTimes(5);
   act(() => tree.unmount());
 });
+
+test('a retained fixed quote still refreshes the card when the repayment offset changes', () => {
+  const owner = {};
+  const render = (offsetBalance: string) => <PreparedProductCard row={row} section="Mortgage"
+    quoteOwner={owner} repaymentAmount={600000} rateScenario={{ amount: '600000', offsetBalance }} />;
+  let tree!: ReactTestRenderer;
+  act(() => { tree = TestRenderer.create(render('100000')); });
+  try {
+    act(() => tree.update(render('200000')));
+    expect(mockCard).toHaveBeenLastCalledWith(expect.objectContaining({ rateScenario: { amount: '600000', offsetBalance: '200000' } }));
+  } finally { act(() => tree.unmount()); }
+});
