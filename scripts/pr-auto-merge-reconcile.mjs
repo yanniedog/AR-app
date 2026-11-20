@@ -4,11 +4,12 @@
  *
  *   node scripts/pr-auto-merge-reconcile.mjs prs [--pr N]   enable/disable auto-merge, update behind branches
  *   node scripts/pr-auto-merge-reconcile.mjs release        dispatch the APK release for unreleased main
+ *   node scripts/pr-auto-merge-reconcile.mjs explore        dispatch the full explorer audit for the newest untested APK
  *
  * Never checks out or executes PR code. Required gates stay with branch protection.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { decidePullRequest, decideReleaseCatchUp, isBaseSyncCommit, isReleasePath, needsBranchUpdate } from './lib/pr-auto-merge-policy.mjs';
+import { EXPLORE_AUTO_RUN_NAMES, EXPLORE_RETRY_COOLDOWN_MS, decideExploreDispatch, decidePullRequest, decideReleaseCatchUp, isBaseSyncCommit, isReleasePath, needsBranchUpdate } from './lib/pr-auto-merge-policy.mjs';
 
 const REPO = process.env.GITHUB_REPOSITORY || 'yanniedog/AR-app';
 const OWNER = process.env.GITHUB_REPOSITORY_OWNER || REPO.split('/')[0];
@@ -145,7 +146,38 @@ function releaseCatchUp() {
   }
 }
 
+// ls-remote --exit-code: 0 found, 2 no match; anything else is a transport error, not "untested".
+function markerExists(tag) {
+  const r = spawnSync('git', ['ls-remote', '--exit-code', `https://github.com/${REPO}`, `refs/heads/explorer/tested/${tag}`], { timeout: 60_000 });
+  if (r.status === 0) return true;
+  if (r.status === 2) return false;
+  throw new Error(`marker lookup for ${tag} failed: ${String(r.stderr || r.error?.message || r.status).trim()}`);
+}
+
+function exploreNewRelease() {
+  // workflow_run never fires for token-dispatched release runs, so this job (which already
+  // runs on every CI completion and on a schedule) starts the audit itself.
+  const raw = gh(['api', `repos/${REPO}/releases?per_page=30`, '--jq',
+    '[.[] | select(.draft|not) | select(.tag_name|startswith("app-v")) | select(any(.assets[]; .name=="app-preview.apk"))][0].tag_name'],
+  { json: false });
+  const tag = raw === 'null' ? '' : raw;
+  const tested = tag ? markerExists(tag) : false;
+  const inFlight = ['queued', 'in_progress'].some(status =>
+    api(`repos/${REPO}/actions/workflows/app-explorer.yml/runs?status=${status}&per_page=50`)
+      .workflow_runs.some(run => EXPLORE_AUTO_RUN_NAMES.includes(run.display_title)));
+  // A failed audit leaves the release untested; retry at most once per cooldown, not every reconcile.
+  const cooling = api(`repos/${REPO}/actions/workflows/app-explorer.yml/runs?status=completed&per_page=50`)
+    .workflow_runs.some(run => run.display_title === EXPLORE_AUTO_RUN_NAMES[0] && Date.now() - Date.parse(run.created_at) < EXPLORE_RETRY_COOLDOWN_MS);
+  const decision = decideExploreDispatch({ tag, tested, inFlight, cooling });
+  console.log(`explorer: ${decision.reason}`);
+  if (decision.dispatch) {
+    gh(['workflow', 'run', 'app-explorer.yml', '--repo', REPO, '--ref', 'main', '-f', `tag=${tag}`, '-f', 'mode=full', '-f', 'audit=live', '-f', 'nonce=auto'], { json: false });
+    console.log('Explorer audit dispatched');
+  }
+}
+
 const [mode, flag, value] = process.argv.slice(2);
 if (mode === 'prs') reconcilePulls(flag === '--pr' && value ? Number(value) : null);
 else if (mode === 'release') releaseCatchUp();
-else { console.error('Usage: pr-auto-merge-reconcile.mjs prs [--pr N] | release'); process.exitCode = 2; }
+else if (mode === 'explore') exploreNewRelease();
+else { console.error('Usage: pr-auto-merge-reconcile.mjs prs [--pr N] | release | explore'); process.exitCode = 2; }
