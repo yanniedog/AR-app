@@ -61,3 +61,7 @@ Babysit and PR-fix workers must follow the per-finding disposition rules below f
 5. After later pushes, re-check for **new** bot threads and handle them the same way before merge.
 
 Low-signal noise (quota notices, empty “react with thumbs” prompts) can be left alone if the feedback gate classifies them as non-blocking; everything else gets an explicit response.
+
+## Audit screenshots
+
+Each audit run captures up to 20 targeted screenshots from `mobile/tools/app-explorer/shots.json` and posts a contact sheet and flag list to the results issue. A PR that changes a screen edits `shots.json` so the next run captures the screens it touched, with a `why` for each. Read only the flagged shots from the sheet.
