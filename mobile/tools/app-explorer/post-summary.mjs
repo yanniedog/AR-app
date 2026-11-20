@@ -16,6 +16,13 @@ const auditLine = (report.match(/^\*\*Audit.*$/m) || report.match(/^Mode .*$/m) 
 out.push(`explorer run ${runId} on ${run.tag || '?'} (${run.mode || '?'})`, '', auditLine, '');
 if (audit.url) out.push(`Audit log: ${audit.url}`, '');
 if (audit.logContentUrl && audit.logContentUrl !== audit.url) out.push(`Audit log (full file): ${audit.logContentUrl}`, '');
+if (audit.kind && !audit.url) out.push(`Audit log: none uploaded (${audit.outcome || 'audit did not finish'}). Raw run files below.`, '');
+{
+  const repo = process.env.GITHUB_REPOSITORY || 'yanniedog/AR-app';
+  const raw = f => `https://github.com/${repo}/blob/explorer/run-${runId}/${f}?raw=true`;
+  const files = ['logcat.txt', 'report.md', 'audit.json'].filter(f => fs.existsSync(path.join(dir, f)));
+  if (files.length) out.push(`Run files: ${files.map(f => `[${f}](${raw(f)})`).join(' | ')}`, '');
+}
 
 let decoded = null;
 try {
