@@ -4572,7 +4572,7 @@ export function PerformanceAuditRunner() {
         if (getPerformanceAuditState().paused) {
           debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, 'audit resumed on returning to the foreground');
         }
-        resumePerformanceAudit();
+        resumePerformanceAudit('system');
         return;
       }
       if (!getPerformanceAuditState().paused) {
@@ -4581,7 +4581,7 @@ export function PerformanceAuditRunner() {
           `audit paused because app state changed to ${nextState}`,
         );
       }
-      pausePerformanceAudit();
+      pausePerformanceAudit('system');
     };
     const subscription = AppState.addEventListener('change', (nextState) => {
       applyAppState(nextState);

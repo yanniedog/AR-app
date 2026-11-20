@@ -2,7 +2,7 @@ import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
 import { PerformanceAuditOverlay } from '../src/components/PerformanceAuditOverlay';
-import { getPerformanceAuditState, markPerformanceAuditRunning, requestPerformanceAudit, resetPerformanceAuditForTests } from '../src/lib/performanceAudit';
+import { getPerformanceAuditState, markPerformanceAuditRunning, pausePerformanceAudit, requestPerformanceAudit, resetPerformanceAuditForTests, resumePerformanceAudit } from '../src/lib/performanceAudit';
 
 jest.mock('../modules/audit-screen-awake', () => ({ AuditScreenAwake: () => null }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
@@ -31,5 +31,19 @@ test('shows elapsed time and pauses and resumes the run', async () => {
   expect(getPerformanceAuditState().paused).toBe(true);
   await act(async () => { tree.update(<PerformanceAuditOverlay state={getPerformanceAuditState()} />); });
   await act(async () => { press('Resume'); });
+  expect(getPerformanceAuditState().paused).toBe(false);
+});
+
+test('a manual pause survives a system foreground resume', () => {
+  resetPerformanceAuditForTests();
+  requestPerformanceAudit();
+  markPerformanceAuditRunning(10);
+  pausePerformanceAudit();
+  resumePerformanceAudit('system');
+  expect(getPerformanceAuditState().paused).toBe(true);
+  resumePerformanceAudit();
+  expect(getPerformanceAuditState().paused).toBe(false);
+  pausePerformanceAudit('system');
+  resumePerformanceAudit('system');
   expect(getPerformanceAuditState().paused).toBe(false);
 });

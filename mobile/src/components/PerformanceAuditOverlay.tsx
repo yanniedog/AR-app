@@ -95,7 +95,7 @@ export const PerformanceAuditOverlay = memo(function PerformanceAuditOverlay({ s
             title={state.paused ? 'Resume' : 'Pause'}
             variant="ghost"
             disabled={state.cancelRequested}
-            onPress={state.paused ? resumePerformanceAudit : pausePerformanceAudit}
+            onPress={() => (state.paused ? resumePerformanceAudit() : pausePerformanceAudit())}
             style={{ paddingVertical: 8 }}
           />
           <Button
