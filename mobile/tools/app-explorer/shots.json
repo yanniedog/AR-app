@@ -3,7 +3,7 @@
   "name": "browse",
   "open": "/browse",
   "scroll": 0,
-  "why": "home rates list"
+  "why": "home rates list, incl. early first page with Updating then the settled page (rows must not shift)"
  },
  {
   "name": "watchlist",
