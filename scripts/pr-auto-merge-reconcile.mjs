@@ -9,7 +9,7 @@
  * Never checks out or executes PR code. Required gates stay with branch protection.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { EXPLORE_RUN_NAME, decideExploreDispatch, decidePullRequest, decideReleaseCatchUp, isBaseSyncCommit, isReleasePath, needsBranchUpdate } from './lib/pr-auto-merge-policy.mjs';
+import { EXPLORE_AUTO_RUN_NAMES, decideExploreDispatch, decidePullRequest, decideReleaseCatchUp, isBaseSyncCommit, isReleasePath, needsBranchUpdate } from './lib/pr-auto-merge-policy.mjs';
 
 const REPO = process.env.GITHUB_REPOSITORY || 'yanniedog/AR-app';
 const OWNER = process.env.GITHUB_REPOSITORY_OWNER || REPO.split('/')[0];
@@ -154,8 +154,8 @@ function exploreNewRelease() {
   { json: false });
   const tested = tag ? spawnSync('git', ['ls-remote', '--exit-code', `https://github.com/${REPO}`, `refs/heads/explorer/tested/${tag}`]).status === 0 : false;
   const inFlight = ['queued', 'in_progress'].some(status =>
-    api(`repos/${REPO}/actions/workflows/app-explorer.yml/runs?event=workflow_dispatch&status=${status}&per_page=30`)
-      .workflow_runs.some(run => run.display_title === EXPLORE_RUN_NAME));
+    api(`repos/${REPO}/actions/workflows/app-explorer.yml/runs?status=${status}&per_page=50`)
+      .workflow_runs.some(run => EXPLORE_AUTO_RUN_NAMES.includes(run.display_title)));
   const decision = decideExploreDispatch({ tag, tested, inFlight });
   console.log(`explorer: ${decision.reason}`);
   if (decision.dispatch) {

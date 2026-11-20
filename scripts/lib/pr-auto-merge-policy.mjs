@@ -70,7 +70,8 @@ export function isReleasePath(file) {
 
 // Start the full explorer audit for the newest published APK once. The explorer
 // pushes explorer/tested/<tag> when an auto run ends, so a tested tag never repeats.
-export const EXPLORE_RUN_NAME = 'app-explorer auto';
+// Run names of every automatic audit (ours, the cron fallback and workflow_run), for the in-flight check.
+export const EXPLORE_AUTO_RUN_NAMES = ['app-explorer auto', 'app-explorer schedule', 'app-explorer workflow_run'];
 export function decideExploreDispatch({ tag, tested, inFlight }) {
   if (!tag) return { dispatch: false, reason: 'no published APK release' };
   if (tested) return { dispatch: false, reason: `${tag} already audited` };
