@@ -6,7 +6,9 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { computeVerdict, renderOutcome } from './session-verdict.mjs';
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 const PKG = 'com.eyex.australianrates';
 const SCHEME = 'arrates';
@@ -31,6 +33,8 @@ function parseArgs(argv) {
     else if (key === '--baseline') args.baseline = next();
     else if (key === '--routes') args.routes = next().split(',').map(s => s.trim()).filter(Boolean);
     else if (key === '--fresh') args.fresh = true;
+    else if (key === '--no-session') args.noSession = true;
+    else if (key === '--session-script') args.sessionScript = next();
     else if (key === '--audit') args.audit = next();
     else if (key === '--audit-timeout-min') args.auditTimeoutMin = Number(next());
     else throw new Error(`Unknown argument ${key}`);
@@ -137,15 +141,40 @@ function dismissSystemDialog(nodes) {
   return true;
 }
 
-async function settle(timeoutMs, since = Date.now()) {
+const labelledCount = nodes => nodes.filter(n => (n.text || n.desc) && (!n.pkg || n.pkg === PKG)).length;
+
+/**
+ * Wait for the screen to stop changing. Besides the settle time it samples what a person would
+ * notice: time to first reaction to the input, time to first meaningful content, the longest
+ * spinner, and whether the screen ended up blank. Samples are one UI dump apart (dumpMs).
+ */
+async function settle(timeoutMs, since = Date.now(), before = null) {
   const start = since;
   let prev = null;
   let last = { nodes: [] };
   let stableSince = null;
   let firstSeen = start;
+  let responseMs = null;
+  let firstContentMs = null;
+  let loadStart = null;
+  let maxLoadingMs = 0;
+  let dumps = 0;
+  let dumpTotal = 0;
+  const metrics = () => {
+    if (loadStart != null) maxLoadingMs = Math.max(maxLoadingMs, Date.now() - loadStart);
+    return {
+      responseMs,
+      firstContentMs,
+      maxLoadingMs,
+      blank: last.nodes.length > 0 && labelledCount(last.nodes) < 3,
+      dumpMs: dumps ? Math.round(dumpTotal / dumps) : 0,
+    };
+  };
   while (Date.now() - start < timeoutMs) {
     const dumpStarted = Date.now();
     last = await dumpUi();
+    dumps += 1;
+    dumpTotal += Date.now() - dumpStarted;
     if (dismissSystemDialog(last.nodes)) {
       prev = null;
       await sleep(800);
@@ -153,11 +182,19 @@ async function settle(timeoutMs, since = Date.now()) {
     }
     const fp = fingerprint(last.nodes);
     const loading = looksLoading(last.nodes);
+    const changed = before == null || fp !== before;
+    if (changed && responseMs == null) responseMs = Date.now() - start;
+    if (changed && !loading && firstContentMs == null && labelledCount(last.nodes) >= 8) firstContentMs = Date.now() - start;
+    if (loading) loadStart ??= Date.now();
+    else if (loadStart != null) {
+      maxLoadingMs = Math.max(maxLoadingMs, Date.now() - loadStart);
+      loadStart = null;
+    }
     if (fp !== prev) firstSeen = dumpStarted;
     if (fp === prev && !loading && last.nodes.length > 0) {
       stableSince ??= Date.now();
       if (Date.now() - stableSince >= 600) {
-        return { ...last, settleMs: Math.max(0, firstSeen - start), timedOut: false };
+        return { ...last, settleMs: Math.max(0, firstSeen - start), timedOut: false, ...metrics() };
       }
     } else {
       stableSince = null;
@@ -165,7 +202,7 @@ async function settle(timeoutMs, since = Date.now()) {
     prev = fp;
     await sleep(150);
   }
-  return { ...last, settleMs: Date.now() - start, timedOut: true };
+  return { ...last, settleMs: Date.now() - start, timedOut: true, ...metrics() };
 }
 
 // ---------- selectors ----------
@@ -285,7 +322,8 @@ class Explorer {
     const index = String(this.steps.length + 1).padStart(3, '0');
     const slug = `${index}-${String(name).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 50).toLowerCase()}`;
     const anrBefore = systemDialogs.filter(d => d.ours).length;
-    const settled = await settle(settleTimeout, since);
+    const before = this.current.nodes.length ? fingerprint(this.current.nodes) : null;
+    const settled = await settle(settleTimeout, since, before);
     const appAnr = systemDialogs.filter(d => d.ours).length > anrBefore;
     this.current = settled;
     const png = adb(['exec-out', 'screencap', '-p'], { encoding: 'buffer', allowFail: true });
@@ -303,6 +341,12 @@ class Explorer {
       slug,
       settleMs: settled.settleMs,
       settleTimedOut: settled.timedOut,
+      responseMs: settled.responseMs ?? undefined,
+      firstContentMs: settled.firstContentMs ?? undefined,
+      maxLoadingMs: settled.maxLoadingMs || undefined,
+      blank: settled.blank || undefined,
+      dumpMs: settled.dumpMs,
+      session: this.sessionFlag || undefined,
       alive: Boolean(pid),
       anr: appAnr || undefined,
       frames,
@@ -596,6 +640,12 @@ class Explorer {
   }
 
   async run(step) {
+    this.sessionFlag = Boolean(step.session);
+    if (step.think) await sleep(step.think);
+    if (step.animations !== undefined) {
+      for (const key of ['window_animation_scale', 'transition_animation_scale', 'animator_duration_scale']) sh(`settings put global ${key} ${step.animations}`, { allowFail: true });
+      return null;
+    }
     if (step.audit) return this.runAudit(step.audit === true ? 'live' : step.audit, step.timeoutMin ?? 90);
     const label = step.name || Object.entries(step).map(([k, v]) => `${k} ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' ');
     if (step.launch !== undefined) return this.launch(label, { warm: step.launch === 'warm' });
@@ -671,6 +721,11 @@ class Explorer {
     fs.writeFileSync(path.join(this.out, 'logcat.txt'), this.logAll);
     const baseline = loadBaseline(this.args.baseline);
     const report = { schemaVersion: 1, ...meta, audit: this.audit, systemDialogs, finishedAt: new Date().toISOString(), steps: this.steps };
+    if (this.steps.some(st => st.session)) {
+      // Only an earlier real-use session is a fair baseline for the session verdict.
+      const sessionBase = baseline?.raw?.steps?.some(st => st.session) ? baseline.raw : null;
+      report.session = computeVerdict(report, sessionBase);
+    }
     fs.writeFileSync(path.join(this.out, 'report.json'), JSON.stringify(report, null, 2));
     fs.writeFileSync(path.join(this.out, 'report.md'), renderMarkdown(report, baseline));
     return report;
@@ -681,7 +736,7 @@ function loadBaseline(file) {
   if (!file || !fs.existsSync(file)) return null;
   try {
     const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return { version: data.app?.versionName, byName: new Map(data.steps.map(s => [s.name, s])) };
+    return { version: data.app?.versionName, byName: new Map(data.steps.map(s => [s.name, s])), raw: data };
   } catch {
     return null;
   }
@@ -696,6 +751,7 @@ function renderMarkdown(report, baseline) {
   const lines = [
     `# App explorer: ${report.app?.versionName ?? '?'} (${report.app?.versionCode ?? '?'})`,
     '',
+    ...(report.session ? renderOutcome(report.session) : []),
     unavailable.length ? `**Data unavailable on ${unavailable.length} of ${report.steps.length} steps**` : '',
     report.network ? `Runner payload check: manifest HTTP ${report.network.manifestStatus}, ${report.network.manifestBytes} bytes, run_date ${report.network.runDate ?? '?'}` : '',
     '',
@@ -736,6 +792,13 @@ function appVersion() {
   };
 }
 
+/** The real-use session: one launch, then taps and scrolls at human pace with real animations. */
+function sessionScript(args) {
+  const file = args.sessionScript || path.join(path.dirname(fileURLToPath(import.meta.url)), 'scripts', 'session.json');
+  const steps = JSON.parse(fs.readFileSync(file, 'utf8'));
+  return [{ animations: 1 }, ...steps.map(st => ({ ...st, session: true })), { animations: 0 }];
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   adb(['wait-for-device'], { timeout: 180000 });
@@ -759,10 +822,12 @@ async function main() {
     script = JSON.parse(raw);
     if (!Array.isArray(script)) throw new Error('Script must be a JSON array of steps');
     if (!script.some(s => s.launch !== undefined)) script.unshift({ launch: true, name: 'cold start' });
+  } else if (args.mode === 'session') {
+    script = sessionScript(args);
   } else if (args.mode === 'audit') {
-    script = [{ launch: true, name: 'cold start' }, { audit: args.audit || 'live', timeoutMin: args.auditTimeoutMin || 90 }];
+    script = [...(args.noSession ? [] : sessionScript(args)), { launch: true, name: 'cold start' }, { audit: args.audit || 'live', timeoutMin: args.auditTimeoutMin || 90 }];
   } else if (args.mode === 'full') {
-    script = [{ launch: true, name: 'cold start' }, ...(args.routes || CRAWL_ROUTES).map(r => ({ open: r, name: r })),
+    script = [...(args.noSession ? [] : sessionScript(args)), { launch: true, name: 'cold start' }, ...(args.routes || CRAWL_ROUTES).map(r => ({ open: r, name: r })),
       { launch: 'warm', name: 'warm resume' }, { launch: true, name: 'cold relaunch' },
       { audit: args.audit || 'live', timeoutMin: args.auditTimeoutMin || 90 }];
   } else {

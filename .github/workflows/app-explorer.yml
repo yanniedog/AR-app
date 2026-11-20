@@ -15,7 +15,7 @@ on:
         description: Release tag or latest
         default: latest
       mode:
-        description: crawl, script, audit or full (crawl then audit)
+        description: crawl, script, session (real-use walkthrough), audit or full (session, crawl, then audit)
         default: crawl
       audit:
         description: Audit kind for audit mode (live or local)
@@ -111,13 +111,19 @@ jobs:
           gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p app-preview.apk -O app.apk
           test -s app.apk
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-      - name: Previous crawl baseline
+      - name: Previous run baseline
         run: |
           set -uo pipefail
-          prev=$(git ls-remote --heads origin 'explorer/run-*' | awk '{print $2}' | sed 's#refs/heads/##' | sort -t- -k2 -n | tail -n 1)
-          if [ -n "$prev" ] && git fetch --depth 1 origin "$prev" 2>/dev/null; then
-            git show FETCH_HEAD:report.json > baseline.json 2>/dev/null || rm -f baseline.json
-          fi
+          # Newest earlier run that holds a real-use session report; otherwise the newest report of any kind.
+          fallback=""
+          for prev in $(git ls-remote --heads origin 'explorer/run-*' | awk '{print $2}' | sed 's#refs/heads/##' | sort -t- -k2 -n -r | head -n 12); do
+            git fetch --depth 1 origin "$prev" 2>/dev/null || continue
+            git show FETCH_HEAD:report.json > candidate.json 2>/dev/null || continue
+            if jq -e '.session' candidate.json >/dev/null 2>&1; then mv candidate.json baseline.json; fallback=""; break; fi
+            if [ -z "$fallback" ]; then cp candidate.json fallback.json; fallback=fallback.json; fi
+          done
+          if [ ! -f baseline.json ] && [ -n "$fallback" ]; then mv fallback.json baseline.json; fi
+          rm -f candidate.json fallback.json
       - name: Payload reachability from runner
         run: |
           set -uo pipefail
