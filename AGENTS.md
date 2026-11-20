@@ -65,3 +65,7 @@ Low-signal noise (quota notices, empty “react with thumbs” prompts) can be l
 ## Audit screenshots
 
 Each audit run captures up to 20 targeted screenshots from `mobile/tools/app-explorer/shots.json` and posts a contact sheet and flag list to the results issue. A PR that changes a screen edits `shots.json` so the next run captures the screens it touched, with a `why` for each. Read only the flagged shots from the sheet.
+
+## Real-use session
+
+`audit` and `full` runs first replay a real-use session (`mobile/tools/app-explorer/scripts/session.json`): one cold launch, then taps and scrolls through rates, a product, lenders, the market tab and RBA and back, with human pauses and real animations. It records tap-to-reaction, time to first content, spinner time, blank screens and dropped frames. The verdict (`session-verdict.mjs`) fails on a crash, ANR, spinner over 15 s, blank screen, failed step or extreme jank, and flags a regression only against the previous session's report, so emulator speed does not decide pass or fail. Absolute timings are informational. The outcome leads the #530 comment and `report.md`. A PR that changes a navigation path edits `session.json` so the walkthrough still follows what a user taps. `node scripts/app-explorer.mjs run --mode session` runs the walkthrough alone.

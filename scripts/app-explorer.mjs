@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Local client for .github/workflows/app-explorer.yml.
-//   node scripts/app-explorer.mjs run [--tag latest] [--mode crawl|script] [--script steps.json]
+//   node scripts/app-explorer.mjs run [--tag latest] [--mode crawl|script|session] [--script steps.json]
 //                                     [--routes /browse,/market] [--keep-data] [--no-wait]
 //   node scripts/app-explorer.mjs run --audit [live|local]   full in-app audit; log saved as audit-log.txt
 //   node scripts/app-explorer.mjs fetch <runId|latest>
