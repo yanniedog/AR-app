@@ -614,8 +614,8 @@ export default function RatesWorkspace() {
   const preparedResults = criteriaPending ? { ...cooperativeResults, rows: EMPTY_RATE_ROWS, ready: false, error: null }
     : indexedRows ? { ...cooperativeResults, rows: indexedRows, ready: true, error: null } : cooperativeResults;
   const rows = preparedResults.rows;
-  const firstRowsReady = preparedResults.ready && rows.length > 0;
-  useEffect(() => { if (firstRowsReady) bootMark('rates-ready'); }, [firstRowsReady]);
+  const firstResultsReady = preparedResults.ready;
+  useEffect(() => { if (firstResultsReady) bootMark('rates-ready'); }, [firstResultsReady]);
   // Ancillary facet inventories must not compete with the matching-result
   // pipeline while the current pricing/filter request is still unresolved.
   const filterOptions = useSearchFilterOptions(

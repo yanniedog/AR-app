@@ -102,6 +102,14 @@ describe('app explorer UX review', () => {
     expect(r.findings.filter(f => f.text === 'Covered row title')).toEqual([]);
   });
 
+  it('keeps small controls near the bottom when there is no tab bar, and edge-aligned children that are not clipped', () => {
+    const small = { text: 'Tiny', clickable: true, bounds: [20, 1400, 100, 1440] };
+    const scroller = { scrollable: true, cls: 'ScrollView', bounds: [0, 585, 720, 1392] };
+    const lastRow = { text: 'Last', cls: 'Button', clickable: true, bounds: [32, 1300, 176, 1392] };
+    const r = review({ compare: [small], list: [scroller, lastRow] });
+    expect(r.findings.filter(f => f.check === 'tap-target').map(f => f.text).sort()).toEqual(['Last', 'Tiny']);
+  });
+
   it('flags text boxes that overlap but not a parent that contains its child', () => {
     const r = review({ rates: [
       { text: 'Comparison rate 5.99%', bounds: [10, 300, 400, 340] },

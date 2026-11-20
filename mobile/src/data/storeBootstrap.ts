@@ -152,6 +152,7 @@ export function createBootstrapActions(
           set({ status: 'idle', error: null });
           if (!opts.skipRefresh) {
             const refreshed = await get().refresh({});
+            bootMark(get().core ? 'core-ready' : 'load-failed');
             // false also means another refresh already owns this load; that
             // refresh settles the status itself.
             if (!refreshed && !get().refreshing && get().status !== 'ready' && get().status !== 'error') {
@@ -168,6 +169,7 @@ export function createBootstrapActions(
       } catch (err) {
         const msg = String((err as Error)?.message ?? err);
         debugLog.error('store', `bootstrap failed: ${msg}`);
+        bootMark('load-failed');
         set({
           status: 'error',
           error: msg,

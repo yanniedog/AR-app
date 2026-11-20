@@ -3,7 +3,8 @@
 
 import { debugLog } from './debugLog';
 
-const FINAL_MARK = 'rates-ready';
+// The line is written once, when Rates is ready or the launch ended without data.
+const FINAL_MARKS = new Set(['rates-ready', 'load-failed']);
 const marks: Record<string, number> = {};
 let flushed = false;
 
@@ -15,7 +16,7 @@ function now(): number {
 export function bootMark(name: string): void {
   if (flushed || marks[name] !== undefined) return;
   marks[name] = now();
-  if (name === FINAL_MARK) flush();
+  if (FINAL_MARKS.has(name)) flush();
 }
 
 function flush(): void {

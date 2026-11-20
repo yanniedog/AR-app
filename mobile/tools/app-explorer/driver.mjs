@@ -359,7 +359,7 @@ export function bootMarksOf(text) {
   const out = {};
   for (const pair of m[1].trim().split(/\s+/)) {
     const [k, v] = pair.split('=');
-    if (k && Number.isFinite(Number(v))) out[k] = Number(v);
+    if (k && /^[a-z][a-z-]{1,23}$/.test(k) && Number.isFinite(Number(v))) out[k] = Number(v);
   }
   return Object.keys(out).length ? out : null;
 }
