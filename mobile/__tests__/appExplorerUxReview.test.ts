@@ -250,7 +250,7 @@ console.log(JSON.stringify({ a: a && [a.width, a.height, a.data.toString('base64
 
   it('expects deposits to sort highest first and loans lowest first', () => {
     const list = (tab: string, rates: number[]) => ({ [`${tab}`]: [
-      node({ text: tab, selected: true, clickable: true, bounds: [0, 200, 200, 260] }),
+      node({ desc: tab, selected: true, clickable: true, bounds: [0, 200, 200, 260] }),
       node({ text: 'Sort · Advertised rate', bounds: [0, 100, 300, 150] }),
       ...rates.map((x, i) => node({ desc: `Product ${i}, Bank ${i}, Advertised rate ${x.toFixed(2)}%`, clickable: true, bounds: [0, 300 + i * 200, 720, 480 + i * 200] })),
     ] });
@@ -267,5 +267,16 @@ console.log(JSON.stringify({ a: a && [a.width, a.height, a.data.toString('base64
     const node = { text: 'Rate', bounds: [20, 300, 300, 340] };
     expect(review({ rates: [node] }, [], { png: { rates: faint } }).findings.filter(f => f.check === 'contrast')).toHaveLength(1);
     expect(review({ rates: [node] }, [], { png: { rates: blank } }).findings.filter(f => f.check === 'contrast')).toHaveLength(1);
+  });
+
+  it('reads cards labelled with a payable-rate origin and keeps the provider boundary', () => {
+    const r = review({ rates: [
+      node({ desc: 'Basic Loan, Bank B, Public payable rate 31.00%, Monthly repayment $2,000, Eligibility unverified', clickable: true, bounds: [0, 300, 720, 500] }),
+      node({ desc: 'Everyday Saver, Bank C, Rate 4.50%, Tier 2', clickable: true, bounds: [0, 600, 720, 800] }),
+    ] });
+    const acc = r.findings.filter(f => f.check === 'accuracy');
+    expect(acc).toHaveLength(1);
+    expect(acc[0].text).toBe('Basic Loan, Bank B');
+    expect(acc[0].detail).toMatch(/payable rate 31% outside/);
   });
 });

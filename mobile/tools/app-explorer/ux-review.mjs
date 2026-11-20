@@ -32,19 +32,27 @@ export const FIRST_VALUE_MINOR_MS = 4000;
 
 const readJson = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
 
-const METRIC = { 'Comparison rate': 'comparison', 'Advertised rate': 'advertised', 'Ongoing rate': 'ongoing' };
+const METRIC = {
+  'Comparison rate': 'comparison', 'Advertised rate': 'advertised', 'Ongoing rate': 'ongoing', Rate: 'rate',
+  'Public payable rate': 'payable', 'Calculated payable rate': 'payable', 'Last verified pricing': 'payable',
+};
+const RATE_KEYS = ['comparison', 'advertised', 'ongoing', 'rate', 'payable'];
+const RATE_LABELS = Object.keys(METRIC).sort((x, y) => y.length - x.length).join('|');
+const ROW_HEAD = new RegExp(`^(.+?), (.+?), (?=(?:${RATE_LABELS}|Pricing unresolved|Your entered rates|Local reference estimate) )`);
+const ROW_RATE = new RegExp(`(?:^|, )(${RATE_LABELS}) (\\d+(?:\\.\\d+)?)%`, 'g');
 
-/** Rows rendered on screen: "<product>, <provider>, <Metric> rate 5.99%, <Metric> rate 5.94% · ..." in any metric order. */
+/** Rows rendered on screen: "<product>, <provider>, <rate label> 5.99%, <rate label> 5.94% · ..." in any label order. */
 export function parseRows(nodes) {
   const rows = [];
   for (const n of nodes) {
     const d = n.desc || '';
     if (/^(Save|Remove), /.test(d)) continue;
-    const head = /^(.+?), (.+?), (?=(?:Comparison|Advertised|Ongoing) rate \d)/.exec(d);
+    const head = ROW_HEAD.exec(d);
     if (!head) continue;
-    const row = { product: head[1], provider: head[2], comparison: null, advertised: null, ongoing: null, tier: (/#(\d+)/.exec(d) || [])[1] || '', y: n.bounds[1], at: [Math.round((n.bounds[0] + n.bounds[2]) / 2), Math.round((n.bounds[1] + n.bounds[3]) / 2)] };
-    for (const m of d.matchAll(/(Comparison|Advertised|Ongoing) rate (\d+(?:\.\d+)?)%/g)) row[METRIC[`${m[1]} rate`]] = Number(m[2]);
-    rows.push(row);
+    const row = { product: head[1], provider: head[2], comparison: null, advertised: null, ongoing: null, rate: null, payable: null, tier: (/#(\d+)/.exec(d) || [])[1] || '', y: n.bounds[1], at: [Math.round((n.bounds[0] + n.bounds[2]) / 2), Math.round((n.bounds[1] + n.bounds[3]) / 2)] };
+    let found = false;
+    for (const m of d.slice(head[0].length - 2).matchAll(ROW_RATE)) { row[METRIC[m[1]]] = Number(m[2]); found = true; }
+    if (found) rows.push(row);
   }
   return rows;
 }
@@ -64,7 +72,7 @@ export function accuracyFindings({ screen, nodes, sample, sortedBy, lowerIsBette
     const group = groups.get(`${r.provider}|${r.product}|${r.tier}`) || [];
     group.push(r);
     groups.set(`${r.provider}|${r.product}|${r.tier}`, group);
-    for (const k of ['comparison', 'advertised', 'ongoing']) {
+    for (const k of RATE_KEYS) {
       if (r[k] != null && (r[k] <= 0 || r[k] > 25)) add('major', name, `${k} rate ${r[k]}% outside 0 to 25`, r.at);
     }
     if (r.comparison != null && r.advertised != null && r.comparison + 0.005 < r.advertised) {
@@ -80,7 +88,7 @@ export function accuracyFindings({ screen, nodes, sample, sortedBy, lowerIsBette
   for (const list of groups.values()) {
     if (list.length < 2) continue;
     const r = list[0];
-    const differ = list.some(x => !same(x.comparison, r.comparison) || !same(x.advertised, r.advertised) || !same(x.ongoing, r.ongoing));
+    const differ = list.some(x => !same(x.comparison, r.comparison) || !same(x.advertised, r.advertised) || RATE_KEYS.some(k => !same(x[k], r[k])));
     add(differ ? 'major' : 'minor', `${r.product}, ${r.provider}`, differ ? `shown ${list.length} times with different rates` : `row shown ${list.length} times`, r.at);
   }
   const key = METRIC[sortedBy];
@@ -154,8 +162,8 @@ export async function reviewRun(dir, { sample } = {}) {
     const list = [...r.findings];
     const png = loadPng(path.join(dir, 'screens', `${s.slug}.png`));
     if (png) { list.push(...contrastFindings({ screen: s.name, nodes: s.nodes, png, pkg: PKG, density })); contrastMeasured += 1; }
-    const sortedBy = (s.nodes.map(n => /^Sort · ((?:Comparison|Advertised|Ongoing) rate)/.exec(n.text || n.desc || '')).find(Boolean) || [])[1] || null;
-    const section = (s.nodes.find(n => n.selected && /^(Home loans|Savings|Term deposits)$/.test((n.text || n.desc || '').trim())) || {}).text;
+    const sortedBy = (s.nodes.map(n => /^Sort · (Comparison rate|Advertised rate|Ongoing rate|Rate)\b/.exec(n.text || n.desc || '')).find(Boolean) || [])[1] || null;
+    const section = (s.nodes.map(n => n.selected && /^(Home loans|Savings|Term deposits)\b/.exec((n.text || n.desc || '').trim())).find(Boolean) || [])[1];
     const acc = accuracyFindings({ screen: s.name, nodes: s.nodes, sample, sortedBy, lowerIsBetter: section ? section === 'Home loans' : undefined });
     list.push(...acc.findings);
     if (s.step.settleMs >= 5000 && !/cold/.test(s.name)) list.push({ check: 'slow', severity: s.step.settleMs >= 10000 ? 'major' : 'minor', screen: s.name, text: '', at: [0, 0], detail: `${(s.step.settleMs / 1000).toFixed(1)} s to settle` });
