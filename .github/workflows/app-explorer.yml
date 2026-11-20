@@ -39,6 +39,10 @@ on:
   schedule:
     # Cheap check every 30 min: runs the full crawl + audit once per new app-v release.
     - cron: '7,37 * * * *'
+  workflow_run:
+    # Starts the full crawl + audit as soon as a release run finishes publishing an APK.
+    workflows: [mobile-android-apk]
+    types: [completed]
   pull_request:
     paths:
       - '.github/workflows/app-explorer.yml'
@@ -48,13 +52,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: app-explorer-${{ github.event.pull_request.number || (github.event_name == 'schedule' && 'scheduled') || github.run_id }}
+  group: app-explorer-${{ github.event.pull_request.number || ((github.event_name == 'schedule' || github.event_name == 'workflow_run') && 'scheduled') || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Scheduled runs only proceed when the newest release has no tested marker yet.
+  # Scheduled and post-release runs only proceed when the newest release has no tested marker yet.
   pending:
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 3
     outputs:
@@ -76,7 +80,7 @@ jobs:
     needs: pending
     if: >-
       always() && (
-      (github.event_name == 'schedule' && needs.pending.outputs.tag != '') ||
+      ((github.event_name == 'schedule' || github.event_name == 'workflow_run') && needs.pending.outputs.tag != '') ||
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
@@ -85,7 +89,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ needs.pending.outputs.tag || inputs.tag || 'latest' }}
       # Scheduled release checks run full (crawl + audit); PR self-tests stay a short crawl.
-      MODE: ${{ inputs.mode || (github.event_name == 'schedule' && 'full') || 'crawl' }}
+      MODE: ${{ inputs.mode || ((github.event_name == 'schedule' || github.event_name == 'workflow_run') && 'full') || 'crawl' }}
       SCRIPT_JSON: ${{ inputs.script }}
       ROUTES: ${{ inputs.routes }}
       AUDIT: ${{ inputs.audit || 'live' }}
@@ -190,7 +194,7 @@ jobs:
           git push -q "$remote" "HEAD:refs/heads/$branch"
           echo "Results: branch $branch"
           tag=$(node -e 'try{console.log(require("./run.json").tag||"")}catch{console.log("")}')
-          if [ "$GITHUB_EVENT_NAME" = schedule ] && [ -n "$tag" ]; then
+          if { [ "$GITHUB_EVENT_NAME" = schedule ] || [ "$GITHUB_EVENT_NAME" = workflow_run ]; } && [ -n "$tag" ]; then
             git push -q "$remote" "HEAD:refs/heads/explorer/tested/$tag"
           fi
           git ls-remote --heads "$remote" 'explorer/run-*' | awk '{print $2}' | sed 's#refs/heads/##' \
