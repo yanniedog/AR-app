@@ -52,7 +52,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: app-explorer-${{ github.event.pull_request.number || (github.event_name == 'schedule' && 'scheduled') || github.run_id }}
+  group: app-explorer-${{ github.event.pull_request.number || ((github.event_name == 'schedule' || github.event_name == 'workflow_run') && 'scheduled') || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
