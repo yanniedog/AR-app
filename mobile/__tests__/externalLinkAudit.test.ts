@@ -73,6 +73,35 @@ describe('external link audit', () => {
     expect((await auditExternalLink(request, options({ fetch: jest.fn(async () => response(status)) }))).reachability.status).toBe('fail');
   });
 
+  it('confirms an unavailable HEAD with a one-byte GET before failing', async () => {
+    const fetch = jest.fn(async (_url: RequestInfo | URL, init?: RequestInit) => response(init?.method === 'HEAD' ? 404 : 206));
+    const result = await auditExternalLink(request, options({ fetch }));
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenNthCalledWith(1, request.url, expect.objectContaining({ method: 'HEAD' }));
+    expect(result.reachability.detail).toMatch(/GET/);
+    expect(result.reachability.detail).not.toMatch(/HEAD/);
+    expect(fetch).toHaveBeenLastCalledWith(request.url, expect.objectContaining({ method: 'GET', headers: { Range: 'bytes=0-0' } }));
+    expect(result.reachability.status).toBe('pass');
+  });
+
+  it('keeps a rejected one-byte range unknown, not failed', async () => {
+    const fetch = jest.fn(async (_url: RequestInfo | URL, init?: RequestInit) => response(init?.method === 'HEAD' ? 404 : 416));
+    expect((await auditExternalLink(request, options({ fetch }))).reachability.status).toBe('unknown');
+  });
+
+  it('cancels the response body once the status is known', async () => {
+    const cancel = jest.fn(async () => undefined);
+    const fetch = jest.fn(async () => ({ status: 200, url: request.url, body: { cancel } }) as unknown as Response);
+    await auditExternalLink(request, options({ fetch }));
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it.each([502, 503, 504])('keeps a temporarily unavailable HTTP %i unknown', async (status) => {
+    const result = await auditExternalLink(request, options({ fetch: jest.fn(async () => response(status)) }));
+    expect(result.reachability.status).toBe('unknown');
+    expect(result.httpIssue).toBe('server-unavailable');
+  });
+
   it('revalidates a native-followed final destination and does not bless a missing response URL', async () => {
     const escaped = await auditExternalLink(request, options({ fetch: jest.fn(async () => response(200, 'https://attacker.test/redirect')) }));
     expect(escaped.reachability.status).toBe('fail');

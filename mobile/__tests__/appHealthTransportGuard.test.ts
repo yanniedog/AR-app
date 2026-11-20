@@ -238,6 +238,21 @@ describe('installAppHealthTransportGuard', () => {
     } finally { guard.restore(); }
   });
 
+  it('allows only the one-byte Range GET as the external-link fallback', async () => {
+    const { target, fetchSpy } = targetWithSpies();
+    const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract });
+    const request = { url: 'https://www.rba.gov.au/statistics/tables/?table=f1',
+      label: 'Statistics', purpose: 'official_economic_source' as const };
+    guard.allowExternalUrls([request]);
+    try {
+      await expect(target.fetch(request.url, { method: 'GET', credentials: 'omit', headers: { Range: 'bytes=0-0' } })).resolves.toMatchObject({ ok: true });
+      await expect(target.fetch(request.url, { method: 'GET', credentials: 'omit', headers: { Range: 'bytes=0-999' } })).rejects.toThrow('blocked');
+      await expect(target.fetch(request.url, { method: 'GET', credentials: 'omit', headers: { Range: 'bytes=0-0', Cookie: 'a' } })).rejects.toThrow('blocked');
+      await expect(target.fetch(request.url, { method: 'GET', credentials: 'omit' })).rejects.toThrow('blocked');
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    } finally { guard.restore(); }
+  });
+
   it('preserves zero transport for external destinations in local mode', async () => {
     const { target, fetchSpy } = targetWithSpies();
     const guard = installAppHealthTransportGuard({ target, mode: 'local', contract });
