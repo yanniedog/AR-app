@@ -12,7 +12,7 @@ const run = json('run.json');
 const audit = json('audit.json');
 const report = read('report.md');
 const out = [];
-const auditLine = (report.match(/^\*\*Audit.*$/m) || ['no audit line'])[0];
+const auditLine = (report.match(/^\*\*Audit.*$/m) || report.match(/^Mode .*$/m) || ['no run summary'])[0];
 out.push(`explorer run ${runId} on ${run.tag || '?'} (${run.mode || '?'})`, '', auditLine, '');
 if (audit.url) out.push(`Audit log: ${audit.url}`, '');
 

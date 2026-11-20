@@ -2680,9 +2680,6 @@ export async function runJourney(
       settle: async () => {
         await outsideStepBudget(watchdog, async () => {
           await settleUi();
-          // Let Fabric finish unmounting the left screen before the next route mounts.
-          await yieldToPaintFrames(JOURNEY_UNMOUNT_GRACE_FRAMES);
-          await delay(JOURNEY_UNMOUNT_GRACE_MS);
         });
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
@@ -3652,6 +3649,10 @@ export function PerformanceAuditRunner() {
                 }
               }
             }
+            // Let Fabric finish unmounting the left screen before the next route mounts.
+            await yieldToPaintFrames(JOURNEY_UNMOUNT_GRACE_FRAMES);
+            await delay(JOURNEY_UNMOUNT_GRACE_MS);
+            assertSessionActive(watchdog);
           }
         }
 
