@@ -314,11 +314,11 @@ function RootNavigator() {
               />
               <Stack.Screen
                 name="rba"
-                options={{ title: 'RBA', animation: 'none' }}
+                options={{ title: 'RBA', animation: 'none', freezeOnBlur: false }}
               />
               <Stack.Screen name="profile" options={{ title: 'Profile', animation: 'fade' }} />
               <Stack.Screen name="settings" options={{ title: 'Settings', animation: 'fade' }} />
-              <Stack.Screen name="research" options={{ title: 'Trends', animation: 'fade' }} />
+              <Stack.Screen name="research" options={{ title: 'Trends', animation: 'fade', freezeOnBlur: false }} />
               <Stack.Screen name="trends" options={{ headerShown: false }} />
               <Stack.Screen name="about" options={{ title: 'About', animation: 'fade' }} />
               <Stack.Screen
