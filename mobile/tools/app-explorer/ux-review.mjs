@@ -136,7 +136,8 @@ function taskMetrics(report, screens) {
   const launch = step(LAUNCH);
   const launchRows = launch && bySlug.has(launch.slug) ? parseRows(bySlug.get(launch.slug).nodes).length : 0;
   const compare = step(/compare/i);
-  const lenders = step(/lenders/i);
+  // The Lenders control opens the filter sheet, so only a step that opens a lender's own page counts.
+  const lenders = step(/lender detail|open (a )?lender$/i);
   const product = step(/open product/i);
   return [
     { task: 'Find the best rate', taps: ms(launch) != null && launchRows > 0 ? 0 : null, ms: launchRows > 0 ? ms(launch) : null },
@@ -192,9 +193,12 @@ export async function reviewRun(dir, { sample } = {}) {
   const scary = firstNodes.find(n => n.pkg === PKG && INTIMIDATING.test(n.text || n.desc || '') && (n.text || n.desc || '').length < 80);
   if (scary) findings.push({ check: 'intimidating-first-run', severity: 'major', screen: 'cold start', text: (scary.text || scary.desc).slice(0, 60), at: [0, 0], detail: 'setup or permission request on first launch' });
   // Navigation: the bottom bar should offer the same destinations wherever it appears.
-  const navSets = screens.filter(s => !/^audit /.test(s.name)).map(s => ({ name: s.name, set: s.nodes.filter(n => n.pkg === PKG && n.clickable && n.bounds[1] > s.size[1] - 220 && (n.text || n.desc)).map(n => (n.text || n.desc).trim()).sort().join('|') })).filter(x => x.set.split('|').length >= 3);
-  const modal = [...navSets.reduce((m, x) => m.set(x.set, (m.get(x.set) || 0) + 1), new Map())].sort((a, b) => b[1] - a[1])[0];
-  if (modal) for (const x of navSets) if (x.set !== modal[0]) findings.push({ check: 'nav-inconsistent', severity: 'minor', screen: x.name, text: '', at: [0, 0], detail: 'bottom navigation differs from the usual set' });
+  // Primary tabs are identified by their labels, not by position: a scrolled row near the bottom is not navigation.
+  const TABS = ['Rates', 'Saved', 'Market'];
+  for (const s of screens.filter(x => !/^audit /.test(x.name))) {
+    const tabs = new Set(s.nodes.filter(n => n.pkg === PKG && n.clickable && n.bounds[1] > s.size[1] - 220 && TABS.includes((n.text || n.desc || '').trim())).map(n => (n.text || n.desc).trim()));
+    if (tabs.size > 0 && tabs.size < TABS.length) findings.push({ check: 'nav-inconsistent', severity: 'minor', screen: s.name, text: TABS.filter(t => !tabs.has(t)).join(', '), at: [0, 0], detail: 'tab bar is missing destinations' });
+  }
   const everyNode = screens.flatMap(s => s.nodes);
   const hooks = { saveRow: everyNode.some(n => /^Save, /.test(n.desc || '')), savedTab: everyNode.some(n => /^Saved$/.test(n.text || n.desc || '')), alerts: everyNode.some(n => /alert|notif/i.test(n.text || n.desc || '')) };
   if (screens.length && !hooks.saveRow && !hooks.savedTab) findings.push({ check: 'no-engagement-hook', severity: 'major', screen: 'all', text: '', at: [0, 0], detail: 'no save control or Saved destination found' });

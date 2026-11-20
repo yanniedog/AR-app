@@ -299,4 +299,20 @@ console.log(JSON.stringify({ a: a && [a.width, a.height, a.data.toString('base64
     expect(checks(r)).toContain('no-first-value');
     expect(r.rubric.find(x => x.key === 'onboarding')!.score).toBeLessThan(5);
   });
+
+  it('does not count the Lenders filter control as opening a lender', () => {
+    const r = review({ 'open-app': [], 'open-lenders': [], 'lender-detail': [] }, [{}, { name: 'open lenders', firstContentMs: 900, tapped: 'Lenders' }, { name: 'lender detail', firstContentMs: 700, tapped: 'Row' }]);
+    expect(r.tasks.find(t => t.task === 'Open a lender')).toMatchObject({ taps: 1, ms: 700 });
+    const only = review({ 'open-lenders': [] }, [{ name: 'open lenders', firstContentMs: 900, tapped: 'Lenders' }]);
+    expect(only.tasks.find(t => t.task === 'Open a lender')).toMatchObject({ taps: null, ms: null });
+  });
+
+  it('judges navigation by the tab labels, not by anything near the bottom of the screen', () => {
+    const tab = (t: string, x: number) => node({ text: t, clickable: true, bounds: [x, 1480, x + 240, 1600] });
+    const scrolled = node({ desc: 'Basic Loan, Bank B, Advertised rate 5.10%', clickable: true, bounds: [0, 1420, 720, 1600] });
+    const full = review({ a: [tab('Rates', 0), tab('Saved', 240), tab('Market', 480), scrolled], b: [tab('Rates', 0), tab('Saved', 240), tab('Market', 480)] });
+    expect(checks(full)).not.toContain('nav-inconsistent');
+    expect(checks(review({ a: [scrolled] }))).not.toContain('nav-inconsistent');
+    expect(checks(review({ a: [tab('Rates', 0), tab('Saved', 240)] }))).toContain('nav-inconsistent');
+  });
 });
