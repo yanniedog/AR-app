@@ -1,3 +1,4 @@
+import { bootMark } from '../lib/bootTrace';
 import { COMPACT_HISTORY_NORMALIZATION_VERSION, HISTORY_DERIVATION_VERSION } from './historyDerivation';
 import { cache } from './cache';
 import {
@@ -206,17 +207,20 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
                 () => datasetStillCurrent(runDate, coreSha, detailsSha, cached.run_date),
                 coreSha,
               );
+              bootMark('suitability-built');
             }
             return;
           }
           if (source === 'remote' && manifest) {
             work.stage('Downloading and decoding product details');
+            bootMark('details-start');
             const { text, details: fresh } = await downloadDetails(
               manifest.files.details.url,
               manifest.files.details.sha256,
               { expectedBytes: manifest.files.details.bytes, requireExactBytes: !!manifest.payload_revision,
                 maxCompressedBytes: 64 * 1024 * 1024, maxInflatedBytes: 192 * 1024 * 1024 },
             );
+            bootMark('details-fetched');
             if (!datasetUnchanged()) return;
             work.stage('Saving verified product details');
             await cache.writeDetails(text, manifest.payload_revision ? manifest.files.details.sha256 : undefined, manifest.files.details.sha256);
@@ -245,6 +249,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
                 ),
               coreSha,
             );
+            bootMark('suitability-built');
             return;
           }
         } catch (err) {

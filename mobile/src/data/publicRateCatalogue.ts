@@ -1,3 +1,4 @@
+import { bootMark } from '../lib/bootTrace';
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { bytesToHex } from '@noble/hashes/utils';
@@ -174,13 +175,14 @@ export function createPublicRateCatalogueClient(manifest: Manifest,
     active();
     if (!startPromise) startPromise = acquisition(capability.index, true).then(async raw => {
       active();
-      index = validatePublicRateIndex(raw, manifest); index.products.forEach(product => productsByKey.set(product.productKey, product)); publish();
+      index = validatePublicRateIndex(raw, manifest); index.products.forEach(product => productsByKey.set(product.productKey, product)); publish(); bootMark('catalogue-index');
       const discovery = capability.shards.filter(asset => index!.routes?.some(route => route.name === asset.name && route.kind === 'discovery'));
       let cursor = 0;
       const worker = async () => { while (cursor < discovery.length) { active(); await loadShard(discovery[cursor++]); await yieldToUi(0); } };
       await workers(worker);
       validatePublicRateDiscovery(index, [...productsByKey.values()]);
       discoveryComplete = true; publish();
+      bootMark('catalogue-discovery');
     }).catch((error: unknown) => {
       if (!(error instanceof LocalCatalogueCacheMiss)) publish(error instanceof Error ? error.message : 'Public rate catalogue unavailable'); startPromise = undefined; throw error;
     });
