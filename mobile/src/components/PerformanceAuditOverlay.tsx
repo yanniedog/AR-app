@@ -1,11 +1,10 @@
 import { uiLabel } from '../lib/uiCopy';
-import React, { memo, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import React, { memo, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AuditScreenAwake } from '../../modules/audit-screen-awake';
 import { cancelPerformanceAudit, getPerformanceAuditState, pausePerformanceAudit, resumePerformanceAudit } from '../lib/performanceAudit';
-import { getPassiveAuditStatus, subscribePassiveAudit } from '../lib/passiveAudit';
 import { uiCount, uiDurationClock, uiJoin } from '../lib/uiCopy';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Card, Row } from './ui';
@@ -16,7 +15,6 @@ export const PerformanceAuditOverlay = memo(function PerformanceAuditOverlay({ s
 }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const passive = useSyncExternalStore(subscribePassiveAudit, getPassiveAuditStatus, getPassiveAuditStatus);
   const live = state.status === 'queued' || state.status === 'running';
   const [now, setNow] = useState(() => Date.now());
   const pausedMs = useRef(0);
@@ -77,7 +75,7 @@ export const PerformanceAuditOverlay = memo(function PerformanceAuditOverlay({ s
         <Row style={{ justifyContent: 'space-between' }}>
           <AppText variant="small" color="textMuted">{uiJoin('Elapsed', ': ', elapsed)}</AppText>
           <AppText variant="small" color="textMuted">
-            {uiJoin('Data', ' ', uiCount(passive.completed), ' / ', uiCount(passive.total), ' · ', 'Links', ' ', uiCount(passive.linksCompleted), ' / ', uiCount(passive.linksTotal))}
+            {uiJoin('Checks', ' ', uiCount(state.progress.completed), ' / ', uiCount(state.progress.total))}
           </AppText>
         </Row>
         <View
