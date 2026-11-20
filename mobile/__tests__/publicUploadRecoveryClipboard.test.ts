@@ -128,3 +128,18 @@ it('copies the paste.rs link or the paste.c-net.org link on request without re-u
   expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
   expect(log.verifyDebugLogUpload).toHaveBeenCalledTimes(1);
 });
+
+it('a second link copy requested during a pending copy still copies its own link', async () => {
+  const { log, sharing, delivery, clipboard } = reload();
+  const share = 'https://paste.rs/short';
+  jest.mocked(log.uploadDebugLog).mockResolvedValue({ ...result, shareUrl: share });
+  jest.mocked(log.saveDebugLogUploadReceipt).mockImplementation(async (value, createdAt, hash) => ({ ...result, ...value, schemaVersion: 1,
+    createdAt: createdAt ?? new Date().toISOString(), contentSha256: hash }));
+  await delivery.uploadCompletedPerformanceAudit(report);
+  let release!: () => void;
+  jest.mocked(clipboard.setStringAsync).mockImplementationOnce(() => new Promise<boolean>(resolve => { release = () => resolve(true); }));
+  const first = sharing.copyDebugLogUploadLink('share');
+  const second = sharing.copyDebugLogUploadLink('content');
+  release(); await first; await second;
+  expect(jest.mocked(clipboard.setStringAsync).mock.calls.map(call => call[0])).toEqual([share, result.url]);
+});

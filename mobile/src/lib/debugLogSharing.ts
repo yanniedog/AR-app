@@ -314,7 +314,8 @@ export function retryDebugLogUpload(options: { acceptDuplicateRisk?: boolean } =
  * or the paste.c-net.org content host ('content'). Never uploads or verifies.
  */
 export function copyDebugLogUploadLink(which: 'share' | 'content'): Promise<DebugLogUploadSnapshot> {
-  if (inFlight) return inFlight;
+  // Serialize: a request made during another flight copies its own link once that flight settles.
+  if (inFlight) return inFlight.then(() => copyDebugLogUploadLink(which));
   const url = which === 'share' ? snapshot.shareUrl : snapshot.contentUrl ?? snapshot.url;
   if (!url || !snapshot.verified || snapshot.recoveryReceipt) return Promise.resolve(snapshot);
   const flightEpoch = uploadFlightEpoch;
