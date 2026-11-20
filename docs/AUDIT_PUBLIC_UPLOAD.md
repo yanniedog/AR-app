@@ -31,7 +31,8 @@ risk. A confirmed receipt clears that uncertainty. No deletion capability or
 local content hash is added to the public body.
 
 Automatic publication verifies its receipt without changing the clipboard;
-**Copy link** is an explicit action. A separate SecureStore recovery record keeps
+**Copy link** is an explicit action. When the upload has both a paste.rs link and a
+paste.c-net.org link, both are shown and each has its own copy button. A separate SecureStore recovery record keeps
 the deletion capability if primary receipt persistence fails. If both secure
 writes and cleanup fail, the app explicitly warns that it must stay open until
 deletion succeeds; it does not claim restart-safe recovery in that situation.
