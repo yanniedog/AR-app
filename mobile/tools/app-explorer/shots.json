@@ -90,10 +90,10 @@
   "why": "settings"
  },
  {
-  "name": "performance-audit",
-  "open": "/performance-audit",
+  "name": "about",
+  "open": "/about",
   "scroll": 0,
-  "why": "audit upload status and copy-link buttons"
+  "why": "about"
  },
  {
   "name": "profile",
@@ -102,10 +102,10 @@
   "why": "profile"
  },
  {
-  "name": "debug-log",
-  "open": "/debug-log",
+  "name": "terms",
+  "open": "/terms",
   "scroll": 0,
-  "why": "uploaded log link and copy button"
+  "why": "terms"
  },
  {
   "name": "third-party",
