@@ -16,6 +16,13 @@ const auditLine = (report.match(/^\*\*Audit.*$/m) || report.match(/^Mode .*$/m) 
 out.push(`explorer run ${runId} on ${run.tag || '?'} (${run.mode || '?'})`, '', auditLine, '');
 if (audit.url) out.push(`Audit log: ${audit.url}`, '');
 if (audit.logContentUrl && audit.logContentUrl !== audit.url) out.push(`Audit log (full file): ${audit.logContentUrl}`, '');
+if ((audit.kind || /audit|full/.test(run.mode || '')) && !audit.url) out.push(`Audit log: no URL${audit.outcome ? ` (outcome: ${audit.outcome})` : ''}`, '');
+{
+  const repo = process.env.GITHUB_REPOSITORY || 'yanniedog/AR-app';
+  const raw = f => `https://github.com/${repo}/blob/explorer/run-${runId}/${f}?raw=true`;
+  const files = ['logcat.txt', 'report.md', 'audit.json'].filter(f => fs.existsSync(path.join(dir, f)));
+  if (files.length) out.push(`Run files: ${files.map(f => `[${f}](${raw(f)})`).join(' | ')}`, '');
+}
 
 const shots = json('shots/shots-result.json');
 if (read('shots/shots-failed')) out.push('Screenshot pass failed', '');
