@@ -33,6 +33,7 @@ function parseArgs(argv) {
     else if (key === '--baseline') args.baseline = next();
     else if (key === '--routes') args.routes = next().split(',').map(s => s.trim()).filter(Boolean);
     else if (key === '--fresh') args.fresh = true;
+    else if (key === '--session-baseline') args.sessionBaseline = next();
     else if (key === '--no-session') args.noSession = true;
     else if (key === '--session-script') args.sessionScript = next();
     else if (key === '--audit') args.audit = next();
@@ -141,14 +142,58 @@ function dismissSystemDialog(nodes) {
   return true;
 }
 
-const labelledCount = nodes => nodes.filter(n => (n.text || n.desc) && (!n.pkg || n.pkg === PKG)).length;
+/** Body of the screen: below the header and above the tab bar, own package only. */
+function bodyOf(nodes) {
+  const own = nodes.filter(n => !n.pkg || n.pkg === PKG);
+  const height = Math.max(0, ...own.map(n => n.bounds[3]));
+  return own.filter(n => {
+    const y = (n.bounds[1] + n.bounds[3]) / 2;
+    return y > height * 0.12 && y < height * 0.88 && n.bounds[2] > n.bounds[0] && n.bounds[3] > n.bounds[1];
+  });
+}
+const bodyLabelled = nodes => bodyOf(nodes).filter(n => n.text || n.desc).length;
+/** Real content, not chrome: several labelled items, or many nodes when it is mostly graphic. */
+const contentful = nodes => { const body = bodyOf(nodes); return body.filter(n => n.text || n.desc).length >= 6 || body.length >= 14; };
+const isBlank = nodes => nodes.length > 0 && bodyLabelled(nodes) < 2 && bodyOf(nodes).length < 5;
+
+const ERROR_TEXT = /\b(failed|couldn.t|could not|unable to|something went wrong|unavailable|no results|nothing (saved|here|to show)|no saved|no data|error)\b/i;
+const ERROR_ACTION = /retry|try again|refresh|reload|clear|reset|edit|change|add /i;
+/** A visible error or empty state, and whether the screen offers a way to act on it. */
+export function errorStateOf(nodes) {
+  const body = bodyOf(nodes);
+  const hit = body.find(n => n.text && n.text.length < 120 && ERROR_TEXT.test(n.text));
+  if (!hit) return null;
+  const action = body.some(n => n.clickable && ERROR_ACTION.test(`${n.text} ${n.desc}`));
+  return { text: hit.text.slice(0, 80), action };
+}
+
+/** Count labelled items that stayed on screen but moved vertically between two dumps. */
+function shiftedBetween(prevNodes, nodes) {
+  const prevY = new Map();
+  const dup = new Set();
+  for (const n of bodyOf(prevNodes)) {
+    const k = n.text || n.desc;
+    if (!k) continue;
+    if (prevY.has(k)) dup.add(k); else prevY.set(k, n.bounds[1]);
+  }
+  let moved = 0;
+  const seen = new Set();
+  for (const n of bodyOf(nodes)) {
+    const k = n.text || n.desc;
+    if (!k || dup.has(k) || seen.has(k)) continue;
+    seen.add(k);
+    if (prevY.has(k) && Math.abs(prevY.get(k) - n.bounds[1]) >= 24) moved += 1;
+  }
+  return moved;
+}
 
 /**
  * Wait for the screen to stop changing. Besides the settle time it samples what a person would
- * notice: time to first reaction to the input, time to first meaningful content, the longest
- * spinner, and whether the screen ended up blank. Samples are one UI dump apart (dumpMs).
+ * notice: time to first reaction to the input, time to first real content, the longest spinner,
+ * layout jumps after content showed, and whether the screen ended blank or in an error state.
+ * Samples are one UI dump apart (dumpMs). Scroll steps skip the layout jump count.
  */
-async function settle(timeoutMs, since = Date.now(), before = null) {
+async function settle(timeoutMs, since = Date.now(), before = null, { scrolling = false } = {}) {
   const start = since;
   let prev = null;
   let last = { nodes: [] };
@@ -158,6 +203,7 @@ async function settle(timeoutMs, since = Date.now(), before = null) {
   let firstContentMs = null;
   let loadStart = null;
   let maxLoadingMs = 0;
+  let shifts = 0;
   let dumps = 0;
   let dumpTotal = 0;
   const metrics = () => {
@@ -166,12 +212,16 @@ async function settle(timeoutMs, since = Date.now(), before = null) {
       responseMs,
       firstContentMs,
       maxLoadingMs,
-      blank: last.nodes.length > 0 && labelledCount(last.nodes) < 3,
+      shifts,
+      blank: isBlank(last.nodes),
+      errorState: errorStateOf(last.nodes),
+      waitedMs: Date.now() - start,
       dumpMs: dumps ? Math.round(dumpTotal / dumps) : 0,
     };
   };
   while (Date.now() - start < timeoutMs) {
     const dumpStarted = Date.now();
+    const prevNodes = last.nodes;
     last = await dumpUi();
     dumps += 1;
     dumpTotal += Date.now() - dumpStarted;
@@ -184,7 +234,8 @@ async function settle(timeoutMs, since = Date.now(), before = null) {
     const loading = looksLoading(last.nodes);
     const changed = before == null || fp !== before;
     if (changed && responseMs == null) responseMs = Date.now() - start;
-    if (changed && !loading && firstContentMs == null && labelledCount(last.nodes) >= 8) firstContentMs = Date.now() - start;
+    if (changed && firstContentMs == null && contentful(last.nodes)) firstContentMs = Date.now() - start;
+    else if (!scrolling && firstContentMs != null && prevNodes.length && fp !== prev && shiftedBetween(prevNodes, last.nodes) > 0) shifts += 1;
     if (loading) loadStart ??= Date.now();
     else if (loadStart != null) {
       maxLoadingMs = Math.max(maxLoadingMs, Date.now() - loadStart);
@@ -323,7 +374,7 @@ class Explorer {
     const slug = `${index}-${String(name).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 50).toLowerCase()}`;
     const anrBefore = systemDialogs.filter(d => d.ours).length;
     const before = this.current.nodes.length ? fingerprint(this.current.nodes) : null;
-    const settled = await settle(settleTimeout, since, before);
+    const settled = await settle(settleTimeout, since, before, { scrolling: Boolean(this.scrollStep) });
     const appAnr = systemDialogs.filter(d => d.ours).length > anrBefore;
     this.current = settled;
     const png = adb(['exec-out', 'screencap', '-p'], { encoding: 'buffer', allowFail: true });
@@ -345,6 +396,9 @@ class Explorer {
       firstContentMs: settled.firstContentMs ?? undefined,
       maxLoadingMs: settled.maxLoadingMs || undefined,
       blank: settled.blank || undefined,
+      waitedMs: settled.waitedMs,
+      shifts: settled.shifts || undefined,
+      errorState: this.sessionFlag && settled.errorState ? settled.errorState : undefined,
       dumpMs: settled.dumpMs,
       session: this.sessionFlag || undefined,
       alive: Boolean(pid),
@@ -413,12 +467,14 @@ class Explorer {
       if (Date.now() - start > timeoutMs) return null;
       await sleep(300);
       nodes = (await dumpUi()).nodes;
+      this.current = { nodes };
     }
   }
 
   async scrollUntil(sel, maxSwipes = 8) {
     for (let i = 0; i <= maxSwipes; i += 1) {
       const nodes = (await dumpUi()).nodes;
+      this.current = { nodes };
       const hit = findNode(nodes, sel);
       if (hit) return hit;
       this.swipe('down');
@@ -641,6 +697,7 @@ class Explorer {
 
   async run(step) {
     this.sessionFlag = Boolean(step.session);
+    this.scrollStep = Boolean(step.session && step.scroll && !step.tap && !step.longPress);
     if (step.think) await sleep(step.think);
     if (step.animations !== undefined) {
       for (const key of ['window_animation_scale', 'transition_animation_scale', 'animator_duration_scale']) sh(`settings put global ${key} ${step.animations}`, { allowFail: true });
@@ -658,7 +715,17 @@ class Explorer {
       const t0 = Date.now();
       if (step.longPress) sh(`input swipe ${x} ${y} ${x} ${y} 900`);
       else sh(`input tap ${x} ${y}`);
-      return this.record(label, { tapped: node.text || node.desc || node.id, at: [x, y] }, undefined, t0);
+      let rec = await this.record(label, { tapped: node.text || node.desc || node.id, at: [x, y] }, undefined, t0);
+      if (step.session && rec.responseMs == null && rec.alive) {
+        // A person whose tap did nothing taps again; record that as friction.
+        const t1 = Date.now();
+        sh(`input tap ${x} ${y}`);
+        rec.retapped = true;
+        rec = await this.record(`${label} again`, { tapped: rec.tapped, at: [x, y] }, undefined, t1);
+        if (rec.responseMs == null) rec.error = `no reaction to tap on ${JSON.stringify(sel)}`;
+      }
+      await this.postconditions(step, rec);
+      return rec;
     }
     if (step.tapXY) {
       sh(`input tap ${step.tapXY[0]} ${step.tapXY[1]}`);
@@ -679,15 +746,20 @@ class Explorer {
       return this.record(label);
     }
     if (step.scroll) {
+      const t0 = Date.now();
       for (let i = 0; i < (step.times ?? 1); i += 1) {
         this.swipe(step.scroll);
         await sleep(350);
       }
-      return this.record(label);
+      return this.record(label, {}, undefined, t0);
     }
     if (step.back !== undefined) {
+      const t0 = Date.now();
       for (let i = 0; i < (step.times ?? 1); i += 1) sh('input keyevent 4');
-      return this.record(label);
+      const rec = await this.record(label, {}, undefined, t0);
+      if (step.session && rec.responseMs == null && rec.alive) rec.deadEnd = true;
+      await this.postconditions(step, rec);
+      return rec;
     }
     if (step.key) {
       sh(`input keyevent ${step.key}`);
@@ -717,13 +789,21 @@ class Explorer {
     throw new Error(`Unknown step ${JSON.stringify(step)}`);
   }
 
+  /** Navigation steps can assert what should (then) or should not (gone) be on screen afterwards. */
+  async postconditions(step, rec) {
+    if (!step.then && !step.gone) return;
+    if (rec.error || !rec.alive) return;
+    if (step.then && !(await this.find(step.then, step.thenTimeoutMs ?? 8000))) rec.error = `expected ${JSON.stringify(step.then)} after "${step.name}"`;
+    else if (step.gone && findNode((await dumpUi()).nodes, step.gone)) rec.error = `${JSON.stringify(step.gone)} still on screen after "${step.name}"`;
+  }
+
   finish(meta) {
     fs.writeFileSync(path.join(this.out, 'logcat.txt'), this.logAll);
     const baseline = loadBaseline(this.args.baseline);
     const report = { schemaVersion: 1, ...meta, audit: this.audit, systemDialogs, finishedAt: new Date().toISOString(), steps: this.steps };
     if (this.steps.some(st => st.session)) {
       // Only an earlier real-use session is a fair baseline for the session verdict.
-      const sessionBase = baseline?.raw?.steps?.some(st => st.session) ? baseline.raw : null;
+      const sessionBase = loadBaseline(this.args.sessionBaseline)?.raw;
       report.session = computeVerdict(report, sessionBase);
     }
     fs.writeFileSync(path.join(this.out, 'report.json'), JSON.stringify(report, null, 2));
@@ -838,7 +918,7 @@ async function main() {
     try {
       await ex.run(step);
     } catch (error) {
-      ex.steps.push({ n: ex.steps.length + 1, name: step.name || JSON.stringify(step), error: String(error.message || error), alive: Boolean(appPid()), settleMs: 0, frames: {}, log: { errors: [], warnings: 0 }, visible: [] });
+      ex.steps.push({ n: ex.steps.length + 1, name: step.name || JSON.stringify(step), error: String(error.message || error), alive: Boolean(appPid()), settleMs: 0, frames: {}, log: { errors: [], warnings: 0 }, visible: [], session: step.session || undefined });
     }
   }
   const report = ex.finish(meta);

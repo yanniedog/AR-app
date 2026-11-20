@@ -111,19 +111,21 @@ jobs:
           gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p app-preview.apk -O app.apk
           test -s app.apk
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-      - name: Previous run baseline
+      - name: Previous run baselines
         run: |
           set -uo pipefail
-          # Newest earlier run that holds a real-use session report; otherwise the newest report of any kind.
-          fallback=""
-          for prev in $(git ls-remote --heads origin 'explorer/run-*' | awk '{print $2}' | sed 's#refs/heads/##' | sort -t- -k2 -n -r | head -n 12); do
+          # baseline.json: newest earlier run of any kind (step deltas).
+          # session-baseline.json: newest earlier run holding a real-use session verdict.
+          # Only run ids below this run, so a rerun or a faster newer run is never its own baseline.
+          have_any=""; have_session=""
+          for prev in $(git ls-remote --heads origin 'explorer/run-*' | awk '{print $2}' | sed 's#refs/heads/##' | awk -F'run-' -v cur="$GITHUB_RUN_ID" '($2 + 0) < (cur + 0)' | sort -t- -k2 -n -r); do
+            if [ -n "$have_any" ] && [ -n "$have_session" ]; then break; fi
             git fetch --depth 1 origin "$prev" 2>/dev/null || continue
             git show FETCH_HEAD:report.json > candidate.json 2>/dev/null || continue
-            if jq -e '.session' candidate.json >/dev/null 2>&1; then mv candidate.json baseline.json; fallback=""; break; fi
-            if [ -z "$fallback" ]; then cp candidate.json fallback.json; fallback=fallback.json; fi
+            if [ -z "$have_any" ]; then cp candidate.json baseline.json; have_any=1; fi
+            if [ -z "$have_session" ] && jq -e '.session' candidate.json >/dev/null 2>&1; then mv candidate.json session-baseline.json; have_session=1; fi
           done
-          if [ ! -f baseline.json ] && [ -n "$fallback" ]; then mv fallback.json baseline.json; fi
-          rm -f candidate.json fallback.json
+          rm -f candidate.json
       - name: Payload reachability from runner
         run: |
           set -uo pipefail
