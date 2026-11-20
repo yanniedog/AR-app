@@ -411,17 +411,22 @@ function PerformanceAuditScreenInner() {
     value === 'successful' ? 'Successful' : value === 'failed' ? 'Failed' : value === 'incomplete' ? 'Incomplete' : 'Needs review';
   // One value: the last measured run on this device, or the typical duration before a first run.
   const nextEstimate = uiDurationClock(state.report && state.report.durationMs > 0 ? state.report.durationMs : PERFORMANCE_AUDIT_TYPICAL_DURATION_MS);
-  const rbaRoundTripsCompleted = state.status === 'complete' && report?.sessionId === state.sessionId
-    && (['cold', 'warm'] as const).every(iteration => report.checks.some(check =>
-      check.id === `journey-rba-${iteration}` && check.metrics.actionCompleted === true
-        && check.metrics.backReturnedToAudit === true));
+  const rbaRounds = state.status === 'complete' && report?.sessionId === state.sessionId
+    ? (['cold', 'warm'] as const).map(iteration => report.checks.find(check => check.id === `journey-rba-${iteration}`))
+    : [];
+  const rbaBackProven = rbaRounds.length === 2 && rbaRounds.every(check =>
+    check?.metrics.backReturnedToAudit === true && check.metrics.backChangedPath === true);
+  const rbaReadyProven = rbaBackProven && rbaRounds.every(check =>
+    check?.metrics.actionCompleted === true && check.metrics.firstReadyFrameObserved === true);
+  const rbaProofId = rbaReadyProven ? 'audit-rba-round-trips-complete'
+    : rbaBackProven ? 'audit-rba-navigation-only' : 'audit-last-run';
   const controls = <Card style={{ gap: 10 }} collapsable={false} onLayout={() => {
     markAuditEntryScreenPhase('screenLayoutAt');
     setLayoutReady(true);
   }}>
         <AppText variant="h2">{uiLabel('App health audit')}</AppText>
         {!running ? <>
-          <InfoRow testID={completion && rbaRoundTripsCompleted ? 'audit-rba-round-trips-complete' : 'audit-last-run'} label="Last audit" value={completion ? uiJoin(outcomeLabel(completion.outcome), ' · ', uiDate(completion.finishedAt)) : uiLabel(state.report ? 'Loading' : recoveryFailed ? 'Report unavailable' : 'No audit history')} />
+          <InfoRow testID={completion ? rbaProofId : 'audit-last-run'} label="Last audit" value={completion ? uiJoin(outcomeLabel(completion.outcome), ' · ', uiDate(completion.finishedAt)) : uiLabel(state.report ? 'Loading' : recoveryFailed ? 'Report unavailable' : 'No audit history')} />
           <InfoRow label="Estimated time" value={nextEstimate} />
         </> : null}
         <Button title="Local audit" testID="audit-start-local" icon="pulse-outline" loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'} disabled={auditDisabled} onPress={() => void runAudit('local')} />

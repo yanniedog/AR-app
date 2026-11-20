@@ -20,7 +20,12 @@ import {
 export interface DebugLogUploadSnapshot {
   sessionId: string | null;
   phase: 'idle' | 'preparing' | 'uploading' | 'verifying' | 'verified' | 'copying' | 'copied' | 'failed';
+  /** Preferred link: the paste.rs pointer when present, otherwise the content host. */
   url: string | null;
+  /** Content-host link (deletable). Equals `url` when no paste.rs pointer exists. */
+  contentUrl?: string | null;
+  /** paste.rs pointer to `contentUrl`, when the shortener succeeded. */
+  shareUrl?: string | null;
   verified: boolean;
   error: string | null;
   /** Retain deletion access until the failed upload has been removed. */
@@ -29,6 +34,12 @@ export interface DebugLogUploadSnapshot {
   mayHaveUploaded: boolean;
   preparationFailed?: boolean;
 }
+
+/** Snapshot link fields for a receipt, so the UI can offer every known link. */
+function linkPatch(receipt: DebugLogUploadReceipt): Pick<DebugLogUploadSnapshot, 'url' | 'contentUrl' | 'shareUrl'> {
+  return { url: debugLogUploadShareUrl(receipt), contentUrl: receipt.url, shareUrl: receipt.shareUrl ?? null };
+}
+const NO_LINKS = { url: null, contentUrl: null, shareUrl: null } as const;
 
 interface UploadRequest {
   sessionId: string | null;
@@ -40,7 +51,7 @@ interface UploadRequest {
 }
 
 let snapshot: DebugLogUploadSnapshot = {
-  sessionId: null, phase: 'idle', url: null, verified: false, error: null, recoveryReceipt: null,
+  sessionId: null, phase: 'idle', ...NO_LINKS, verified: false, error: null, recoveryReceipt: null,
   mayHaveUploaded: false,
 };
 const listeners = new Set<() => void>();
@@ -71,7 +82,7 @@ export function failPublicReportPreparation(sessionId: string): void {
   queuedAuditRequest = null;
   preparedBody = null;
   pendingReceipt = null;
-  update({ sessionId, phase: 'failed', url: snapshot.recoveryReceipt?.url ?? null, verified: false, mayHaveUploaded: false,
+  update({ sessionId, phase: 'failed', ...(snapshot.recoveryReceipt ? linkPatch(snapshot.recoveryReceipt) : NO_LINKS), verified: false, mayHaveUploaded: false,
     preparationFailed: true,
     error: 'The deidentified report could not be prepared. The completed report remains on this device.' });
 }
@@ -89,7 +100,7 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
   const uploadRequest = lastRequest;
   const publish = (patch: Partial<DebugLogUploadSnapshot>) => {
     if (flightEpoch === uploadFlightEpoch) update(patch);
-    else if (patch.recoveryReceipt) update({ sessionId: null, phase: 'failed', url: patch.recoveryReceipt.url,
+    else if (patch.recoveryReceipt) update({ sessionId: null, phase: 'failed', ...linkPatch(patch.recoveryReceipt),
       recoveryReceipt: patch.recoveryReceipt, verified: false, error: 'Delete the uploaded log using its recovery receipt in Debug log.' });
   };
   try {
@@ -99,7 +110,7 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
       const recovery = await loadDebugLogUploadRecoveryReceipt();
       if (recovery) {
         pendingReceipt = recovery;
-        publish({ url: debugLogUploadShareUrl(recovery), recoveryReceipt: recovery });
+        publish({ ...linkPatch(recovery), recoveryReceipt: recovery });
         throw new Error('Delete the earlier upload from Debug log before creating another public copy.');
       }
       const receipts = await loadDebugLogUploadReceipts();
@@ -113,7 +124,7 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
       const hash = request.publicReport?.contentSha256;
       pendingReceipt = hash ? receipts.find(receipt => receipt.contentSha256 === hash) ?? null : null;
       if (pendingReceipt) {
-        publish({ url: debugLogUploadShareUrl(pendingReceipt), verified: pendingReceipt.verified === true });
+        publish({ ...linkPatch(pendingReceipt), verified: pendingReceipt.verified === true });
       } else {
         if (hash) {
           if (!duplicateRiskAccepted && await publicReportUploadUncertain(hash)) {
@@ -139,7 +150,7 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
                   : await saveDebugLogUploadReceipt(partial);
                 pendingReceipt = early;
                 hostedCreatedAt = early.createdAt;
-                publish({ url: debugLogUploadShareUrl(early) });
+                publish(linkPatch(early));
               } catch { /* SecureStore may be unavailable until the final save path. */ }
             },
           });
@@ -174,7 +185,7 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
             if (hash) await recordPublicReportUploadAttempt(hash, 'failed', attemptEpoch);
           } catch {
             pendingReceipt = receipt;
-            publish({ url: debugLogUploadShareUrl(receipt), recoveryReceipt: receipt });
+            publish({ ...linkPatch(receipt), recoveryReceipt: receipt });
             throw new Error(recoverySaved
               ? 'The upload needs deletion. Its recovery deletion receipt is saved securely; use Delete uploaded log in Debug log.'
               : 'Secure deletion recovery is unavailable. Keep this app open and use Delete uploaded log in Debug log before restarting.');
@@ -182,7 +193,7 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
           throw new Error('The new paste was removed because its deletion receipt could not be saved. The full log is still available locally.');
         }
         if (hash) await recordPublicReportUploadAttempt(hash, null, attemptEpoch);
-        publish({ url: debugLogUploadShareUrl(pendingReceipt) });
+        publish(linkPatch(pendingReceipt));
         if (result.truncated || result.clientTruncated) {
           throw new Error('The paste service did not accept the complete log.');
         }
@@ -283,7 +294,7 @@ export function startDebugLogUpload(
   if (request.sessionId) lastAuditSession = request.sessionId;
   preparedBody = null;
   pendingReceipt = null;
-  update({ sessionId: request.sessionId, phase: 'preparing', url: null, verified: false, error: null, mayHaveUploaded: false,
+  update({ sessionId: request.sessionId, phase: 'preparing', ...NO_LINKS, verified: false, error: null, mayHaveUploaded: false,
     preparationFailed: false });
   return run();
 }
@@ -298,6 +309,33 @@ export function retryDebugLogUpload(options: { acceptDuplicateRisk?: boolean } =
   return run(true);
 }
 
+/**
+ * Copy one specific link of a verified upload: the paste.rs pointer ('share')
+ * or the paste.c-net.org content host ('content'). Never uploads or verifies.
+ */
+export function copyDebugLogUploadLink(which: 'share' | 'content'): Promise<DebugLogUploadSnapshot> {
+  // Serialize: a request made during another flight copies its own link once that flight settles.
+  if (inFlight) return inFlight.then(() => copyDebugLogUploadLink(which));
+  const url = which === 'share' ? snapshot.shareUrl : snapshot.contentUrl ?? snapshot.url;
+  if (!url || !snapshot.verified || snapshot.recoveryReceipt) return Promise.resolve(snapshot);
+  const flightEpoch = uploadFlightEpoch;
+  inFlight = (async () => {
+    try {
+      const copy = Clipboard.setStringAsync(url);
+      update({ phase: 'copying', error: null });
+      if (await copy === false) throw new Error('Clipboard write was refused.');
+      if (flightEpoch === uploadFlightEpoch) update({ phase: 'copied' });
+    } catch {
+      if (flightEpoch === uploadFlightEpoch) {
+        update({ phase: 'failed', error: 'The link could not be copied. Tap a copy button to try again.' });
+        debugLog.warn('debugLogUpload', 'Link copy failed');
+      }
+    }
+    return snapshot;
+  })().finally(() => { inFlight = null; });
+  return inFlight;
+}
+
 /** Restore known report status without network or clipboard writes. */
 export async function restorePublicReportUpload(sessionId: string, prepare: () => UploadRequest, shouldRestore: () => boolean): Promise<void> {
   if (inFlight || snapshot.phase !== 'idle' || !shouldRestore()) return;
@@ -306,7 +344,7 @@ export async function restorePublicReportUpload(sessionId: string, prepare: () =
   const recovery = await loadDebugLogUploadRecoveryReceipt();
   if (!isCurrent()) return;
   if (recovery) {
-    update({ sessionId, phase: 'failed', url: debugLogUploadShareUrl(recovery), recoveryReceipt: recovery,
+    update({ sessionId, phase: 'failed', ...linkPatch(recovery), recoveryReceipt: recovery,
       error: 'Delete the upload using the securely saved recovery receipt in Debug log.' });
     return;
   }
@@ -327,7 +365,7 @@ export async function restorePublicReportUpload(sessionId: string, prepare: () =
   lastAuditSession = request.sessionId;
   preparedBody = request.publicReport.body;
   pendingReceipt = receipt ?? null;
-  update({ sessionId: request.sessionId, phase: 'failed', url: receipt ? debugLogUploadShareUrl(receipt) : null,
+  update({ sessionId: request.sessionId, phase: 'failed', ...(receipt ? linkPatch(receipt) : NO_LINKS),
     preparationFailed: false,
     verified: receipt?.verified === true, mayHaveUploaded: uncertain,
     error: receipt?.verified ? null : receipt ? 'The saved upload needs verification before it can be shared.'
@@ -348,14 +386,14 @@ export function forgetDeletedDebugLogUpload(url: string): void {
     lastAuditSession = blockedRequest.sessionId;
     blockedRequest = null;
     update({
-      phase: 'failed', sessionId: lastRequest.sessionId, url: null, verified: false,
+      phase: 'failed', sessionId: lastRequest.sessionId, ...NO_LINKS, verified: false,
       error: 'The earlier upload was removed. Retry upload to share the completed audit.',
       recoveryReceipt: null, mayHaveUploaded: false,
     });
     return;
   }
   lastAuditSession = null;
-  update({ phase: 'idle', url: null, verified: false, error: null, recoveryReceipt: null });
+  update({ phase: 'idle', ...NO_LINKS, verified: false, error: null, recoveryReceipt: null });
 }
 
 /** Clear private retry bodies and stale completion callbacks without deleting public-copy capabilities. */
@@ -364,7 +402,7 @@ export function resetClearedPublicReportUpload(): void {
   lastRequest = null; lastAuditSession = null; blockedRequest = null; queuedAuditRequest = null;
   preparedBody = null; pendingReceipt = null; duplicateRiskAccepted = false;
   const recovery = snapshot.recoveryReceipt;
-  update({ sessionId: null, phase: recovery ? 'failed' : 'idle', url: recovery?.url ?? null, verified: false,
+  update({ sessionId: null, phase: recovery ? 'failed' : 'idle', ...(recovery ? linkPatch(recovery) : NO_LINKS), verified: false,
     error: recovery ? 'Delete the uploaded log using its recovery receipt in Debug log.' : null,
     mayHaveUploaded: false, preparationFailed: false });
 }

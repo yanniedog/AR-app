@@ -536,6 +536,7 @@ class Explorer {
     let lastShot = 0;
     let url = null;
     let outcome = null;
+    let rbaNavigationProven = false;
     let idleAtHome = 0;
     let lastCounter = null;
     let lastProgressAt = Date.now();
@@ -582,7 +583,10 @@ class Explorer {
       if (privateAudit) {
         const completed = nodes.some(n => /^(Successful|Needs review|Failed|Incomplete)\s*·\s*\S/.test(n.text));
         if (onAuditHome && completed && nodes.some(n => n.id === 'audit-start-live' && n.enabled)) {
-          outcome = nodes.some(n => n.id === 'audit-rba-round-trips-complete') ? 'completed' : 'missing cold or warm RBA round trip';
+          const rbaReady = nodes.some(n => n.id === 'audit-rba-round-trips-complete');
+          rbaNavigationProven = rbaReady || nodes.some(n => n.id === 'audit-rba-navigation-only');
+          outcome = rbaReady ? 'completed' : rbaNavigationProven
+            ? 'RBA navigation completed; readiness failed' : 'missing cold or warm RBA round trip';
           break;
         }
         continue;
@@ -598,7 +602,10 @@ class Explorer {
       }
     }
     const elapsedMs = Date.now() - t0;
-    if (privateAudit && outcome === 'completed' && appPid() !== startPid) outcome = 'app crashed';
+    if (privateAudit && appPid() !== startPid) {
+      outcome = 'app crashed';
+      rbaNavigationProven = false;
+    }
     if (privateAudit && !outcome) outcome = 'timed out';
     const final = await this.snapshot('audit finished', { auditElapsedMs: elapsedMs, auditUrl: url, auditOutcome: outcome, error: privateAudit
       ? (outcome === 'completed' ? undefined : outcome)
@@ -612,7 +619,7 @@ class Explorer {
         await sleep(400);
       }
     }
-    const audit = { kind, url, outcome, elapsedMs, visibleOutcome: final.step.visible.slice(0, 20) };
+    const audit = { kind, url, outcome, elapsedMs, ...(privateAudit ? { rbaNavigationProven } : {}), visibleOutcome: final.step.visible.slice(0, 20) };
     if (url && !privateAudit) {
       try {
         const { body, status, contentUrl } = await fetchUploadedLog(url);

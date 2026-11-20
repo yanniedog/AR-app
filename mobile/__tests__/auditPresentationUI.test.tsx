@@ -3,6 +3,7 @@ import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { DebugLogUploadStatus } from '../src/components/DebugLogUploadStatus';
 
 let mockSnapshot: Record<string, unknown>;
+const mockCopy = jest.fn();
 type Tree = ReactTestRenderer & { root: {
   findByType(type: string): { props: Record<string, unknown> };
   findAllByType(type: string): { props: Record<string, unknown> }[];
@@ -11,6 +12,7 @@ jest.mock('../src/lib/debugLogSharing', () => ({
   getDebugLogUploadSnapshot: () => mockSnapshot,
   subscribeDebugLogUpload: () => () => {},
   retryDebugLogUpload: jest.fn(),
+  copyDebugLogUploadLink: (...args: unknown[]) => mockCopy(...args),
 }));
 jest.mock('../src/components/AuditOutcomeSymbols', () => ({ AuditDeliverySymbol: 'AuditDeliverySymbol' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button', Card: 'Card' }));
@@ -73,4 +75,22 @@ test('an unverified URL stays hidden in its audit while generic debug recovery r
     expect(scoped.root.findAllByType('Button').some(node => node.props.title === 'Retry verification')).toBe(true);
     expect(generic.root.findAllByType('AppText').some(node => node.props.children === mockSnapshot.url)).toBe(true);
   } finally { act(() => { scoped.unmount(); generic.unmount(); }); }
+});
+
+test('a verified upload with both hosts shows each link and copies either one', () => {
+  mockCopy.mockClear();
+  mockSnapshot = { sessionId: 'audit-c', phase: 'verified', verified: true, error: null, mayHaveUploaded: false,
+    url: 'https://paste.rs/abc', shareUrl: 'https://paste.rs/abc', contentUrl: 'https://paste.c-net.org/3293435a-075d-82aa-6abc-690495b57f48' };
+  let tree!: Tree;
+  act(() => { tree = TestRenderer.create(<DebugLogUploadStatus sessionId="audit-c" />) as Tree; });
+  try {
+    const text = tree.root.findAllByType('AppText').map(node => node.props.children);
+    expect(text).toContain('https://paste.rs/abc');
+    expect(text).toContain('https://paste.c-net.org/3293435a-075d-82aa-6abc-690495b57f48');
+    const buttons = tree.root.findAllByType('Button');
+    expect(buttons.some(node => node.props.title === 'Copy link')).toBe(false);
+    (buttons.find(node => node.props.title === 'Copy paste.rs link')!.props.onPress as () => void)();
+    (buttons.find(node => node.props.title === 'Copy paste.c-net.org link')!.props.onPress as () => void)();
+    expect(mockCopy.mock.calls).toEqual([['share'], ['content']]);
+  } finally { act(() => tree.unmount()); }
 });

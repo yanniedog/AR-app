@@ -31,7 +31,12 @@ if (!process.argv.includes('--analyze-only')) {
 }
 
 const report = (() => { try { return JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')); } catch { return { steps: [] }; } })();
-const im = (cmd, args) => { try { return execFileSync(cmd, args, { encoding: 'utf8' }).trim(); } catch { return ''; } };
+const hasBin = name => { try { execFileSync('which', [name]); return true; } catch { return false; } };
+const IM7 = !hasBin('convert') && hasBin('magick');
+const im = (cmd, args) => {
+  const [bin, pre] = IM7 ? ['magick', [cmd === 'convert' ? [] : [cmd]].flat()] : [cmd, []];
+  try { return execFileSync(bin, [...pre, ...args], { encoding: 'utf8' }).trim(); } catch { return ''; }
+};
 const results = [];
 fs.mkdirSync(path.join(out, 'thumbs'), { recursive: true });
 for (const s of manifest) {

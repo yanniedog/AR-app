@@ -1,10 +1,10 @@
 import { uiLabel } from '../lib/uiCopy';
-import React, { memo } from 'react';
+import React, { memo, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AuditScreenAwake } from '../../modules/audit-screen-awake';
-import { cancelPerformanceAudit, getPerformanceAuditState } from '../lib/performanceAudit';
+import { cancelPerformanceAudit, getPerformanceAuditState, pausePerformanceAudit, resumePerformanceAudit } from '../lib/performanceAudit';
 import { uiCount, uiDurationClock, uiJoin } from '../lib/uiCopy';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Card, Row } from './ui';
@@ -15,11 +15,35 @@ export const PerformanceAuditOverlay = memo(function PerformanceAuditOverlay({ s
 }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const live = state.status === 'queued' || state.status === 'running';
+  const [now, setNow] = useState(() => Date.now());
+  const pausedMs = useRef(0);
+  const pausedAt = useRef<number | null>(null);
+  useEffect(() => {
+    pausedMs.current = 0;
+    pausedAt.current = null;
+  }, [state.startedAt]);
+  useEffect(() => {
+    if (state.paused) {
+      if (pausedAt.current == null) pausedAt.current = Date.now();
+    } else if (pausedAt.current != null) {
+      pausedMs.current += Date.now() - pausedAt.current;
+      pausedAt.current = null;
+    }
+  }, [state.paused]);
+  useEffect(() => {
+    if (!live || state.paused) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, [live, state.paused]);
   if (state.status !== 'queued' && state.status !== 'running') return null;
 
   const total = Math.max(1, state.progress.total);
   const fraction = Math.max(0, Math.min(1, state.progress.completed / total));
   const percent = Math.round(fraction * 100);
+  const startedMs = state.startedAt ? Date.parse(state.startedAt) : NaN;
+  const elapsed = Number.isFinite(startedMs) ? uiDurationClock(Math.max(0, (pausedAt.current ?? now) - startedMs - pausedMs.current)) : uiLabel('Unknown');
   const estimate = state.estimate ? uiDurationClock(state.estimate.remainingMs) : null;
 
   return (
@@ -48,6 +72,12 @@ export const PerformanceAuditOverlay = memo(function PerformanceAuditOverlay({ s
           {state.paused ? uiLabel('Paused') : estimate ? uiJoin('Estimated time', ': ', estimate) : uiLabel('Preparing')}
         </AppText>
         <AppText variant="small" color="textMuted">{uiLabel(state.paused ? 'Paused' : state.progress.label.startsWith('Background work:') ? 'Background checks' : 'Checking')}</AppText>
+        <Row style={{ justifyContent: 'space-between' }}>
+          <AppText variant="small" color="textMuted">{uiJoin('Elapsed', ': ', elapsed)}</AppText>
+          <AppText variant="small" color="textMuted">
+            {uiJoin('Checks', ' ', uiCount(state.progress.completed), ' / ', uiCount(state.progress.total))}
+          </AppText>
+        </Row>
         <View
           accessibilityRole="progressbar"
           accessibilityLabel="App health audit"
@@ -72,6 +102,14 @@ export const PerformanceAuditOverlay = memo(function PerformanceAuditOverlay({ s
           <AppText variant="tiny" color="textFaint">
             {uiJoin(uiCount(state.progress.completed), ' / ', state.progress.total ? uiCount(state.progress.total) : 'Unknown', ' ', 'Checks')}
           </AppText>
+          <Row style={{ gap: 4 }}>
+          <Button
+            title={state.paused ? 'Resume' : 'Pause'}
+            variant="ghost"
+            disabled={state.cancelRequested}
+            onPress={() => (state.paused ? resumePerformanceAudit() : pausePerformanceAudit())}
+            style={{ paddingVertical: 8 }}
+          />
           <Button
             title={state.cancelRequested ? 'Cancelling' : 'Cancel'}
             icon="close"
@@ -80,6 +118,7 @@ export const PerformanceAuditOverlay = memo(function PerformanceAuditOverlay({ s
             onPress={cancelPerformanceAudit}
             style={{ paddingVertical: 8 }}
           />
+          </Row>
         </Row>
       </Card>
     </View>

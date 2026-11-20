@@ -1,4 +1,6 @@
-import { getLocalAppHealthAuditGeneration, isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
+import { Platform } from 'react-native';
+import { getLocalAppHealthAuditGeneration, hasAppHealthFetchGuard, isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
+import { AppHealthNetworkPolicyError } from '../lib/appHealth/networkPolicy';
 import { cache } from './cache';
 import { ECONOMIC_RECHECK_MS, type CashRateForecast } from './economicOutlookTypes';
 import {
@@ -124,16 +126,42 @@ function offline(cached: RbaMarketOutlook | null): RbaMarketOutlook {
   return freezePayload({ ...cached, refreshStatus: 'offline' });
 }
 
-async function fetchCsv(url: string): Promise<string> {
+type SourceCsvDiagnostic = 'parsed' | 'invalid-csv' | 'http' | 'policy' | 'timeout' | 'transport';
+
+async function fetchCsv<T>(source: 'F17' | 'J1', url: string, parse: (csv: string) => T): Promise<T> {
   if (isLocalAppHealthAudit()) throw new Error('Official RBA data is unavailable in this local audit');
+  const diagnose = process.env.EXPO_PUBLIC_AR_CI_RBA_DIAGNOSTICS === '1'
+    && Platform.OS === 'android' && hasAppHealthFetchGuard();
+  const startedAt = Date.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8_000);
+  let httpStatus: number | undefined;
+  let result: SourceCsvDiagnostic = 'transport';
   try {
     const response = await fetch(url, { method: 'GET', credentials: 'omit', headers: { Accept: 'text/csv' }, signal: controller.signal });
-    if (!response.ok) throw new Error(`Official RBA data request failed (${response.status})`);
-    return await response.text();
+    httpStatus = response.status;
+    if (!response.ok) {
+      result = 'http';
+      throw new Error(`Official RBA data request failed (${response.status})`);
+    }
+    const csv = await response.text();
+    result = 'invalid-csv';
+    const parsed = parse(csv);
+    result = 'parsed';
+    return parsed;
+  } catch (error) {
+    if (result === 'transport') {
+      if (controller.signal.aborted) result = 'timeout';
+      else if (error instanceof AppHealthNetworkPolicyError || (
+        error instanceof Error && error.message.includes("Redirect is not allowed when redirect mode is 'error'")
+      )) result = 'policy';
+    }
+    throw error;
   } finally {
     clearTimeout(timer);
+    if (diagnose) {
+      console.info(`[AR_CI_RBA] ${source} ${result} status=${httpStatus ?? '-'} elapsedMs=${Date.now() - startedAt}`);
+    }
   }
 }
 
@@ -216,8 +244,8 @@ export async function loadRbaMarketOutlook(force = false): Promise<RbaMarketOutl
     if (!force && cached?.refreshStatus === 'current' && age >= 0 && age < ECONOMIC_RECHECK_MS) return freezePayload(cached);
     const checkedAt = new Date().toISOString();
     const [bonds, economists] = await Promise.allSettled([
-      fetchCsv(RBA_F17_FORWARD_URL).then((text) => parseRbaBondForwardsCsv(text)),
-      fetchCsv(RBA_J1_FORECAST_URL).then((text) => parseRbaEconomistsCsv(text)),
+      fetchCsv('F17', RBA_F17_FORWARD_URL, parseRbaBondForwardsCsv),
+      fetchCsv('J1', RBA_J1_FORECAST_URL, parseRbaEconomistsCsv),
     ]);
     return commit(sequence, expectedGeneration, auditGeneration, {
       schema_version: 1,

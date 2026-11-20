@@ -123,7 +123,7 @@ test('single-point charts provide real SVG evidence without fabricating an unava
   expect(graphics().ready).toBe(true);
 });
 
-test('switching real multipoint charts requires current SVG layout and rejects old native callbacks', async () => {
+test('switching real multipoint charts reports readiness for each selection from the measured container and ignores old native callbacks', async () => {
   await mount();
   measureChart('forecast');
   measureChart('bonds');
@@ -131,16 +131,16 @@ test('switching real multipoint charts requires current SVG layout and rejects o
   expect(graphics().ready).toBe(true);
   await action('rba.forecast.next');
   expect(chart('forecast').props.selectedIndex).toBe(1);
-  expect(probe('forecast').status).toBe('pending');
+  expect(probe('forecast').status).toBe('ready');
   act(() => oldForecastLayout(event()));
-  expect(probe('forecast').status).toBe('pending');
+  expect(probe('forecast').status).toBe('ready');
   expect(probe('bonds').status).toBe('ready');
   measureChart('forecast');
   act(() => oldForecastLayout(event(0, 0)));
   expect(graphics().ready).toBe(true);
   await action('rba.bonds.next');
   expect(chart('bonds').props.selectedIndex).toBe(0);
-  expect(probe('bonds').status).toBe('pending');
+  expect(probe('bonds').status).toBe('ready');
   expect(probe('forecast').status).toBe('ready');
   measureChart('bonds');
   await action('rba.open');
@@ -149,7 +149,7 @@ test('switching real multipoint charts requires current SVG layout and rejects o
   await action('rba.forecast.next');
   expect(chart('forecast').props.selectedIndex).toBe(0);
   act(() => oldForecastLayout(event()));
-  expect(probe('forecast').status).toBe('pending');
+  expect(probe('forecast').status).toBe('ready');
   measureChart('forecast');
   expect(graphics().ready).toBe(true);
 });
@@ -206,7 +206,7 @@ test('local audit without cached RBA outlook marks rba.data as intentionally emp
   });
 });
 
-test('unchanged cached charts retain actual SVG proof across refresh without borrowing proof for new content', async () => {
+test('unchanged cached charts retain actual SVG proof across refresh and report new content from the measured container', async () => {
   await mount();
   measureChart('forecast');
   measureChart('bonds');
@@ -218,9 +218,9 @@ test('unchanged cached charts retain actual SVG proof across refresh without bor
     economists: { ...outlook.economists!, points: [{ date: '2027-01-01', value: 4.25 }] },
   });
   await refresh();
-  expect(probe('forecast').status).toBe('pending');
+  expect(probe('forecast').status).toBe('ready');
   act(() => oldLayout(event()));
-  expect(probe('forecast').status).toBe('pending');
+  expect(probe('forecast').status).toBe('ready');
   measureChart('forecast');
   expect(graphics().ready).toBe(true);
   expect(probe('forecast')).toMatchObject({ expectedCount: 1, actualCount: 1 });

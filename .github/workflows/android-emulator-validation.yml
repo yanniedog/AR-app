@@ -80,6 +80,7 @@ jobs:
       - name: Assemble native release-mode x86_64 APK
         env:
           NODE_ENV: production
+          EXPO_PUBLIC_AR_CI_RBA_DIAGNOSTICS: "1"
         run: |
           set -euo pipefail
           cd android

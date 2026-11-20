@@ -67,3 +67,16 @@ export function decideReleaseCatchUp(input) {
 export function isReleasePath(file) {
   return file.startsWith('mobile/') || file === '.github/workflows/mobile-android-apk.yml';
 }
+
+// Start the full explorer audit for the newest published APK once. The explorer
+// pushes explorer/tested/<tag> when an auto run ends, so a tested tag never repeats.
+// Run names of every automatic audit (ours, the cron fallback and workflow_run), for the in-flight check.
+export const EXPLORE_AUTO_RUN_NAMES = ['app-explorer auto', 'app-explorer schedule', 'app-explorer workflow_run'];
+export const EXPLORE_RETRY_COOLDOWN_MS = 90 * 60 * 1000;
+export function decideExploreDispatch({ tag, tested, inFlight, cooling = false }) {
+  if (!tag) return { dispatch: false, reason: 'no published APK release' };
+  if (tested) return { dispatch: false, reason: `${tag} already audited` };
+  if (inFlight) return { dispatch: false, reason: `audit for ${tag} already running` };
+  if (cooling) return { dispatch: false, reason: `${tag} audit retried too recently` };
+  return { dispatch: true, reason: `${tag} not audited yet` };
+}

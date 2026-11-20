@@ -493,3 +493,17 @@ test('audit entry phases and HTTP dispositions survive public export', () => {
     expect(checks[2].metrics.httpIssue).toBe('timeout');
   }
 });
+
+test('server-unavailable HTTP issue survives hosted and standalone export', () => {
+  const report = makePerformanceAuditReport('http-issue', [
+    { id: 'external-link-1', label: 'Link', kind: 'network', status: 'warn', durationMs: 12,
+      metrics: { httpAttempted: true, httpIssue: 'server-unavailable' } },
+  ]);
+  const decoded = decodeCompactDiagnosticJson(createPublicPerformanceAuditReport(report)) as
+    { checks: typeof report.checks; diagnosticLog: { checks: typeof report.checks } };
+  for (const checks of [decoded.checks, decoded.diagnosticLog.checks]) {
+    expect(checks[0].metrics.httpIssue).toBe('server-unavailable');
+  }
+  const standalone = fullAuditDiagnosticLog(report, id => id) as typeof report;
+  expect(standalone.checks[0].metrics.httpIssue).toBe('server-unavailable');
+});
