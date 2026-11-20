@@ -210,9 +210,11 @@ export default function RbaRates() {
 
         <LedgerSection title="Outlook">
           <LedgerAction label={uiLabel(loading ? 'Refreshing outlook' : 'Refresh outlook')} variant="quiet" loading={loading} onPress={() => { void refresh(true); }} style={{ alignSelf: 'flex-start' }} />
-          {error ? <LedgerText tone="danger" accessibilityRole="alert">{uiLabel("Refresh failed")}</LedgerText> : null}
-          {outlook?.refreshStatus === 'offline' ? <LedgerText tone="mutedInk">{uiJoin('Cached', ' · ', 'Offline')}</LedgerText> : null}
-          {outlook?.refreshStatus === 'partial' ? <LedgerText tone="mutedInk">{uiJoin('Refresh', ' · ', 'Partial')}</LedgerText> : null}
+          <View collapsable={false}>
+            {error ? <LedgerText tone="danger" accessibilityRole="alert">{uiLabel("Refresh failed")}</LedgerText> : null}
+            {outlook?.refreshStatus === 'offline' ? <LedgerText tone="mutedInk">{uiJoin('Cached', ' · ', 'Offline')}</LedgerText> : null}
+            {outlook?.refreshStatus === 'partial' ? <LedgerText tone="mutedInk">{uiJoin('Refresh', ' · ', 'Partial')}</LedgerText> : null}
+          </View>
         </LedgerSection>
 
         <LedgerSection title="Economists’ cash-rate forecast">
@@ -222,7 +224,9 @@ export default function RbaRates() {
               accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true
             });
           }}>{loading ? uiLabel("Loading") : uiLabel("Forecast unavailable")}</LedgerText>}</View>
-          {outlook?.economists ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA J1', ' ', '·', ' ', 'Survey', ' ', uiDate(outlook.economists.surveyDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.economists.publicationDate), surveyStale ? uiJoin(' ', '·', ' ', 'Older survey') : '')}</LedgerText> : null}
+          <View collapsable={false}>
+            {outlook?.economists ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA J1', ' ', '·', ' ', 'Survey', ' ', uiDate(outlook.economists.surveyDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.economists.publicationDate), surveyStale ? uiJoin(' ', '·', ' ', 'Older survey') : '')}</LedgerText> : null}
+          </View>
         </LedgerSection>
 
         <LedgerSection title="Bond-market forward rates">
@@ -232,7 +236,9 @@ export default function RbaRates() {
               accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true
             });
           }}>{loading ? uiLabel("Loading") : uiLabel("Bond data unavailable")}</LedgerText>}</View>
-          {outlook?.bondForwards ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA F17', ' ', '·', ' ', 'Observed', ' ', uiDate(outlook.bondForwards.observationDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.bondForwards.publicationDate), bondStale ? uiJoin(' ', '·', ' ', 'Older observation') : '')}</LedgerText> : null}
+          <View collapsable={false}>
+            {outlook?.bondForwards ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA F17', ' ', '·', ' ', 'Observed', ' ', uiDate(outlook.bondForwards.observationDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.bondForwards.publicationDate), bondStale ? uiJoin(' ', '·', ' ', 'Older observation') : '')}</LedgerText> : null}
+          </View>
         </LedgerSection>
 
         <Disclosure title="Sources" open={sourcesOpen} onToggle={() => setSourcesOpen((open) => !open)}>
