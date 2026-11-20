@@ -14,6 +14,7 @@ import { noDataErrorMessage, readValidatedHistoryBanks } from './storeHelpers';
 import { SECTION_ORDER } from '../constants';
 import type { CorePayload } from '../types';
 import { normalizeProductHistoryPayload } from './productHistory';
+import { bootMark } from '../lib/bootTrace';
 import {
   clearSuitabilityIndex,
   closeSuitabilityGateUntilRebuild,
@@ -60,6 +61,7 @@ export function createBootstrapActions(
       try {
         const prefs = get().prefs;
         const cachedBundle = await cache.readBundle();
+        bootMark('cache-read');
         // Retain old sample bytes on disk, but require a verified downloaded dataset.
         const bundle = cachedBundle?.meta.source === 'sample' ? null : cachedBundle;
         const [rawCachedSearch, cachedOptionalMeta, cachedHistory, cachedProductHistory] = await Promise.all([
@@ -127,6 +129,7 @@ export function createBootstrapActions(
             ...(cachedHistory ? { historyBanks: cachedHistory } : {}),
             ...(cachedProductHistory ? { productHistory: cachedProductHistory } : {}),
           });
+          bootMark('core-ready');
           debugLog.info('store', `cached core ready elapsed_ms=${Date.now() - started}`);
           void prepareBankRateHistoryAfterPaint(set, get, bundle.core, bundle.meta.manifest,
             parseHistoryDatesIndex(bundle.meta.historyDatesIndex, bundle.meta.manifest), null,
@@ -149,6 +152,7 @@ export function createBootstrapActions(
           set({ status: 'idle', error: null });
           if (!opts.skipRefresh) {
             const refreshed = await get().refresh({});
+            bootMark(get().core ? 'core-ready' : 'load-failed');
             // false also means another refresh already owns this load; that
             // refresh settles the status itself.
             if (!refreshed && !get().refreshing && get().status !== 'ready' && get().status !== 'error') {
@@ -165,6 +169,7 @@ export function createBootstrapActions(
       } catch (err) {
         const msg = String((err as Error)?.message ?? err);
         debugLog.error('store', `bootstrap failed: ${msg}`);
+        bootMark('load-failed');
         set({
           status: 'error',
           error: msg,

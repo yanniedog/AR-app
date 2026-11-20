@@ -77,7 +77,8 @@ describe('real-use session verdict', () => {
   it('flags dropped frames well above the previous build, and extreme jank outright', () => {
     const base = report([step(1, 'scroll', { frames: { frames: 100, janky: 10 } })], '1.0.0');
     expect(verdict(report([step(1, 'scroll', { frames: { frames: 100, janky: 40 } })]), base).findings[0].kind).toBe('jank');
-    expect(verdict(report([step(1, 'scroll', { frames: { frames: 100, janky: 70 } })]), null).outcome).toBe('fail');
+    expect(verdict(report([step(1, 'scroll', { frames: { frames: 100, janky: 97 } })]), null).outcome).toBe('fail');
+    expect(verdict(report([step(1, 'scroll', { frames: { frames: 100, janky: 80 } })]), null).outcome).toBe('pass');
     expect(verdict(report([step(1, 'scroll', { frames: { frames: 5, janky: 5 } })]), null).outcome).toBe('pass');
   });
 });

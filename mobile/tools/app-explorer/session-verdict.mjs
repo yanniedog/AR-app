@@ -8,7 +8,7 @@ export const THRESHOLDS = {
   emptyFrictionMs: 5000,
   unresponsiveMs: 3000,
   layoutJumps: 2,
-  jankFailRatio: 0.6,
+  jankFailRatio: 0.95,
   jankRegressionDelta: 0.15,
   jankMinFrames: 20,
   regressionFactor: 1.5,

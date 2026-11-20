@@ -5,6 +5,7 @@ import { useFocusMeasurement } from '../../hooks/useFocusMeasurement';
 import { isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../../data/mortgageFacetScope';
 import { useMortgageResultsIndex } from '../../hooks/useMortgageResultsIndex';
 import { profileSectionCount } from '../../data/profile';
+import { bootMark } from '../../lib/bootTrace';
 import { checkDrillOutcome } from '../../lib/degradationLog';
 import { reconcilePublicCompareSelectionTokens } from '../../data/publicCompareSelectionTokens';
 import { publicScenarioForRow } from '../../data/publicRateIntegration';
@@ -820,6 +821,8 @@ export default function RatesWorkspace() {
   const searchPending = intentPending || (availability === 'unlisted' ? !catalogueDetails
     : section === 'Mortgage' && !mortgageCriteriaReady && !isDefaultMortgageBrowse ? false
     : detailFiltersPending || searchIndexLoading || !publicPricing.ready || !preparedResults.ready);
+  const ratesSettled = core != null && !searchPending;
+  useEffect(() => { if (ratesSettled) bootMark('rates-ready'); }, [ratesSettled]);
   const presented = useRef<{ rows: typeof pageRows; section: SectionKey; availability: RateAvailability;
     core: typeof core; catalogue: typeof catalogue; revision: number; scenarioFor: typeof rowScenario;
     unverified: WeakSet<RateRow> } | null>(null);

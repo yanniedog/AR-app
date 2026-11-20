@@ -69,7 +69,7 @@
   "name": "rba",
   "open": "/rba",
   "scroll": 0,
-  "why": "RBA outlook charts, crash site"
+  "why": "RBA outlook charts, crash site, refresh action when a chart is unavailable"
  },
  {
   "name": "rba-scrolled",

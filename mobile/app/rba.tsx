@@ -186,6 +186,8 @@ export default function RbaRates() {
   const bondStale = outlook?.bondForwards && now - Date.parse(outlook.bondForwards.observationDate) > 45 * DAY_MS;
   const surveyStale = outlook?.economists && now - Date.parse(outlook.economists.surveyDate) > 120 * DAY_MS;
 
+  const retryOutlook = <LedgerAction label={uiLabel('Refresh outlook')} variant="quiet" onPress={() => { void refresh(true); }} style={{ alignSelf: 'flex-start' }} />;
+
   return (
     <ScreenScrollView>
       <View style={{ gap: 28 }} onLayout={(event) => setLayoutReady(event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0)}>
@@ -223,7 +225,8 @@ export default function RbaRates() {
               revision: forecastRevision, expectedCount: 0, pointCount: 0,
               accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true
             });
-          }}>{loading ? uiLabel("Loading") : uiLabel("Forecast unavailable")}</LedgerText>}</View>
+          }}>{loading ? uiLabel("Loading") : uiLabel("Forecast unavailable")}</LedgerText>}
+            {!forecasts.length && !loading ? retryOutlook : null}</View>
           <View collapsable={false}>
             {outlook?.economists ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA J1', ' ', '·', ' ', 'Survey', ' ', uiDate(outlook.economists.surveyDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.economists.publicationDate), surveyStale ? uiJoin(' ', '·', ' ', 'Older survey') : '')}</LedgerText> : null}
           </View>
@@ -235,7 +238,8 @@ export default function RbaRates() {
               revision: bondRevision, expectedCount: 0, pointCount: 0,
               accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true
             });
-          }}>{loading ? uiLabel("Loading") : uiLabel("Bond data unavailable")}</LedgerText>}</View>
+          }}>{loading ? uiLabel("Loading") : uiLabel("Bond data unavailable")}</LedgerText>}
+            {!bonds?.length && !loading ? retryOutlook : null}</View>
           <View collapsable={false}>
             {outlook?.bondForwards ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA F17', ' ', '·', ' ', 'Observed', ' ', uiDate(outlook.bondForwards.observationDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.bondForwards.publicationDate), bondStale ? uiJoin(' ', '·', ' ', 'Older observation') : '')}</LedgerText> : null}
           </View>

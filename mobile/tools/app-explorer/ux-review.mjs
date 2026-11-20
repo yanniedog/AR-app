@@ -170,7 +170,7 @@ export async function reviewRun(dir, { sample } = {}) {
     const r = checkScreen({ screen: s.name, nodes: s.nodes, size: s.size, density, pkg: PKG, settleTimedOut: !!s.step.settleTimedOut, allowProse: legal });
     const list = [...r.findings];
     const png = loadPng(path.join(dir, 'screens', `${s.slug}.png`));
-    if (png) { list.push(...contrastFindings({ screen: s.name, nodes: s.nodes, png, pkg: PKG, density })); contrastMeasured += 1; }
+    if (png) { list.push(...contrastFindings({ screen: s.name, nodes: s.nodes, png, pkg: PKG, density, size: s.size })); contrastMeasured += 1; }
     const sortedBy = (s.nodes.map(n => /^Sort · (Comparison rate|Advertised rate|Ongoing rate|Rate)\b/.exec(n.text || n.desc || '')).find(Boolean) || [])[1] || null;
     const section = (s.nodes.map(n => n.selected && /^(Home loans|Savings|Term deposits)\b/.exec((n.text || n.desc || '').trim())).find(Boolean) || [])[1];
     const acc = accuracyFindings({ screen: s.name, nodes: s.nodes, sample, sortedBy, lowerIsBetter: section ? section === 'Home loans' : undefined });
