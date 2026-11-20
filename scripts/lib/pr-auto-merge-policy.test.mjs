@@ -67,4 +67,5 @@ test('the explorer audit starts once per untested published release', () => {
   assert.equal(decideExploreDispatch({ ...base, tag: '' }).dispatch, false);
   assert.equal(decideExploreDispatch({ ...base, tested: true }).dispatch, false);
   assert.equal(decideExploreDispatch({ ...base, inFlight: true }).dispatch, false);
+  assert.equal(decideExploreDispatch({ ...base, cooling: true }).dispatch, false);
 });
