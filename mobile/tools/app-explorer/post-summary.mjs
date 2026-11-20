@@ -15,6 +15,7 @@ const out = [];
 const auditLine = (report.match(/^\*\*Audit.*$/m) || report.match(/^Mode .*$/m) || ['no run summary'])[0];
 out.push(`explorer run ${runId} on ${run.tag || '?'} (${run.mode || '?'})`, '', auditLine, '');
 if (audit.url) out.push(`Audit log: ${audit.url}`, '');
+if (audit.logContentUrl && audit.logContentUrl !== audit.url) out.push(`Audit log (full file): ${audit.logContentUrl}`, '');
 
 let decoded = null;
 try {
