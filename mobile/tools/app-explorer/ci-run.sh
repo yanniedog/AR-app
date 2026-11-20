@@ -22,6 +22,6 @@ if [ "${MODE:-crawl}" = script ]; then
 fi
 if [ "${MODE:-crawl}" = audit ] || [ "${MODE:-crawl}" = full ]; then
   # Targeted screenshots first so a later audit crash cannot lose them.
-  node mobile/tools/app-explorer/shots.mjs explorer-out/shots || true
+  node mobile/tools/app-explorer/shots.mjs explorer-out/shots || { mkdir -p explorer-out/shots; echo failed > explorer-out/shots/shots-failed; }
 fi
 node mobile/tools/app-explorer/driver.mjs "${args[@]}"
