@@ -91,3 +91,13 @@ it('scores current retrieval separately from a slow passive observation', async 
   expect(check.metrics).toMatchObject({ preloaded: true, backgroundDurationMs: 15305,
     handlerAttempted: true, httpAttempted: false });
 });
+
+it('keeps the destination when the link verifier throws before recording a result', async () => {
+  const external = require('../src/lib/externalLinkAudit');
+  const spy = jest.spyOn(external, 'auditExternalLink').mockRejectedValueOnce(new Error('verifier crashed'));
+  const check = await runExternalLinkAuditCheck({ url: 'https://www.rba.gov.au/statistics/?q=1',
+    label: 'Source', purpose: 'official_economic_source' }, 4, { platform: 'android', reachability: true });
+  spy.mockRestore();
+  expect(check.status).toBe('fail');
+  expect(check.metrics).toMatchObject({ host: 'www.rba.gov.au', destinationPath: '/statistics/' });
+});

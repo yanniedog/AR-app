@@ -61,6 +61,15 @@ export function externalLinkAuditCheck(result: ExternalLinkAuditResult, index: n
   };
 }
 
+function requestDestination(request: TrustedExternalUrlRequest): { host?: string; destinationPath?: string } {
+  try {
+    const parsed = new URL(request.url);
+    return { host: parsed.host, destinationPath: parsed.pathname };
+  } catch {
+    return {};
+  }
+}
+
 export async function runExternalLinkAuditCheck(request: TrustedExternalUrlRequest, index: number, options: ExternalLinkAuditOptions): Promise<AuditCheck> {
   const started = globalThis.performance?.now?.() ?? Date.now();
   const prepared = !options.reachability && !options.signal?.aborted ? getPreloadedExternalLink(request) : null;
@@ -81,7 +90,7 @@ export async function runExternalLinkAuditCheck(request: TrustedExternalUrlReque
       status: 'fail',
       durationMs: null,
       metrics: { executionAttempted: true, nonTimingFailure: true,
-        reason: 'The link verifier failed before it could record a result.' },
+        reason: 'The link verifier failed before it could record a result.', ...requestDestination(request) },
     };
   }
 }
