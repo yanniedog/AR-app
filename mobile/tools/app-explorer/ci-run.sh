@@ -20,4 +20,8 @@ if [ "${MODE:-crawl}" = script ]; then
   fi
   args+=(--script explorer-script.json)
 fi
+if [ "${MODE:-crawl}" = audit ] || [ "${MODE:-crawl}" = full ]; then
+  # Targeted screenshots first so a later audit crash cannot lose them.
+  node mobile/tools/app-explorer/shots.mjs explorer-out/shots || true
+fi
 node mobile/tools/app-explorer/driver.mjs "${args[@]}"

@@ -1,0 +1,122 @@
+[
+ {
+  "name": "browse",
+  "open": "/browse",
+  "scroll": 0,
+  "why": "home rates list"
+ },
+ {
+  "name": "watchlist",
+  "open": "/watchlist",
+  "scroll": 0,
+  "why": "saved items"
+ },
+ {
+  "name": "market",
+  "open": "/market",
+  "scroll": 0,
+  "why": "market tab"
+ },
+ {
+  "name": "tools",
+  "open": "/tools",
+  "scroll": 0,
+  "why": "tools tab"
+ },
+ {
+  "name": "trends",
+  "open": "/trends",
+  "scroll": 0,
+  "why": "trends charts"
+ },
+ {
+  "name": "search",
+  "open": "/search",
+  "scroll": 0,
+  "why": "search"
+ },
+ {
+  "name": "bank-rates",
+  "open": "/bank-rates",
+  "scroll": 0,
+  "why": "bank rates"
+ },
+ {
+  "name": "compare",
+  "open": "/compare",
+  "scroll": 0,
+  "why": "compare"
+ },
+ {
+  "name": "calculator",
+  "open": "/calculator",
+  "scroll": 0,
+  "why": "calculator"
+ },
+ {
+  "name": "projections",
+  "open": "/projections",
+  "scroll": 0,
+  "why": "projections chart"
+ },
+ {
+  "name": "research",
+  "open": "/research",
+  "scroll": 0,
+  "why": "research"
+ },
+ {
+  "name": "rba",
+  "open": "/rba",
+  "scroll": 0,
+  "why": "RBA outlook charts, crash site"
+ },
+ {
+  "name": "rba-scrolled",
+  "open": "/rba",
+  "scroll": 3,
+  "why": "RBA lower sections and history chart"
+ },
+ {
+  "name": "rba-response",
+  "open": "/rba-response",
+  "scroll": 0,
+  "why": "RBA response"
+ },
+ {
+  "name": "settings",
+  "open": "/settings",
+  "scroll": 0,
+  "why": "settings"
+ },
+ {
+  "name": "about",
+  "open": "/about",
+  "scroll": 0,
+  "why": "about"
+ },
+ {
+  "name": "profile",
+  "open": "/profile",
+  "scroll": 0,
+  "why": "profile"
+ },
+ {
+  "name": "audit-screen",
+  "open": "/performance-audit",
+  "scroll": 0,
+  "why": "audit screen"
+ },
+ {
+  "name": "debug-log",
+  "open": "/debug-log",
+  "scroll": 0,
+  "why": "debug log"
+ },
+ {
+  "name": "catalogue",
+  "open": "/catalogue",
+  "scroll": 0,
+  "why": "catalogue"
+ }
+]
