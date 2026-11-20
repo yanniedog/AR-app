@@ -39,7 +39,7 @@ const METRIC = {
 const RATE_KEYS = ['comparison', 'advertised', 'ongoing', 'rate', 'payable'];
 const RATE_LABELS = Object.keys(METRIC).sort((x, y) => y.length - x.length).join('|');
 const ROW_HEAD = new RegExp(`^(.+?), (.+?), (?=(?:${RATE_LABELS}|Pricing unresolved|Your entered rates|Local reference estimate) )`);
-const ROW_RATE = new RegExp(`(?:^|, )(${RATE_LABELS}) (\\d+(?:\\.\\d+)?)%`, 'g');
+const ROW_RATE = new RegExp(`(?:^|, )(${RATE_LABELS}) (-?\\d+(?:\\.\\d+)?)%`, 'g');
 
 /** Rows rendered on screen: "<product>, <provider>, <rate label> 5.99%, <rate label> 5.94% · ..." in any label order. */
 export function parseRows(nodes) {
@@ -130,7 +130,7 @@ function firstRunMetrics(report, screens) {
 function taskMetrics(report, screens) {
   const bySlug = new Map(screens.map(s => [s.slug, s]));
   const step = re => (report.steps || []).find(s => re.test(s.name || ''));
-  const ok = s => s && !errorScreen((bySlug.get(s.slug) || { nodes: [] }).nodes);
+  const ok = s => s && !s.error && s.alive !== false && !s.anr && !errorScreen((bySlug.get(s.slug) || { nodes: [] }).nodes);
   const ms = s => (ok(s) && Number.isFinite(s.firstContentMs) ? s.firstContentMs : null);
   const tapped = s => (ok(s) && s.tapped ? 1 : null);
   const launch = step(LAUNCH);

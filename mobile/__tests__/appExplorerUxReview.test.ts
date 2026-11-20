@@ -315,4 +315,12 @@ console.log(JSON.stringify({ a: a && [a.width, a.height, a.data.toString('base64
     expect(checks(review({ a: [scrolled] }))).not.toContain('nav-inconsistent');
     expect(checks(review({ a: [tab('Rates', 0), tab('Saved', 240)] }))).toContain('nav-inconsistent');
   });
+
+  it('leaves a task unknown when its step errored or crashed, and range-checks negative rates', () => {
+    const r = review({ 'open-app': [], 'open-product': [], 'open-lenders': [] }, [{}, { name: 'open product', firstContentMs: 400, tapped: 'Row', error: 'not found' }, { name: 'open lender detail', firstContentMs: 300, tapped: 'Row', alive: false }]);
+    expect(r.tasks.find(t => t.task === 'Open a product')).toMatchObject({ taps: null, ms: null });
+    expect(r.tasks.find(t => t.task === 'Open a lender')).toMatchObject({ taps: null, ms: null });
+    const neg = review({ rates: [node({ desc: 'Basic Loan, Bank B, Advertised rate -1.00%', clickable: true, bounds: [0, 300, 720, 500] })] });
+    expect(neg.findings.some(f => f.check === 'accuracy' && /outside/.test(f.detail))).toBe(true);
+  });
 });
