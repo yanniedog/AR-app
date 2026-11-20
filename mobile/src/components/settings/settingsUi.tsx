@@ -223,11 +223,11 @@ export function ToggleRow({
   );
 }
 
-export function InfoRow({ label, value }: { label: UiCopy; value: UiCopy }) {
+export function InfoRow({ label, value, testID }: { label: UiCopy; value: UiCopy; testID?: string }) {
   const { width, fontScale } = useWindowDimensions();
   const stacked = width < 400 || fontScale >= 1.3;
   return (
-    <Row gap={stacked ? 4 : 12} style={{ flexDirection: stacked ? 'column' : 'row',
+    <Row testID={testID} gap={stacked ? 4 : 12} style={{ flexDirection: stacked ? 'column' : 'row',
       alignItems: stacked ? 'stretch' : 'flex-start', paddingVertical: 6, minHeight: 36 }}>
       <AppText variant="small" color="textMuted" style={{ flex: stacked ? undefined : 1, flexShrink: 1, minWidth: 0 }}>
         {label}

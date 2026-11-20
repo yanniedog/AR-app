@@ -6,11 +6,12 @@ adb shell 'while [ "$(getprop sys.boot_completed)" != 1 ]; do sleep 1; done'
 sleep 20
 adb shell wm size 720x1600
 adb shell wm density 320
-adb install -r -g app.apk
-args=(--mode "${MODE:-crawl}" --out explorer-out)
+adb install -r -g "${APK:-app.apk}"
+args=(--mode "${MODE:-crawl}" --out "${OUT:-explorer-out}")
 if [ "${FRESH:-true}" = true ]; then args+=(--fresh); fi
+if [ "${PRIVATE_AUDIT:-false}" = true ]; then args+=(--private-audit); fi
 if [ -f baseline.json ]; then args+=(--baseline baseline.json); fi
-if [ "${MODE:-crawl}" = audit ] || [ "${MODE:-crawl}" = full ]; then args+=(--audit "${AUDIT:-live}" --audit-timeout-min 120); fi
+if [ "${MODE:-crawl}" = audit ] || [ "${MODE:-crawl}" = full ]; then args+=(--audit "${AUDIT:-live}" --audit-timeout-min "${AUDIT_TIMEOUT_MIN:-120}"); fi
 if [ -n "${ROUTES:-}" ]; then args+=(--routes "$ROUTES"); fi
 if [ "${MODE:-crawl}" = script ]; then
   if [ -n "${SCRIPT_JSON:-}" ]; then
@@ -20,7 +21,7 @@ if [ "${MODE:-crawl}" = script ]; then
   fi
   args+=(--script explorer-script.json)
 fi
-if [ "${MODE:-crawl}" = audit ] || [ "${MODE:-crawl}" = full ]; then
+if [ "${PRIVATE_AUDIT:-false}" != true ] && { [ "${MODE:-crawl}" = audit ] || [ "${MODE:-crawl}" = full ]; }; then
   # Targeted screenshots first so a later audit crash cannot lose them.
   node mobile/tools/app-explorer/shots.mjs explorer-out/shots || { mkdir -p explorer-out/shots; echo failed > explorer-out/shots/shots-failed; }
 fi

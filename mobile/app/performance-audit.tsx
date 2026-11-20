@@ -411,19 +411,23 @@ function PerformanceAuditScreenInner() {
     value === 'successful' ? 'Successful' : value === 'failed' ? 'Failed' : value === 'incomplete' ? 'Incomplete' : 'Needs review';
   // One value: the last measured run on this device, or the typical duration before a first run.
   const nextEstimate = uiDurationClock(state.report && state.report.durationMs > 0 ? state.report.durationMs : PERFORMANCE_AUDIT_TYPICAL_DURATION_MS);
+  const rbaRoundTripsCompleted = state.status === 'complete' && report?.sessionId === state.sessionId
+    && (['cold', 'warm'] as const).every(iteration => report.checks.some(check =>
+      check.id === `journey-rba-${iteration}` && check.metrics.actionCompleted === true
+        && check.metrics.backReturnedToAudit === true));
   const controls = <Card style={{ gap: 10 }} collapsable={false} onLayout={() => {
     markAuditEntryScreenPhase('screenLayoutAt');
     setLayoutReady(true);
   }}>
         <AppText variant="h2">{uiLabel('App health audit')}</AppText>
         {!running ? <>
-          <InfoRow label="Last audit" value={completion ? uiJoin(outcomeLabel(completion.outcome), ' · ', uiDate(completion.finishedAt)) : uiLabel(state.report ? 'Loading' : recoveryFailed ? 'Report unavailable' : 'No audit history')} />
+          <InfoRow testID={completion && rbaRoundTripsCompleted ? 'audit-rba-round-trips-complete' : 'audit-last-run'} label="Last audit" value={completion ? uiJoin(outcomeLabel(completion.outcome), ' · ', uiDate(completion.finishedAt)) : uiLabel(state.report ? 'Loading' : recoveryFailed ? 'Report unavailable' : 'No audit history')} />
           <InfoRow label="Estimated time" value={nextEstimate} />
         </> : null}
         <Button title="Local audit" testID="audit-start-local" icon="pulse-outline" loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'} disabled={auditDisabled} onPress={() => void runAudit('local')} />
         <Button title="Live audit" testID="audit-start-live" icon="cloud-download-outline" variant="secondary" loading={(running && state.auditMode === 'live-source') || auditPreflightMode === 'live-source'} disabled={auditDisabled} onPress={() => void runAudit('live-source')} />
         <ToggleRow icon="cloud-upload-outline" label="Public upload" value={running ? state.uploadLog : publicUpload} onChange={setPublicUpload} disabled={auditDisabled} />
-        <InfoRow label={uiLabel(running ? 'Destination' : 'Next destination')} value={uiLabel((running ? state.uploadLog : publicUpload) ? 'Public hosting' : 'Debug log')} />
+        <InfoRow testID={!running && !publicUpload ? 'audit-local-destination' : undefined} label={uiLabel(running ? 'Destination' : 'Next destination')} value={uiLabel((running ? state.uploadLog : publicUpload) ? 'Public hosting' : 'Debug log')} />
         <Disclosure title="Upload details" open={uploadOpen} onToggle={() => setUploadOpen(!uploadOpen)}>
           <InfoRow label={uiLabel(running ? 'Audit upload' : 'Next audit upload')} value={uiLabel(running ? state.uploadLog ? 'Public' : 'Local' : publicUpload ? 'Public' : 'Local')} />
           <InfoRow label="Included" value="Checks / errors / traces / readiness / timing / deidentified log" />
