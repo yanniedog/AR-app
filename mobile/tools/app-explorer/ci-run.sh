@@ -27,5 +27,10 @@ fi
 status=0
 node mobile/tools/app-explorer/driver.mjs "${args[@]}" || status=$?
 # UX rubric review of whatever the run captured, including after a crash.
-node mobile/tools/app-explorer/ux-review.mjs explorer-out || true
+ux_status=0
+node mobile/tools/app-explorer/ux-review.mjs explorer-out || ux_status=$?
+if [ "$ux_status" -ne 0 ]; then
+  echo "ux-review failed with status $ux_status" >&2
+  echo "$ux_status" > explorer-out/ux-review-failed
+fi
 exit "$status"

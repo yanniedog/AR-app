@@ -28,6 +28,7 @@ export const FIXES = {
   'no-return-reason': 'Show what changed since the last visit',
   'no-engagement-hook': 'Add a save control and a Saved destination',
   'accuracy': 'Fix the displayed figure or its sort',
+  'contrast-not-measured': 'Install pngjs in the explorer job',
 };
 
 export const DP = (density = 320) => density / 160;
@@ -113,6 +114,7 @@ function truncation({ screen, app }) {
 function offscreen({ screen, app, size }) {
   const [W, H] = size;
   const out = [];
+  const scrollers = app.filter(n => n.scrollable);
   for (const n of app) {
     if (!(n.text || n.desc || n.clickable)) continue;
     const b = n.bounds;
@@ -121,9 +123,17 @@ function offscreen({ screen, app, size }) {
     const w = b[2] - b[0];
     if ((left + right) / w > 0.1) {
       out.push({ check: 'off-screen', severity: 'major', screen, text: label(n), at: centre(b), detail: `${Math.round(left + right)} px outside the ${W} px width` });
+      continue;
     }
-    // Vertical overflow only matters for fixed chrome; scrolled content legitimately runs past the fold.
-    if (!n.scrollable && b[0] >= 0 && b[1] >= H) continue;
+    // Content inside a scroll container may run past the fold; fixed content may not.
+    // An item that starts or ends inside a scroller belongs to it, even when its own box spills past the scroller.
+    if (n.scrollable || scrollers.some(s => s !== n && b[0] >= s.bounds[0] - 2 && b[2] <= s.bounds[2] + 2 && ((b[1] >= s.bounds[1] - 2 && b[1] < s.bounds[3]) || (b[3] > s.bounds[1] && b[3] <= s.bounds[3] + 2)))) continue;
+    const top = Math.max(0, -b[1]);
+    const bottom = Math.max(0, b[3] - H);
+    const h = b[3] - b[1];
+    if ((top + bottom) / h > 0.1) {
+      out.push({ check: 'off-screen', severity: 'major', screen, text: label(n), at: centre(b), detail: `${Math.round(top + bottom)} px outside the ${H} px height` });
+    }
   }
   return out;
 }
@@ -160,12 +170,11 @@ function collisions({ screen, nodes, app, size }) {
   if (ime.length) {
     const top = Math.min(...ime.map(n => n.bounds[1]));
     const focus = app.find(n => n.cls === 'EditText' && n.bounds[3] > top + LIMITS.keyboardSlackPx);
+    const hidden = app.filter(n => n !== focus && n.clickable && n.enabled && n.bounds[3] > top + LIMITS.keyboardSlackPx && n.bounds[3] <= H);
     if (focus) {
-      out.push({ check: 'keyboard-collision', severity: 'major', screen, text: label(focus), at: centre(focus.bounds), detail: 'input sits under the keyboard' });
-    }
-    const hidden = app.filter(n => n.clickable && n.bounds[1] >= top && n.bounds[3] <= H);
-    if (hidden.length > 2) {
-      out.push({ check: 'keyboard-collision', severity: 'minor', screen, text: label(hidden[0]), at: centre(hidden[0].bounds), detail: `${hidden.length} controls behind the keyboard` });
+      out.push({ check: 'keyboard-collision', severity: 'major', screen, text: label(focus), at: centre(focus.bounds), detail: `input sits under the keyboard${hidden.length ? `, ${hidden.length} more controls hidden` : ''}` });
+    } else if (hidden.length) {
+      out.push({ check: 'keyboard-collision', severity: hidden.length > 2 ? 'major' : 'minor', screen, text: label(hidden[0]), at: centre(hidden[0].bounds), detail: `${hidden.length} control${hidden.length > 1 ? 's' : ''} behind the keyboard` });
     }
   }
   const bars = nodes.filter(n => SYSTEMUI.test(n.pkg) && area(n.bounds) > 0 && (n.bounds[1] === 0 || n.bounds[3] === H));
@@ -208,10 +217,13 @@ function states({ screen, app, settleTimedOut }) {
 function prose({ screen, app, allowProse }) {
   if (allowProse) return [];
   const out = [];
+  const seen = new Set();
   for (const n of app) {
-    const t = (n.text || '').trim();
+    const t = (n.text || n.desc || '').trim();
     const words = t.split(/\s+/).filter(Boolean).length;
+    if (seen.has(t)) continue;
     if (words >= 9 && /[.!?]$/.test(t) && !/\d/.test(t.slice(0, 12))) {
+      seen.add(t);
       out.push({ check: 'prose', severity: 'minor', screen, text: label(n), at: centre(n.bounds), detail: `${words}-word sentence` });
     }
   }
@@ -224,9 +236,9 @@ function jargon({ screen, app, allowProse }) {
   const out = [];
   const seen = new Set();
   for (const n of app) {
-    const t = n.text || '';
+    const t = n.text || n.desc || '';
     const m = JARGON.exec(t);
-    if (!m || t.length > 60 || seen.has(m[2])) continue;
+    if (!m || t.length > 160 || seen.has(m[2])) continue;
     seen.add(m[2]);
     out.push({ check: 'jargon', severity: 'minor', screen, text: label(n), at: centre(n.bounds), detail: `unexpanded ${m[2]}` });
   }
@@ -303,7 +315,11 @@ const lin = v => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.
 const lum = (r, g, b) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
 export const ratio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 
-/** Contrast between the dominant background and the farthest text pixel inside a box. */
+/**
+ * Contrast between the dominant background and the glyph colour inside a box. Glyph pixels are
+ * those that differ visibly from the background; the glyph colour is the strongest quartile of
+ * them, so anti-aliased edges do not dilute it. Null when the box holds no ink.
+ */
 export function boxContrast(png, bounds) {
   const x1 = Math.max(0, bounds[0]);
   const y1 = Math.max(0, bounds[1]);
@@ -312,22 +328,21 @@ export function boxContrast(png, bounds) {
   if (x2 - x1 < 4 || y2 - y1 < 4) return null;
   const hist = new Map();
   const px = [];
-  const step = Math.max(1, Math.floor(Math.sqrt(((x2 - x1) * (y2 - y1)) / 800)));
-  for (let y = y1; y < y2; y += step) {
-    for (let x = x1; x < x2; x += step) {
+  for (let y = y1; y < y2; y++) {
+    for (let x = x1; x < x2; x++) {
       const i = (y * png.width + x) * 4;
       const r = png.data[i], g = png.data[i + 1], b = png.data[i + 2];
       const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
       hist.set(key, (hist.get(key) || 0) + 1);
-      px.push([r, g, b]);
+      px.push(lum(r, g, b));
     }
   }
   let bgKey = 0, best = 0;
   for (const [k, v] of hist) if (v > best) { best = v; bgKey = k; }
   const bg = lum(((bgKey >> 10) & 31) << 3, ((bgKey >> 5) & 31) << 3, (bgKey & 31) << 3);
-  const diffs = px.map(([r, g, b]) => ratio(lum(r, g, b), bg)).sort((a, b) => b - a);
-  const n = Math.max(1, Math.floor(diffs.length * 0.03));
-  return diffs[Math.min(diffs.length - 1, n)];
+  const glyph = px.map(l => ratio(l, bg)).filter(r => r >= 1.25).sort((a, b) => b - a);
+  if (glyph.length < 3) return null;
+  return glyph[Math.floor((glyph.length - 1) * 0.25)];
 }
 
 /** Contrast findings for the text nodes of one screen. `png` is a decoded pngjs image. */
@@ -341,8 +356,7 @@ export function contrastFindings({ screen, nodes, png, pkg, density = 320, limit
     if (r == null) continue;
     const large = (n.bounds[3] - n.bounds[1]) / dp >= 24;
     const need = large ? LIMITS.largeTextContrast : LIMITS.textContrast;
-    // A text box with no glyph pixels at all reads as ratio 1; only judge boxes that have ink.
-    if (r > 1.3 && r < need) {
+    if (r != null && r < need) {
       out.push({ check: 'contrast', fix: FIXES.contrast, severity: r < 3 ? 'major' : 'minor', screen, text: label(n), at: centre(n.bounds), detail: `${r.toFixed(1)}:1, needs ${need}:1` });
     }
   }

@@ -217,6 +217,11 @@ export function summarize(nodes) {
   return items;
 }
 
+/** Raw nodes for the UX review. Editable fields are blanked: the results branch is public. */
+function rawNodes(nodes, size) {
+  return { size, nodes: nodes.map(n => (n.cls === 'EditText' ? { ...n, text: '', desc: '', redacted: true } : n)) };
+}
+
 // ---------- device state ----------
 
 function screenSize() {
@@ -292,7 +297,7 @@ class Explorer {
     if (png && png.length) fs.writeFileSync(path.join(this.out, 'screens', `${slug}.png`), png);
     const screen = summarize(settled.nodes);
     fs.writeFileSync(path.join(this.out, 'ui', `${slug}.json`), JSON.stringify(screen, null, 1));
-    fs.writeFileSync(path.join(this.out, 'ui', `${slug}.nodes.json`), JSON.stringify(settled.nodes));
+    fs.writeFileSync(path.join(this.out, 'ui', `${slug}.nodes.json`), JSON.stringify(rawNodes(settled.nodes, this.size)));
     const log = drainLogcat();
     this.logAll += `\n===== ${slug} =====\n${log}`;
     const pid = appPid();
@@ -409,7 +414,7 @@ class Explorer {
     if (png && png.length) fs.writeFileSync(path.join(this.out, 'screens', `${slug}.png`), png);
     const screen = summarize(nodes);
     fs.writeFileSync(path.join(this.out, 'ui', `${slug}.json`), JSON.stringify(screen, null, 1));
-    fs.writeFileSync(path.join(this.out, 'ui', `${slug}.nodes.json`), JSON.stringify(nodes));
+    fs.writeFileSync(path.join(this.out, 'ui', `${slug}.nodes.json`), JSON.stringify(rawNodes(nodes, this.size)));
     const log = drainLogcat();
     this.logAll += `\n===== ${slug} =====\n${log}`;
     const step = { n: this.steps.length + 1, name, slug, settleMs: 0, alive: Boolean(appPid()), frames: frameStats(), memKb: memoryKb(), log: classifyLog(log), visible: screen.slice(0, 40).map(i => i.label).filter(Boolean), ...extra };

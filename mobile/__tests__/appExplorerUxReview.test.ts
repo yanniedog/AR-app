@@ -11,14 +11,26 @@ const node = (n: N) => ({ text: '', desc: '', id: '', cls: 'View', clickable: fa
 const row = (product: string, bank: string, comparison: number, advertised: number, y: number) =>
   node({ desc: `${product}, ${bank}, Comparison rate ${comparison.toFixed(2)}%, Advertised rate ${advertised.toFixed(2)}% · Variable`, clickable: true, bounds: [0, y, 720, y + 200] });
 
-function review(screens: Record<string, N[]>, steps: Record<string, unknown>[] = []) {
+function review(screens: Record<string, N[]>, steps: Record<string, unknown>[] = [], opts: { sample?: unknown; stale?: boolean; size?: number[]; png?: Record<string, (x: number, y: number) => number[]> } = {}) {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'ux-review-'));
   fs.mkdirSync(path.join(out, 'ui'));
   const names = Object.keys(screens);
   names.forEach((name, i) => {
     const slug = `${String(i + 1).padStart(3, '0')}-${name}`;
-    fs.writeFileSync(path.join(out, 'ui', `${slug}.nodes.json`), JSON.stringify(screens[name].map(node)));
+    fs.writeFileSync(path.join(out, 'ui', `${slug}.nodes.json`), JSON.stringify({ size: opts.size ?? [720, 1600], nodes: screens[name].map(node) }));
+    const paint = opts.png?.[name];
+    if (paint) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { PNG } = require('pngjs');
+      const png = new PNG({ width: 720, height: 1600 });
+      for (let y = 0; y < 1600; y++) for (let x = 0; x < 720; x++) png.data.set([...paint(x, y), 255], (y * 720 + x) * 4);
+      fs.mkdirSync(path.join(out, 'screens'), { recursive: true });
+      fs.writeFileSync(path.join(out, 'screens', `${slug}.png`), PNG.sync.write(png));
+    }
   });
+  // A node file left by an earlier run, with no step in this run's report.
+  if (opts.stale) fs.writeFileSync(path.join(out, 'ui', '099-old.nodes.json'), JSON.stringify([node({ text: 'Old', clickable: true, bounds: [0, 0, 10, 10] })]));
+  if (opts.sample) fs.writeFileSync(path.join(out, 'published-sample.json'), JSON.stringify(opts.sample));
   fs.writeFileSync(path.join(out, 'report.json'), JSON.stringify({
     device: { size: [720, 1600] },
     steps: names.map((name, i) => ({ n: i + 1, name, slug: `${String(i + 1).padStart(3, '0')}-${name}`, settleMs: 100, ...(steps[i] || {}) })),
@@ -27,6 +39,7 @@ function review(screens: Record<string, N[]>, steps: Record<string, unknown>[] =
   return JSON.parse(fs.readFileSync(path.join(out, 'ux-review.json'), 'utf8')) as {
     findings: { check: string; severity: string; detail: string; fix: string; text: string }[];
     rubric: { key: string; score: number }[]; summaryLines: string[]; screens: number;
+    tasks: { task: string; taps: number | null; ms: number | null }[]; firstRun: { firstValueMs: number | null };
   };
 }
 
@@ -77,8 +90,8 @@ describe('app explorer UX review', () => {
   it('flags first-run gates, slow first value and input requests on the first screen', () => {
     const r = review({ 'cold-start': [
       { text: 'Continue', clickable: true, bounds: [100, 1200, 620, 1320] },
-      { text: 'Setup key', cls: 'EditText', bounds: [100, 600, 620, 700] },
-    ] }, [{ settleMs: 17000 }]);
+      { text: 'Enter setup key to continue', bounds: [100, 600, 620, 700] },
+    ] }, [{ settleMs: 17000, firstContentMs: 16000 }]);
     expect(checks(r)).toEqual(expect.arrayContaining(['first-run-gate', 'slow-first-value', 'intimidating-first-run']));
     expect(r.rubric.find(x => x.key === 'onboarding')!.score).toBeLessThan(5);
   });
@@ -87,7 +100,7 @@ describe('app explorer UX review', () => {
     const r = review({ rates: [{ text: 'Data unavailable', bounds: [100, 600, 620, 660] }] });
     const dead = r.findings.find(f => f.check === 'dead-end-state');
     expect(dead?.severity).toBe('major');
-    for (const f of r.findings) expect(f.fix).not.toBe('');
+    for (const f of r.findings) { expect(typeof f.fix).toBe('string'); expect(f.fix.length).toBeGreaterThan(0); }
     expect(r.summaryLines.join('\n')).toMatch(/Frustration and abandonment risk/);
   });
 
@@ -100,5 +113,77 @@ describe('app explorer UX review', () => {
     ] });
     expect(r.findings.filter(f => f.severity === 'major')).toEqual([]);
     expect(r.rubric.find(x => x.key === 'layout')!.score).toBe(5);
+  });
+
+  it('flags fixed content cut off vertically but not scrolled content past the fold', () => {
+    const r = review({ rates: [
+      { text: 'Fixed bar', clickable: true, bounds: [0, 1560, 720, 1700] },
+      { desc: 'list', scrollable: true, bounds: [0, 200, 720, 1500] },
+      { text: 'Row inside', bounds: [20, 1400, 700, 1700] },
+    ] });
+    expect(r.findings.filter(f => f.check === 'off-screen').map(f => f.text)).toEqual(['Fixed bar']);
+  });
+
+  it('checks content descriptions for jargon and prose once, not per parent and child', () => {
+    const r = review({ rates: [
+      { desc: '≤80% LVR', clickable: true, bounds: [0, 300, 300, 400] },
+      { text: '≤80% LVR', bounds: [10, 310, 200, 340] },
+      { desc: 'This screen shows you the best rates that we found for you today.', bounds: [10, 500, 700, 540] },
+    ] });
+    expect(r.findings.filter(f => f.check === 'jargon')).toHaveLength(1);
+    expect(r.findings.filter(f => f.check === 'prose')).toHaveLength(1);
+  });
+
+  it('reads advertised-first rows and flags a missing advertised rate against the published sample', () => {
+    const adv = { desc: 'Basic Loan, Bank B, Advertised rate 6.50%, Comparison rate 6.60% · Variable', clickable: true, bounds: [0, 300, 720, 500] };
+    const r = review({ rates: [adv] }, [], { sample: [{ product: 'Basic Loan', provider: 'Bank B', comparison: 6.6, advertised: null }] });
+    expect(r.findings.some(f => f.check === 'accuracy' && /published 6.6% \/ none%/.test(f.detail))).toBe(true);
+  });
+
+  it('flags the same product shown with different rates', () => {
+    const r = review({ rates: [
+      row('Basic Loan', 'Bank B', 5.9, 5.8, 300),
+      row('Basic Loan', 'Bank B', 6.4, 6.3, 500),
+    ] });
+    expect(r.findings.find(f => f.check === 'accuracy' && /different rates/.test(f.detail))?.severity).toBe('major');
+  });
+
+  it('does not treat the Rates search field as an intimidating first run', () => {
+    const r = review({ 'cold-start': [{ text: '', desc: 'Search', cls: 'EditText', clickable: true, bounds: [20, 380, 700, 460] }] });
+    expect(checks(r)).not.toContain('intimidating-first-run');
+  });
+
+  it('reports one keyboard finding even when a single action is hidden', () => {
+    const r = review({ search: [
+      { text: 'Apply', clickable: true, bounds: [100, 1100, 620, 1220] },
+      { cls: 'Keyboard', pkg: 'com.google.android.inputmethod.latin', bounds: [0, 1000, 720, 1600] },
+    ] });
+    expect(r.findings.filter(f => f.check === 'keyboard-collision')).toHaveLength(1);
+  });
+
+  it('reviews only screens from this run and uses the size saved with each screen', () => {
+    const r = review({ rates: [{ text: 'Wide', clickable: true, bounds: [0, 300, 1500, 420] }] }, [], { stale: true, size: [1600, 720] });
+    expect(r.screens).toBe(1);
+    expect(checks(r)).not.toContain('off-screen');
+  });
+
+  it('prints unknown for first value and task costs the driver did not measure', () => {
+    const unknown = review({ rates: [row('Basic Loan', 'Bank B', 5.9, 5.8, 300)] }, [{ settleMs: 9000 }]);
+    expect(unknown.firstRun.firstValueMs).toBeNull();
+    expect(unknown.tasks.every(t => t.taps === null && t.ms === null)).toBe(true);
+    expect(unknown.summaryLines.join('\n')).toMatch(/First value unknown/);
+    const known = review({ 'open-app': [], 'open-product': [] }, [{ firstContentMs: 2100 }, { name: 'open product', firstContentMs: 400, tapped: 'Row' }]);
+    expect(known.tasks.find(t => t.task === 'Open a product')).toMatchObject({ taps: 1, ms: 400 });
+  });
+
+  it('measures contrast from glyph pixels and says so when it cannot', () => {
+    const faint = (x: number, y: number) => (x > 20 && x < 300 && y > 300 && y < 340 && (x + y) % 3 === 0 ? [200, 200, 200] : [255, 255, 255]);
+    const bold = (x: number, y: number) => (x > 20 && x < 300 && y > 300 && y < 340 && (x + y) % 3 === 0 ? [20, 20, 20] : [255, 255, 255]);
+    const node = { text: 'Rate', bounds: [20, 300, 300, 340] };
+    expect(checks(review({ rates: [node] }, [], { png: { rates: faint } }))).toContain('contrast');
+    expect(checks(review({ rates: [node] }, [], { png: { rates: bold } }))).not.toContain('contrast');
+    const none = review({ rates: [node] });
+    expect(checks(none)).toContain('contrast-not-measured');
+    expect(none.summaryLines.join('\n')).toMatch(/Contrast not measured/);
   });
 });

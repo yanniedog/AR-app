@@ -37,6 +37,7 @@ if (shots.results) {
 
 const ux = json('ux-review.json');
 if (ux.summaryLines) out.push(...ux.summaryLines, '');
+else if (read('ux-review-failed')) out.push(`UX review failed (status ${read('ux-review-failed').trim()}), no rubric for this run`, '');
 
 let decoded = null;
 try {

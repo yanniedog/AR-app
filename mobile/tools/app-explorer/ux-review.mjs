@@ -32,14 +32,19 @@ export const FIRST_VALUE_MINOR_MS = 4000;
 
 const readJson = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
 
-/** Rows rendered on screen: "<product>, <provider>, Comparison rate 5.99%, Advertised rate 5.94% · ..." */
+const METRIC = { 'Comparison rate': 'comparison', 'Advertised rate': 'advertised', 'Ongoing rate': 'ongoing' };
+
+/** Rows rendered on screen: "<product>, <provider>, <Metric> rate 5.99%, <Metric> rate 5.94% · ..." in any metric order. */
 export function parseRows(nodes) {
   const rows = [];
   for (const n of nodes) {
     const d = n.desc || '';
-    const m = /^(.+?), (.+?), Comparison rate (\d+(?:\.\d+)?)%(?:, Advertised rate (\d+(?:\.\d+)?)%)?/.exec(d);
-    if (!m || /^Save, /.test(d)) continue;
-    rows.push({ product: m[1], provider: m[2], comparison: Number(m[3]), advertised: m[4] == null ? null : Number(m[4]), y: n.bounds[1], at: [Math.round((n.bounds[0] + n.bounds[2]) / 2), Math.round((n.bounds[1] + n.bounds[3]) / 2)] });
+    if (/^Save, /.test(d)) continue;
+    const head = /^(.+?), (.+?), (?=(?:Comparison|Advertised|Ongoing) rate \d)/.exec(d);
+    if (!head) continue;
+    const row = { product: head[1], provider: head[2], comparison: null, advertised: null, ongoing: null, tier: (/#(\d+)/.exec(d) || [])[1] || '', y: n.bounds[1], at: [Math.round((n.bounds[0] + n.bounds[2]) / 2), Math.round((n.bounds[1] + n.bounds[3]) / 2)] };
+    for (const m of d.matchAll(/(Comparison|Advertised|Ongoing) rate (\d+(?:\.\d+)?)%/g)) row[METRIC[`${m[1]} rate`]] = Number(m[2]);
+    rows.push(row);
   }
   return rows;
 }
@@ -52,27 +57,38 @@ export function accuracyFindings({ screen, nodes, sample, sortedBy }) {
   const rows = parseRows(nodes);
   const out = [];
   const add = (severity, text, detail, at) => out.push({ check: 'accuracy', severity, screen, text, at: at || [0, 0], detail });
-  const seen = new Map();
+  const same = (a, b) => (a == null) === (b == null) && (a == null || Math.abs(a - b) <= 0.005);
+  const groups = new Map();
   for (const r of rows) {
-    const key = `${r.provider}|${r.product}|${r.comparison}|${r.advertised}`;
-    seen.set(key, (seen.get(key) || 0) + 1);
-    if (r.comparison <= 0 || r.comparison > 25) add('major', `${r.product}, ${r.provider}`, `comparison rate ${r.comparison}% outside 0 to 25`, r.at);
-    if (r.advertised != null && r.comparison + 0.005 < r.advertised) {
-      add('minor', `${r.product}, ${r.provider}`, `comparison ${r.comparison}% is below advertised ${r.advertised}%`, r.at);
+    const name = `${r.product}, ${r.provider}`;
+    const group = groups.get(`${r.provider}|${r.product}|${r.tier}`) || [];
+    group.push(r);
+    groups.set(`${r.provider}|${r.product}|${r.tier}`, group);
+    for (const k of ['comparison', 'advertised', 'ongoing']) {
+      if (r[k] != null && (r[k] <= 0 || r[k] > 25)) add('major', name, `${k} rate ${r[k]}% outside 0 to 25`, r.at);
+    }
+    if (r.comparison != null && r.advertised != null && r.comparison + 0.005 < r.advertised) {
+      add('minor', name, `comparison ${r.comparison}% is below advertised ${r.advertised}%`, r.at);
     }
     if (sample) {
-      const hit = sample.find(s => s.provider === r.provider && s.product === r.product);
-      if (hit && (Math.abs(hit.comparison - r.comparison) > 0.005 || (hit.advertised != null && r.advertised != null && Math.abs(hit.advertised - r.advertised) > 0.005))) {
-        add('major', `${r.product}, ${r.provider}`, `shows ${r.comparison}% / ${r.advertised}% but published ${hit.comparison}% / ${hit.advertised}%`, r.at);
+      const hit = sample.find(x => x.provider === r.provider && x.product === r.product);
+      if (hit && (!same(hit.comparison, r.comparison) || !same(hit.advertised, r.advertised))) {
+        add('major', name, `shows ${r.comparison ?? 'none'}% / ${r.advertised ?? 'none'}% but published ${hit.comparison ?? 'none'}% / ${hit.advertised ?? 'none'}%`, r.at);
       }
     }
   }
-  for (const [k, n] of seen) if (n > 1) add('minor', k.split('|').slice(0, 2).reverse().join(', '), `row shown ${n} times`);
-  if (sortedBy === 'Comparison rate') {
-    const list = [...rows].sort((a, b) => a.y - b.y);
+  for (const list of groups.values()) {
+    if (list.length < 2) continue;
+    const r = list[0];
+    const differ = list.some(x => !same(x.comparison, r.comparison) || !same(x.advertised, r.advertised) || !same(x.ongoing, r.ongoing));
+    add(differ ? 'major' : 'minor', `${r.product}, ${r.provider}`, differ ? `shown ${list.length} times with different rates` : `row shown ${list.length} times`, r.at);
+  }
+  const key = METRIC[sortedBy];
+  if (key) {
+    const list = rows.filter(r => r[key] != null).sort((a, b) => a.y - b.y);
     for (let i = 1; i < list.length; i++) {
-      if (list[i].comparison + 0.005 < list[i - 1].comparison) {
-        add('major', `${list[i].product}, ${list[i].provider}`, `listed below ${list[i - 1].comparison}% but is ${list[i].comparison}% with sort by comparison rate`, list[i].at);
+      if (list[i][key] + 0.005 < list[i - 1][key]) {
+        add('major', `${list[i].product}, ${list[i].provider}`, `listed below ${list[i - 1][key]}% but is ${list[i][key]}% with sort by ${sortedBy.toLowerCase()}`, list[i].at);
         break;
       }
     }
@@ -89,53 +105,57 @@ async function loadPng(file) {
   } catch { return null; }
 }
 
+/** Time from launch to rates first showing, only when the driver measured it. */
 function firstRunMetrics(report, firstNodes) {
   const first = (report.steps || [])[0] || {};
-  const ms = first.firstContentMs != null ? first.firstContentMs : first.settleMs;
-  const gates = (firstNodes || []).filter(n => n.clickable && FIRST_RUN_GATE.test((n.text || n.desc || '').trim())).map(n => (n.text || n.desc).trim());
-  const dialogs = (report.systemDialogs || []).length;
-  return { firstValueMs: Number.isFinite(ms) ? ms : null, gates, systemDialogs: dialogs };
+  const ms = first.firstContentMs;
+  const gates = (firstNodes || []).filter(n => n.pkg === PKG && n.clickable && FIRST_RUN_GATE.test((n.text || n.desc || '').trim())).map(n => (n.text || n.desc).trim());
+  return { firstValueMs: Number.isFinite(ms) ? ms : null, gates };
 }
 
-/** Taps from the first screen to each key task, measured on the control actually on screen. */
-function taskMetrics(report, screens) {
-  const first = screens[0];
-  const has = re => first && first.nodes.some(n => n.clickable && re.test(n.text || n.desc || ''));
-  const rows = first ? parseRows(first.nodes) : [];
-  const session = (report.steps || []).filter(s => s.session);
-  const ms = re => { const s = session.find(x => re.test(x.name)); return s ? (s.firstContentMs != null ? s.firstContentMs : s.settleMs) : null; };
+/** Tap counts and times come from named report steps. Anything the driver did not record is null (unknown). */
+function taskMetrics(report) {
+  const steps = report.steps || [];
+  const step = re => steps.find(s => re.test(s.name || ''));
+  const ms = s => (s && Number.isFinite(s.firstContentMs) ? s.firstContentMs : null);
+  const tapped = s => (s && s.tapped ? 1 : null);
+  const launch = step(/open app|cold start/i);
+  const compare = step(/compare/i);
+  const lenders = step(/lenders/i);
+  const product = step(/open product/i);
   return [
-    { task: 'Find the best rate', taps: rows.length ? 0 : null, ms: report.steps && report.steps[0] ? report.steps[0].settleMs : null },
-    { task: 'Compare', taps: has(/^Compare$/) ? 1 : null, ms: ms(/compare/i) },
-    { task: 'Open a lender', taps: has(/^Lenders$/) ? 1 : null, ms: ms(/lenders/i) },
-    { task: 'Open a product', taps: rows.length ? 1 : null, ms: ms(/open product/i) },
-    { task: 'Save a rate', taps: first && first.nodes.some(n => n.clickable && /^Save, /.test(n.desc || '')) ? 1 : null, ms: null },
+    { task: 'Find the best rate', taps: ms(launch) != null ? 0 : null, ms: ms(launch) },
+    { task: 'Compare', taps: tapped(compare), ms: ms(compare) },
+    { task: 'Open a lender', taps: tapped(lenders), ms: ms(lenders) },
+    { task: 'Open a product', taps: tapped(product), ms: ms(product) },
+    { task: 'Save a rate', taps: null, ms: null },
   ];
 }
 
 export async function reviewRun(dir, { sample } = {}) {
   const report = readJson(path.join(dir, 'report.json'), {});
-  const size = (report.device && report.device.size) || [720, 1600];
+  const defaultSize = (report.device && report.device.size) || [720, 1600];
   const density = 320;
-  const files = fs.existsSync(path.join(dir, 'ui')) ? fs.readdirSync(path.join(dir, 'ui')).filter(f => f.endsWith('.nodes.json')).sort() : [];
-  const stepBySlug = new Map((report.steps || []).map(s => [s.slug, s]));
   const screens = [];
-  for (const f of files) {
-    const slug = f.replace(/\.nodes\.json$/, '');
-    const nodes = readJson(path.join(dir, 'ui', f), []);
-    const step = stepBySlug.get(slug) || {};
-    screens.push({ slug, name: step.name || slug, nodes, step });
+  // Only the screens this run's steps produced; files left by an earlier run are ignored.
+  for (const step of report.steps || []) {
+    if (!step.slug) continue;
+    const saved = readJson(path.join(dir, 'ui', `${step.slug}.nodes.json`), null);
+    if (!saved) continue;
+    const nodes = Array.isArray(saved) ? saved : saved.nodes || [];
+    screens.push({ slug: step.slug, name: step.name || step.slug, nodes, step, size: (!Array.isArray(saved) && saved.size) || defaultSize });
   }
+  let contrastMeasured = 0;
   const findings = [];
   const perScreen = [];
   for (const s of screens) {
     if (/^audit (\d|finished|result)/.test(s.name)) continue; // the audit overlay is a diagnostic, not the product
     const legal = LEGAL.test(s.name) || LEGAL.test(s.step.route || '');
-    const r = checkScreen({ screen: s.name, nodes: s.nodes, size, density, pkg: PKG, settleTimedOut: !!s.step.settleTimedOut, allowProse: legal });
+    const r = checkScreen({ screen: s.name, nodes: s.nodes, size: s.size, density, pkg: PKG, settleTimedOut: !!s.step.settleTimedOut, allowProse: legal });
     const list = [...r.findings];
     const png = await loadPng(path.join(dir, 'screens', `${s.slug}.png`));
-    if (png) list.push(...contrastFindings({ screen: s.name, nodes: s.nodes, png, pkg: PKG, density }));
-    const sortedBy = s.nodes.some(n => /^Sort · Comparison rate/.test(n.text || n.desc || '')) ? 'Comparison rate' : null;
+    if (png) { list.push(...contrastFindings({ screen: s.name, nodes: s.nodes, png, pkg: PKG, density })); contrastMeasured += 1; }
+    const sortedBy = (s.nodes.map(n => /^Sort · ((?:Comparison|Advertised|Ongoing) rate)/.exec(n.text || n.desc || '')).find(Boolean) || [])[1] || null;
     const acc = accuracyFindings({ screen: s.name, nodes: s.nodes, sample, sortedBy });
     list.push(...acc.findings);
     if (s.step.settleMs >= 5000 && !/cold/.test(s.name)) list.push({ check: 'slow', severity: s.step.settleMs >= 10000 ? 'major' : 'minor', screen: s.name, text: '', at: [0, 0], detail: `${(s.step.settleMs / 1000).toFixed(1)} s to settle` });
@@ -145,15 +165,15 @@ export async function reviewRun(dir, { sample } = {}) {
 
   const firstRun = firstRunMetrics(report, screens[0] && screens[0].nodes);
   if (firstRun.firstValueMs != null && firstRun.firstValueMs >= FIRST_VALUE_MINOR_MS) {
-    findings.push({ check: 'slow-first-value', severity: firstRun.firstValueMs >= FIRST_VALUE_MAJOR_MS ? 'major' : 'minor', screen: 'cold start', text: '', at: [0, 0], detail: `${(firstRun.firstValueMs / 1000).toFixed(1)} s from launch to settled rates` });
+    findings.push({ check: 'slow-first-value', severity: firstRun.firstValueMs >= FIRST_VALUE_MAJOR_MS ? 'major' : 'minor', screen: 'cold start', text: '', at: [0, 0], detail: `${(firstRun.firstValueMs / 1000).toFixed(1)} s from launch to rates showing` });
   }
   for (const g of firstRun.gates) findings.push({ check: 'first-run-gate', severity: 'major', screen: 'cold start', text: g, at: [0, 0], detail: 'control must be tapped before reaching rates' });
   const firstNodes = (screens[0] && screens[0].nodes) || [];
-  const scary = firstNodes.find(n => n.pkg === PKG && n.cls === 'EditText') || firstNodes.find(n => n.pkg === PKG && INTIMIDATING.test(n.text || '') && (n.text || '').length < 80);
-  if (scary) findings.push({ check: 'intimidating-first-run', severity: 'major', screen: 'cold start', text: (scary.text || scary.cls).slice(0, 60), at: [0, 0], detail: 'input or permission request on first launch' });
-  if (firstRun.systemDialogs) findings.push({ check: 'intimidating-first-run', severity: 'minor', screen: 'cold start', text: '', at: [0, 0], detail: `${firstRun.systemDialogs} system dialog(s) over the app` });
+  // An ordinary field such as Rates search is not a barrier; a setup or permission request is.
+  const scary = firstNodes.find(n => n.pkg === PKG && INTIMIDATING.test(n.text || n.desc || '') && (n.text || n.desc || '').length < 80);
+  if (scary) findings.push({ check: 'intimidating-first-run', severity: 'major', screen: 'cold start', text: (scary.text || scary.desc).slice(0, 60), at: [0, 0], detail: 'setup or permission request on first launch' });
   // Navigation: the bottom bar should offer the same destinations wherever it appears.
-  const navSets = screens.filter(s => !/^audit /.test(s.name)).map(s => ({ name: s.name, set: s.nodes.filter(n => n.pkg === PKG && n.clickable && n.bounds[1] > size[1] - 220 && (n.text || n.desc)).map(n => (n.text || n.desc).trim()).sort().join('|') })).filter(x => x.set.split('|').length >= 3);
+  const navSets = screens.filter(s => !/^audit /.test(s.name)).map(s => ({ name: s.name, set: s.nodes.filter(n => n.pkg === PKG && n.clickable && n.bounds[1] > s.size[1] - 220 && (n.text || n.desc)).map(n => (n.text || n.desc).trim()).sort().join('|') })).filter(x => x.set.split('|').length >= 3);
   const modal = [...navSets.reduce((m, x) => m.set(x.set, (m.get(x.set) || 0) + 1), new Map())].sort((a, b) => b[1] - a[1])[0];
   if (modal) for (const x of navSets) if (x.set !== modal[0]) findings.push({ check: 'nav-inconsistent', severity: 'minor', screen: x.name, text: '', at: [0, 0], detail: 'bottom navigation differs from the usual set' });
   const everyNode = screens.flatMap(s => s.nodes);
@@ -163,30 +183,32 @@ export async function reviewRun(dir, { sample } = {}) {
   if (screens.length && !everyNode.some(n => RETURN_REASON.test(n.text || '')) && !hooks.alerts) {
     findings.push({ check: 'no-return-reason', severity: 'minor', screen: 'all', text: '', at: [0, 0], detail: 'no change or recency signal and no alerts' });
   }
-  for (const f of findings) if (!f.fix) f.fix = FIXES[f.check] || '';
   const reviewed = perScreen.length;
+  if (reviewed && !contrastMeasured) findings.push({ check: 'contrast-not-measured', severity: 'minor', screen: 'all', text: '', at: [0, 0], detail: 'no screenshot could be read, so contrast was not checked', fix: FIXES['contrast-not-measured'] });
+  for (const f of findings) if (!f.fix) f.fix = FIXES[f.check] || '';
   const rubric = RUBRIC.map(([key, title, checks]) => {
     const mine = findings.filter(f => checks.includes(f.check));
     const weighted = mine.reduce((t, f) => t + WEIGHT[f.severity], 0);
     const top = [...mine].sort((a, b) => WEIGHT[b.severity] - WEIGHT[a.severity]).slice(0, 3).map(f => `${f.severity} ${f.screen}: ${f.check}${f.text ? ` "${f.text}"` : ''} (${f.detail}). Fix: ${f.fix}`);
     return { key, title, score: reviewed ? score(weighted, reviewed) : null, findings: mine.length, top };
   });
-  const tasks = taskMetrics(report, screens);
+  const tasks = taskMetrics(report);
   const counts = {};
   for (const f of findings) counts[f.check] = (counts[f.check] || 0) + 1;
-  const result = { schemaVersion: 1, screens: reviewed, findingsTotal: findings.length, major: findings.filter(f => f.severity === 'major').length, counts, rubric, tasks, firstRun, hooks, perScreen, findings, sampleChecked: !!sample };
+  const result = { schemaVersion: 1, screens: reviewed, findingsTotal: findings.length, major: findings.filter(f => f.severity === 'major').length, counts, rubric, tasks, firstRun, hooks, perScreen, findings, sampleChecked: !!sample, contrastMeasured: contrastMeasured > 0 };
   result.summaryLines = summaryLines(result);
   return result;
 }
 
-const sec = ms => (ms == null ? 'n/a' : `${(ms / 1000).toFixed(1)} s`);
+const sec = ms => (ms == null ? 'unknown' : `${(ms / 1000).toFixed(1)} s`);
 
 /** Outcome first, short enough for the results issue. */
 export function summaryLines(r) {
   if (!r.screens) return ['UX review: no raw screen data in this run'];
   const worst = [...r.rubric].filter(x => x.score != null).sort((a, b) => a.score - b.score).slice(0, 3);
   const lines = [`UX review: ${r.major} major, ${r.findingsTotal - r.major} minor across ${r.screens} screens. Weakest: ${worst.map(w => `${w.title} ${w.score}/5`).join(', ')}.`];
-  lines.push(`First value ${sec(r.firstRun.firstValueMs)}, ${r.firstRun.gates.length} gate taps. Taps: ${r.tasks.map(t => `${t.task.toLowerCase()} ${t.taps == null ? '?' : t.taps}`).join(', ')}.`);
+  if (!r.contrastMeasured) lines.push('Contrast not measured.');
+  lines.push(`First value ${sec(r.firstRun.firstValueMs)}, ${r.firstRun.gates.length} gate taps. Taps: ${r.tasks.map(t => `${t.task.toLowerCase()} ${t.taps == null ? 'unknown' : t.taps}`).join(', ')}.`);
   const line = f => `- ${f.severity} | ${f.screen}: ${f.check}${f.text ? ` "${f.text.slice(0, 50)}"` : ''}, ${f.detail} | Fix: ${f.fix}`;
   for (const f of r.findings.filter(f => f.severity === 'major' && !FRUSTRATION.has(f.check)).slice(0, 4)) lines.push(line(f));
   const fr = r.findings.filter(f => FRUSTRATION.has(f.check));
@@ -206,7 +228,7 @@ export function renderMarkdown(r) {
   const out = ['# UX review', '', ...r.summaryLines, '', '| dimension | score | findings |', '| --- | --- | --- |'];
   for (const d of r.rubric) out.push(`| ${d.title} | ${d.score == null ? 'n/a' : `${d.score}/5`} | ${d.findings} |`);
   out.push('', '## Task cost', '', '| task | taps from first screen | seconds |', '| --- | --- | --- |');
-  for (const t of r.tasks) out.push(`| ${t.task} | ${t.taps == null ? 'not found' : t.taps} | ${sec(t.ms)} |`);
+  for (const t of r.tasks) out.push(`| ${t.task} | ${t.taps == null ? 'unknown' : t.taps} | ${sec(t.ms)} |`);
   out.push('', '## Top findings per dimension', '');
   for (const d of r.rubric.filter(x => x.top.length)) out.push(`**${d.title}**`, ...d.top.map(t => `- ${t}`), '');
   out.push('## Screens', '', '| screen | elements | tappable | findings | major |', '| --- | --- | --- | --- | --- |');
