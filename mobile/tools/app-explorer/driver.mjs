@@ -153,7 +153,7 @@ function bodyOf(nodes) {
 }
 const bodyLabelled = nodes => bodyOf(nodes).filter(n => n.text || n.desc).length;
 /** Real content, not chrome: several labelled items, or many nodes when it is mostly graphic. */
-const contentful = nodes => { const body = bodyOf(nodes); return body.filter(n => n.text || n.desc).length >= 6 || body.length >= 14; };
+const contentful = nodes => { const body = bodyOf(nodes); return !errorStateOf(nodes) && (body.filter(n => n.text || n.desc).length >= 6 || body.length >= 14); };
 const isBlank = nodes => nodes.length > 0 && bodyLabelled(nodes) < 2 && bodyOf(nodes).length < 5;
 
 const ERROR_TEXT = /\b(failed|couldn.t|could not|unable to|something went wrong|unavailable|no results|nothing (saved|here|to show)|no saved|no data|error)\b/i;
@@ -305,6 +305,11 @@ export function summarize(nodes) {
   return items;
 }
 
+/** Raw nodes for the UX review. Editable fields are blanked: the results branch is public. */
+function rawNodes(nodes, size) {
+  return { size, nodes: nodes.map(n => (n.cls === 'EditText' ? { ...n, text: '', desc: '', redacted: true } : n)) };
+}
+
 // ---------- device state ----------
 
 function screenSize() {
@@ -381,6 +386,7 @@ class Explorer {
     if (png && png.length) fs.writeFileSync(path.join(this.out, 'screens', `${slug}.png`), png);
     const screen = summarize(settled.nodes);
     fs.writeFileSync(path.join(this.out, 'ui', `${slug}.json`), JSON.stringify(screen, null, 1));
+    fs.writeFileSync(path.join(this.out, 'ui', `${slug}.nodes.json`), JSON.stringify(rawNodes(settled.nodes, this.size)));
     const log = drainLogcat();
     this.logAll += `\n===== ${slug} =====\n${log}`;
     const pid = appPid();
@@ -508,6 +514,7 @@ class Explorer {
     if (png && png.length) fs.writeFileSync(path.join(this.out, 'screens', `${slug}.png`), png);
     const screen = summarize(nodes);
     fs.writeFileSync(path.join(this.out, 'ui', `${slug}.json`), JSON.stringify(screen, null, 1));
+    fs.writeFileSync(path.join(this.out, 'ui', `${slug}.nodes.json`), JSON.stringify(rawNodes(nodes, this.size)));
     const log = drainLogcat();
     this.logAll += `\n===== ${slug} =====\n${log}`;
     const step = { n: this.steps.length + 1, name, slug, settleMs: 0, alive: Boolean(appPid()), frames: frameStats(), memKb: memoryKb(), log: classifyLog(log), visible: screen.slice(0, 40).map(i => i.label).filter(Boolean), ...extra };
