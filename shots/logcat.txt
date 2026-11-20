@@ -1,0 +1,936 @@
+
+===== 001-cold-start =====
+11-20 14:11:20.544 W/australianrates( 4732): Known variants: atom, sandybridge, silvermont, goldmont, goldmont-plus, tremont, kabylake, default
+11-20 14:11:20.544 W/australianrates( 4732): Unexpected CPU variant for x86: x86_64.
+11-20 14:11:20.623 E/australianrates( 4732): Not starting debugger since process cannot load the jdwp agent.
+11-20 14:11:21.330 W/SoLoader( 4732): Initializing SoLoader: 0
+11-20 14:11:21.330 W/SoLoader( 4732): Previously recorded 0 base apk paths.
+11-20 14:11:21.330 W/SoLoader( 4732): Recording new base apk path: /data/app/~~RMawxfMNabs8CZAHFhzkww==/com.eyex.australianrates-jq82hVz5oXOVuo4-4p2NXg==/base.apk
+11-20 14:11:21.337 W/SoLoader( 4732): SoLoader initialized: 8
+11-20 14:11:21.524 W/unknown:BridgelessReact( 4732): ReactHost{0}.startSurface(surfaceId = 0): Schedule
+11-20 14:11:21.528 W/unknown:BridgelessReact( 4732): ReactHost{0}.attachSurface(surfaceId = 0)
+11-20 14:11:21.528 W/unknown:BridgelessReact( 4732): ReactHost{0}.getOrCreateReactInstanceTask()
+11-20 14:11:21.529 W/unknown:BridgelessReact( 4732): ReactHost{0}.getJSBundleLoader()
+11-20 14:11:21.529 W/unknown:BridgelessReact( 4732): ReactHost{0}.getOrCreateReactContext(): Creating BridgelessReactContext
+11-20 14:11:21.529 W/unknown:BridgelessReact( 4732): ReactHost{0}.getOrCreateReactInstanceTask(): Creating ReactInstance
+11-20 14:11:21.529 W/unknown:BridgelessReact( 4732): ReactHost{0}.getOrCreateReactInstanceTask(): Start
+11-20 14:11:21.562 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:11:21.562 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:11:21.589 W/OpenGLRenderer( 4732): Unknown dataspace 0
+11-20 14:11:21.774 W/OpenGLRenderer( 4732): Failed to initialize 101010-2 format, error = EGL_SUCCESS
+11-20 14:11:21.917 W/unknown:BridgelessReact( 4732): ReactHost{0}.getOrCreateReactInstanceTask(): Loading JS Bundle
+11-20 14:11:21.965 W/unknown:BridgelessReact( 4732): ReactHost{0}.getOrCreateReactInstanceTask(): Calling DevSupportManagerBase.onNewReactContextCreated(reactContext)
+11-20 14:11:21.970 W/unknown:BridgelessReact( 4732): ReactHost{0}.startSurface(surfaceId = 0): Execute
+11-20 14:11:21.975 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:11:21.975 W/unknown:BridgelessReact( 4732): ReactHost{0}.getOrCreateReactInstanceTask(): Executing ReactInstanceEventListeners
+11-20 14:11:21.977 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaProviderManager
+11-20 14:11:21.981 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.uimanager.U
+11-20 14:11:21.982 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.swmansion.rnscreens.SearchBarManager
+11-20 14:11:21.983 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.swmansion.rnscreens.ScreenFooterManager
+11-20 14:11:21.983 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.TabScreenViewManager
+11-20 14:11:21.984 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.swmansion.rnscreens.ScreenContainerViewManager
+11-20 14:11:21.984 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.TabsHostViewManager
+11-20 14:11:21.985 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.swmansion.rnscreens.ModalScreenViewManager
+11-20 14:11:21.985 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderConfigViewManager
+11-20 14:11:21.986 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.swmansion.rnscreens.ScreenContentWrapperManager
+11-20 14:11:21.986 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaViewManager
+11-20 14:11:21.986 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class expo.modules.kotlin.views.GroupViewManagerWrapper
+11-20 14:11:21.993 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.swmansion.rnscreens.ScreenViewManager
+11-20 14:11:21.993 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.th3rdwave.safeareacontext.p
+11-20 14:11:21.994 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderSubviewManager
+11-20 14:11:21.997 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.swmansion.rnscreens.ScreenStackViewManager
+11-20 14:11:22.024 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$DefsViewManager
+11-20 14:11:22.026 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.VirtualViewManager$c
+11-20 14:11:22.029 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeMergeManager
+11-20 14:11:22.032 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewManager
+11-20 14:11:22.037 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.safeareaview.c
+11-20 14:11:22.042 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LinearGradientManager
+11-20 14:11:22.043 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeGaussianBlurManager
+11-20 14:11:22.052 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.progressbar.ReactProgressBarViewManager
+11-20 14:11:22.053 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.progressbar.b
+11-20 14:11:22.059 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollViewManager
+11-20 14:11:22.067 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.text.ReactTextViewManager
+11-20 14:11:22.068 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.text.k
+11-20 14:11:22.069 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeColorMatrixManager
+11-20 14:11:22.073 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollContainerViewManager
+11-20 14:11:22.074 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ClipPathViewManager
+11-20 14:11:22.077 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$SymbolManager
+11-20 14:11:22.088 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PatternManager
+11-20 14:11:22.090 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeBlendManager
+11-20 14:11:22.094 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.view.ReactViewManager
+11-20 14:11:22.098 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.SvgViewManager
+11-20 14:11:22.099 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchManager
+11-20 14:11:22.100 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.switchview.d
+11-20 14:11:22.102 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$UseViewManager
+11-20 14:11:22.104 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$CircleViewManager
+11-20 14:11:22.105 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TSpanViewManager
+11-20 14:11:22.112 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FilterManager
+11-20 14:11:22.113 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MarkerManager
+11-20 14:11:22.114 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerButtonViewManager
+11-20 14:11:22.118 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.modal.ReactModalHostManager
+11-20 14:11:22.119 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ForeignObjectManager
+11-20 14:11:22.123 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$EllipseViewManager
+11-20 14:11:22.125 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LineViewManager
+11-20 14:11:22.127 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.text.frescosupport.FrescoBasedReactTextInlineImageViewManager
+11-20 14:11:22.127 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.text.frescosupport.a
+11-20 14:11:22.131 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeFloodManager
+11-20 14:11:22.134 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$GroupViewManager
+11-20 14:11:22.136 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextViewManager
+11-20 14:11:22.141 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ImageViewManager
+11-20 14:11:22.150 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeCompositeManager
+11-20 14:11:22.152 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.image.ReactImageManager
+11-20 14:11:22.153 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RadialGradientManager
+11-20 14:11:22.159 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MaskManager
+11-20 14:11:22.164 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.unimplementedview.ReactUnimplementedViewManager
+11-20 14:11:22.165 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RectViewManager
+11-20 14:11:22.166 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextPathViewManager
+11-20 14:11:22.173 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.scroll.ReactScrollViewManager
+11-20 14:11:22.224 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeOffsetManager
+11-20 14:11:22.225 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PathViewManager
+11-20 14:11:22.227 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.drawer.ReactDrawerLayoutManager
+11-20 14:11:22.231 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.text.ReactVirtualTextViewManager
+11-20 14:11:22.232 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.text.t
+11-20 14:11:22.236 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.swiperefresh.SwipeRefreshLayoutManager
+11-20 14:11:22.237 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.text.ReactRawTextManager
+11-20 14:11:22.241 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.text.f
+11-20 14:11:22.242 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputManager
+11-20 14:11:22.243 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.views.textinput.F
+11-20 14:11:22.245 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerRootViewManager
+11-20 14:11:22.265 W/b       ( 4732): [WARNING] Bridgeless doesn't support CatalystInstance. Accessing an API that's not part of the new architecture is not encouraged usage.
+11-20 14:11:22.540 I/ReactNativeJS( 4732): Running "main"
+11-20 14:11:23.198 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:11:23.198 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:11:23.198 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:11:23.198 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:11:23.198 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:11:23.198 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:11:23.199 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:11:23.218 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:11:23.218 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:11:23.218 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:11:23.218 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:11:23.218 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:11:23.218 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:11:23.218 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:11:23.241 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:23.242 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:23.312 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:23.454 W/ReactNativeJS( 4732): `new NativeEventEmitter()` was called with a non-null argument without the required `addListener` method.
+11-20 14:11:23.454 W/ReactNativeJS( 4732): `new NativeEventEmitter()` was called with a non-null argument without the required `removeListeners` method.
+11-20 14:11:23.946 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:24.166 W/ziparchive( 4732): Unable to open '/data/app/~~hiLnX8MWhVgDjZj6VZCfqw==/com.google.android.trichromelibrary_567263637-VG2AzaygxeQ0YH3BXlr81Q==/TrichromeLibrary.dm': No such file or directory
+11-20 14:11:24.167 W/australianrates( 4732): Entry not found
+11-20 14:11:24.167 W/ziparchive( 4732): Unable to open '/data/app/~~hiLnX8MWhVgDjZj6VZCfqw==/com.google.android.trichromelibrary_567263637-VG2AzaygxeQ0YH3BXlr81Q==/TrichromeLibrary.dm': No such file or directory
+11-20 14:11:24.204 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:25.631 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:11:25.840 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=708 reason=asset HTTP 502 file=manifest.json
+11-20 14:11:27.021 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/dates-index.json?%E2%80%A6 ctx=download
+11-20 14:11:27.022 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=669 reason=asset HTTP 502 file=dates-index.json
+11-20 14:11:27.746 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/dates-index.json?%E2%80%A6 ctx=download
+11-20 14:11:27.747 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=3/3 delay_ms=1420 reason=asset HTTP 502 file=dates-index.json
+11-20 14:11:29.225 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/dates-index.json?%E2%80%A6 ctx=download
+11-20 14:11:29.226 E/ReactNativeJS( 4732): [AR error] store: refresh failed: cannot verify ingest finalisation for 2026-11-20; try again shortly
+11-20 14:11:29.226 W/ReactNativeJS( 4732): [AR warn] ingest: dates-index unavailable: asset HTTP 502
+11-20 14:11:29.228 E/unknown:ReactNative( 4732): ?anon_0_@1:2015967
+11-20 14:11:29.228 E/unknown:ReactNative( 4732): SyntheticError@1:162884
+11-20 14:11:29.228 E/unknown:ReactNative( 4732): Wrapper@1:163399
+11-20 14:11:29.228 E/unknown:ReactNative( 4732): _callSuper@1:148272
+11-20 14:11:29.228 E/unknown:ReactNative( 4732): _construct@1:163747
+11-20 14:11:29.228 E/unknown:ReactNative( 4732): _next@1:594741
+11-20 14:11:29.228 E/unknown:ReactNative( 4732): append@1:1094871
+11-20 14:11:29.228 E/unknown:ReactNative( 4732): asyncGeneratorStep@1:594483
+11-20 14:11:29.228 E/unknown:ReactNative( 4732): console.error: [AR error] store: refresh failed: cannot verify ingest finalisation for 2026-11-20; try again shortly, stack:
+11-20 14:11:29.228 E/unknown:ReactNative( 4732): error@1:1112901
+11-20 14:11:29.228 E/unknown:ReactNative( 4732): mirrorToConsole@1:1094629
+11-20 14:11:29.228 E/unknown:ReactNative( 4732): reactConsoleErrorHandler@1:162449
+11-20 14:11:29.417 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:29.422 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:30.235 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:30.694 W/System  ( 4732): A resource failed to call release. 
+11-20 14:11:31.448 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:31.608 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:32.039 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/dates-index.json?%E2%80%A6 ctx=download
+11-20 14:11:32.043 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=608 reason=asset HTTP 502 file=dates-index.json
+11-20 14:11:32.710 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/dates-index.json?%E2%80%A6 ctx=download
+11-20 14:11:32.711 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=3/3 delay_ms=1407 reason=asset HTTP 502 file=dates-index.json
+11-20 14:11:34.175 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/dates-index.json?%E2%80%A6 ctx=download
+11-20 14:11:34.175 W/ReactNativeJS( 4732): [AR warn] ingest: dates-index unavailable: asset HTTP 502
+11-20 14:11:34.176 E/ReactNativeJS( 4732): [AR error] store: refresh failed: cannot verify ingest finalisation for 2026-11-20; try again shortly
+11-20 14:11:34.177 E/unknown:ReactNative( 4732): ?anon_0_@1:2015967
+11-20 14:11:34.177 E/unknown:ReactNative( 4732): SyntheticError@1:162884
+11-20 14:11:34.177 E/unknown:ReactNative( 4732): Wrapper@1:163399
+11-20 14:11:34.177 E/unknown:ReactNative( 4732): _callSuper@1:148272
+11-20 14:11:34.177 E/unknown:ReactNative( 4732): _construct@1:163747
+11-20 14:11:34.177 E/unknown:ReactNative( 4732): _next@1:594741
+11-20 14:11:34.177 E/unknown:ReactNative( 4732): append@1:1094871
+11-20 14:11:34.177 E/unknown:ReactNative( 4732): asyncGeneratorStep@1:594483
+11-20 14:11:34.177 E/unknown:ReactNative( 4732): console.error: [AR error] store: refresh failed: cannot verify ingest finalisation for 2026-11-20; try again shortly, stack:
+11-20 14:11:34.177 E/unknown:ReactNative( 4732): error@1:1112901
+11-20 14:11:34.177 E/unknown:ReactNative( 4732): mirrorToConsole@1:1094629
+11-20 14:11:34.177 E/unknown:ReactNative( 4732): reactConsoleErrorHandler@1:162449
+11-20 14:11:34.218 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:34.219 W/ReactNativeJS( 4732): [AR warn] degrade: retry.failure action=retryDataLoad detail="cannot verify ingest finalisation for 2026-11-20; try again shortly"
+11-20 14:11:34.264 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:36.633 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:11:36.633 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:11:36.660 W/WindowOnBackDispatcher( 4732): sendCancelIfRunning: isInProgress=falsecallback=android.view.ViewRootImpl$$ExternalSyntheticLambda17@7ce18ff
+11-20 14:11:36.747 W/unknown:BridgelessReact( 4732): ReactHost{0}.attachSurface(surfaceId = 0)
+11-20 14:11:36.747 W/unknown:BridgelessReact( 4732): ReactHost{0}.getOrCreateReactInstanceTask()
+11-20 14:11:36.747 W/unknown:BridgelessReact( 4732): ReactHost{0}.startSurface(surfaceId = 0): Execute
+11-20 14:11:36.747 W/unknown:BridgelessReact( 4732): ReactHost{0}.startSurface(surfaceId = 0): Schedule
+11-20 14:11:36.748 I/ReactNativeJS( 4732): Running "main"
+11-20 14:11:36.761 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:11:36.761 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:11:36.817 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:36.864 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:36.982 W/unknown:BridgelessReact( 4732): ReactHost{0}.stopSurface(surfaceId = 1): Schedule
+11-20 14:11:36.983 E/unknown:SurfaceMountingManager( 4732): Stopping surface [1]
+11-20 14:11:36.983 W/unknown:BridgelessReact( 4732): ReactHost{0}.detachSurface(surfaceId = 1)
+11-20 14:11:36.983 W/unknown:BridgelessReact( 4732): ReactHost{0}.stopSurface(surfaceId = 1): Execute
+11-20 14:11:36.986 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:36.995 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostDestroy(activity)
+11-20 14:11:36.996 W/unknown:ViewManagerPropertyUpdater( 4732): Could not find generated setter for class com.facebook.react.uimanager.RootViewManager
+11-20 14:11:36.997 E/unknown:IntBufferBatchMountItem( 4732): Skipping batch of MountItems; was stopped [1].
+11-20 14:11:37.030 E/unknown:SurfaceMountingManager( 4732): Surface [1] was stopped on SurfaceMountingManager.
+11-20 14:11:37.214 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:11:37.214 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:11:37.214 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:11:37.214 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:11:37.214 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:11:37.214 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:11:37.214 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:11:37.216 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:11:37.216 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:11:37.216 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:11:37.216 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:11:37.216 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:11:37.216 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:11:37.216 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:11:37.318 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:37.319 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/dates-index.json?%E2%80%A6 ctx=download
+11-20 14:11:37.319 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=664 reason=asset HTTP 502 file=dates-index.json
+11-20 14:11:37.591 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:37.938 W/ReactNativeJS( 4732): [AR warn] degrade: store.refreshSkipped reason=already_refreshing
+11-20 14:11:37.984 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:38.159 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/dates-index.json?%E2%80%A6 ctx=download
+11-20 14:11:38.159 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=3/3 delay_ms=1469 reason=asset HTTP 502 file=dates-index.json
+11-20 14:11:39.675 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/dates-index.json?%E2%80%A6 ctx=download
+11-20 14:11:39.676 W/ReactNativeJS( 4732): [AR warn] ingest: dates-index unavailable: asset HTTP 502
+11-20 14:11:39.677 E/ReactNativeJS( 4732): [AR error] store: refresh failed: cannot verify ingest finalisation for 2026-11-20; try again shortly
+11-20 14:11:39.678 E/unknown:ReactNative( 4732): ?anon_0_@1:2015967
+11-20 14:11:39.678 E/unknown:ReactNative( 4732): SyntheticError@1:162884
+11-20 14:11:39.678 E/unknown:ReactNative( 4732): Wrapper@1:163399
+11-20 14:11:39.678 E/unknown:ReactNative( 4732): _callSuper@1:148272
+11-20 14:11:39.678 E/unknown:ReactNative( 4732): _construct@1:163747
+11-20 14:11:39.678 E/unknown:ReactNative( 4732): _next@1:594741
+11-20 14:11:39.678 E/unknown:ReactNative( 4732): append@1:1094871
+11-20 14:11:39.678 E/unknown:ReactNative( 4732): asyncGeneratorStep@1:594483
+11-20 14:11:39.678 E/unknown:ReactNative( 4732): console.error: [AR error] store: refresh failed: cannot verify ingest finalisation for 2026-11-20; try again shortly, stack:
+11-20 14:11:39.678 E/unknown:ReactNative( 4732): error@1:1112901
+11-20 14:11:39.678 E/unknown:ReactNative( 4732): mirrorToConsole@1:1094629
+11-20 14:11:39.678 E/unknown:ReactNative( 4732): reactConsoleErrorHandler@1:162449
+11-20 14:11:39.755 W/ReactNativeJS( 4732): [AR warn] degrade: retry.failure action=retryDataLoad detail="cannot verify ingest finalisation for 2026-11-20; try again shortly"
+11-20 14:11:39.755 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:40.039 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:40.040 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:45.065 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:45.174 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:45.389 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/dates-index.json?%E2%80%A6 ctx=download
+11-20 14:11:45.390 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=615 reason=asset HTTP 502 file=dates-index.json
+11-20 14:11:46.042 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/dates-index.json?%E2%80%A6 ctx=download
+11-20 14:11:46.042 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=3/3 delay_ms=1385 reason=asset HTTP 502 file=dates-index.json
+11-20 14:11:47.493 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/dates-index.json?%E2%80%A6 ctx=download
+11-20 14:11:47.493 W/ReactNativeJS( 4732): [AR warn] ingest: dates-index unavailable: asset HTTP 502
+11-20 14:11:47.494 E/ReactNativeJS( 4732): [AR error] store: refresh failed: cannot verify ingest finalisation for 2026-11-20; try again shortly
+11-20 14:11:47.495 E/unknown:ReactNative( 4732): ?anon_0_@1:2015967
+11-20 14:11:47.495 E/unknown:ReactNative( 4732): SyntheticError@1:162884
+11-20 14:11:47.495 E/unknown:ReactNative( 4732): Wrapper@1:163399
+11-20 14:11:47.495 E/unknown:ReactNative( 4732): _callSuper@1:148272
+11-20 14:11:47.495 E/unknown:ReactNative( 4732): _construct@1:163747
+11-20 14:11:47.495 E/unknown:ReactNative( 4732): _next@1:594741
+11-20 14:11:47.495 E/unknown:ReactNative( 4732): append@1:1094871
+11-20 14:11:47.495 E/unknown:ReactNative( 4732): asyncGeneratorStep@1:594483
+11-20 14:11:47.495 E/unknown:ReactNative( 4732): console.error: [AR error] store: refresh failed: cannot verify ingest finalisation for 2026-11-20; try again shortly, stack:
+11-20 14:11:47.495 E/unknown:ReactNative( 4732): error@1:1112901
+11-20 14:11:47.495 E/unknown:ReactNative( 4732): mirrorToConsole@1:1094629
+11-20 14:11:47.495 E/unknown:ReactNative( 4732): reactConsoleErrorHandler@1:162449
+11-20 14:11:47.540 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:47.541 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:47.542 W/ReactNativeJS( 4732): [AR warn] degrade: retry.failure action=retryDataLoad detail="cannot verify ingest finalisation for 2026-11-20; try again shortly"
+11-20 14:11:47.901 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:47.902 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:11:48.031 W/australianrates( 4732): Cleared Reference was only reachable from finalizer (only reported once)
+11-20 14:12:02.940 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:12:02.941 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:12:03.048 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:12:03.049 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:12:03.073 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:12:03.074 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=670 reason=asset HTTP 502 file=manifest.json
+11-20 14:12:03.919 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:12:03.920 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=3/3 delay_ms=874 reason=asset HTTP 502 file=manifest.json
+11-20 14:12:04.936 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:12:04.940 E/ReactNativeJS( 4732): [AR error] store: refresh failed: asset HTTP 502
+11-20 14:12:05.073 E/unknown:ReactNative( 4732): ?anon_0_@1:2015967
+11-20 14:12:05.073 E/unknown:ReactNative( 4732): SyntheticError@1:162884
+11-20 14:12:05.073 E/unknown:ReactNative( 4732): Wrapper@1:163399
+11-20 14:12:05.073 E/unknown:ReactNative( 4732): _callSuper@1:148272
+11-20 14:12:05.073 E/unknown:ReactNative( 4732): _construct@1:163747
+11-20 14:12:05.073 E/unknown:ReactNative( 4732): _throw@1:594788
+11-20 14:12:05.073 E/unknown:ReactNative( 4732): append@1:1094871
+11-20 14:12:05.073 E/unknown:ReactNative( 4732): asyncGeneratorStep@1:594483
+11-20 14:12:05.073 E/unknown:ReactNative( 4732): console.error: [AR error] store: refresh failed: asset HTTP 502, stack:
+11-20 14:12:05.073 E/unknown:ReactNative( 4732): error@1:1112901
+11-20 14:12:05.073 E/unknown:ReactNative( 4732): mirrorToConsole@1:1094629
+11-20 14:12:05.073 E/unknown:ReactNative( 4732): reactConsoleErrorHandler@1:162449
+11-20 14:12:05.214 W/ReactNativeJS( 4732): [AR warn] degrade: retry.failure action=retryDataLoad detail="asset HTTP 502"
+11-20 14:12:05.215 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:12:05.268 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:12:35.314 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:12:35.315 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:12:35.427 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:12:35.437 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:12:35.438 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=577 reason=asset HTTP 502 file=manifest.json
+11-20 14:12:36.091 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:12:36.091 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=3/3 delay_ms=1233 reason=asset HTTP 502 file=manifest.json
+11-20 14:12:37.387 E/ReactNativeJS( 4732): [AR error] store: refresh failed: asset HTTP 502
+11-20 14:12:37.387 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:12:37.388 E/unknown:ReactNative( 4732): ?anon_0_@1:2015967
+11-20 14:12:37.388 E/unknown:ReactNative( 4732): SyntheticError@1:162884
+11-20 14:12:37.388 E/unknown:ReactNative( 4732): Wrapper@1:163399
+11-20 14:12:37.388 E/unknown:ReactNative( 4732): _callSuper@1:148272
+11-20 14:12:37.388 E/unknown:ReactNative( 4732): _construct@1:163747
+11-20 14:12:37.388 E/unknown:ReactNative( 4732): _throw@1:594788
+11-20 14:12:37.388 E/unknown:ReactNative( 4732): append@1:1094871
+11-20 14:12:37.388 E/unknown:ReactNative( 4732): asyncGeneratorStep@1:594483
+11-20 14:12:37.388 E/unknown:ReactNative( 4732): console.error: [AR error] store: refresh failed: asset HTTP 502, stack:
+11-20 14:12:37.388 E/unknown:ReactNative( 4732): error@1:1112901
+11-20 14:12:37.388 E/unknown:ReactNative( 4732): mirrorToConsole@1:1094629
+11-20 14:12:37.388 E/unknown:ReactNative( 4732): reactConsoleErrorHandler@1:162449
+11-20 14:12:37.532 W/ReactNativeJS( 4732): [AR warn] degrade: retry.failure action=retryDataLoad detail="asset HTTP 502"
+11-20 14:12:37.535 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:12:37.576 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:13:37.635 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:13:37.754 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:13:37.819 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:13:37.819 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=481 reason=asset HTTP 502 file=manifest.json
+11-20 14:13:38.391 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:13:38.403 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=3/3 delay_ms=1148 reason=asset HTTP 502 file=manifest.json
+11-20 14:13:39.620 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:13:39.622 E/ReactNativeJS( 4732): [AR error] store: refresh failed: asset HTTP 502
+11-20 14:13:39.624 E/unknown:ReactNative( 4732): ?anon_0_@1:2015967
+11-20 14:13:39.624 E/unknown:ReactNative( 4732): SyntheticError@1:162884
+11-20 14:13:39.624 E/unknown:ReactNative( 4732): Wrapper@1:163399
+11-20 14:13:39.624 E/unknown:ReactNative( 4732): _callSuper@1:148272
+11-20 14:13:39.624 E/unknown:ReactNative( 4732): _construct@1:163747
+11-20 14:13:39.624 E/unknown:ReactNative( 4732): _throw@1:594788
+11-20 14:13:39.624 E/unknown:ReactNative( 4732): append@1:1094871
+11-20 14:13:39.624 E/unknown:ReactNative( 4732): asyncGeneratorStep@1:594483
+11-20 14:13:39.624 E/unknown:ReactNative( 4732): console.error: [AR error] store: refresh failed: asset HTTP 502, stack:
+11-20 14:13:39.624 E/unknown:ReactNative( 4732): error@1:1112901
+11-20 14:13:39.624 E/unknown:ReactNative( 4732): mirrorToConsole@1:1094629
+11-20 14:13:39.624 E/unknown:ReactNative( 4732): reactConsoleErrorHandler@1:162449
+11-20 14:13:39.729 W/ReactNativeJS( 4732): [AR warn] degrade: retry.failure action=retryDataLoad detail="asset HTTP 502"
+11-20 14:13:39.735 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:13:39.736 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:13:39.830 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:13:39.831 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:14:39.859 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:14:39.860 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:14:39.920 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:14:39.993 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:14:39.993 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=596 reason=asset HTTP 502 file=manifest.json
+11-20 14:14:40.668 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:14:40.669 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=3/3 delay_ms=1148 reason=asset HTTP 502 file=manifest.json
+11-20 14:14:41.892 E/ReactNativeJS( 4732): [AR error] store: refresh failed: asset HTTP 502
+11-20 14:14:41.892 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:14:41.904 E/unknown:ReactNative( 4732): ?anon_0_@1:2015967
+11-20 14:14:41.904 E/unknown:ReactNative( 4732): SyntheticError@1:162884
+11-20 14:14:41.904 E/unknown:ReactNative( 4732): Wrapper@1:163399
+11-20 14:14:41.904 E/unknown:ReactNative( 4732): _callSuper@1:148272
+11-20 14:14:41.904 E/unknown:ReactNative( 4732): _construct@1:163747
+11-20 14:14:41.904 E/unknown:ReactNative( 4732): _throw@1:594788
+11-20 14:14:41.904 E/unknown:ReactNative( 4732): append@1:1094871
+11-20 14:14:41.904 E/unknown:ReactNative( 4732): asyncGeneratorStep@1:594483
+11-20 14:14:41.904 E/unknown:ReactNative( 4732): console.error: [AR error] store: refresh failed: asset HTTP 502, stack:
+11-20 14:14:41.904 E/unknown:ReactNative( 4732): error@1:1112901
+11-20 14:14:41.904 E/unknown:ReactNative( 4732): mirrorToConsole@1:1094629
+11-20 14:14:41.904 E/unknown:ReactNative( 4732): reactConsoleErrorHandler@1:162449
+11-20 14:14:42.013 W/ReactNativeJS( 4732): [AR warn] degrade: retry.failure action=retryDataLoad detail="asset HTTP 502"
+11-20 14:14:42.014 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:14:42.049 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:14:42.050 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 002-browse-open =====
+11-20 14:15:32.005 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:15:32.005 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:15:32.008 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:15:32.008 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:15:32.073 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:15:32.095 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:15:32.096 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:15:32.131 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:15:32.236 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:15:32.236 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=578 reason=asset HTTP 502 file=manifest.json
+11-20 14:15:32.407 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:15:32.408 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:15:32.907 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:15:32.907 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=3/3 delay_ms=980 reason=asset HTTP 502 file=manifest.json
+11-20 14:15:33.968 E/ReactNativeJS( 4732): [AR error] store: refresh failed: asset HTTP 502
+11-20 14:15:33.968 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:15:33.970 E/unknown:ReactNative( 4732): ?anon_0_@1:2015967
+11-20 14:15:33.970 E/unknown:ReactNative( 4732): SyntheticError@1:162884
+11-20 14:15:33.970 E/unknown:ReactNative( 4732): Wrapper@1:163399
+11-20 14:15:33.970 E/unknown:ReactNative( 4732): _callSuper@1:148272
+11-20 14:15:33.970 E/unknown:ReactNative( 4732): _construct@1:163747
+11-20 14:15:33.970 E/unknown:ReactNative( 4732): _throw@1:594788
+11-20 14:15:33.970 E/unknown:ReactNative( 4732): append@1:1094871
+11-20 14:15:33.970 E/unknown:ReactNative( 4732): asyncGeneratorStep@1:594483
+11-20 14:15:33.970 E/unknown:ReactNative( 4732): console.error: [AR error] store: refresh failed: asset HTTP 502, stack:
+11-20 14:15:33.970 E/unknown:ReactNative( 4732): error@1:1112901
+11-20 14:15:33.970 E/unknown:ReactNative( 4732): mirrorToConsole@1:1094629
+11-20 14:15:33.970 E/unknown:ReactNative( 4732): reactConsoleErrorHandler@1:162449
+11-20 14:15:34.048 W/ReactNativeJS( 4732): [AR warn] degrade: retry.failure action=retryDataLoad detail="asset HTTP 502"
+11-20 14:15:34.050 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:15:34.119 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 003-browse =====
+11-20 14:16:34.147 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:16:34.148 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:16:34.183 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:16:34.184 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:16:34.266 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:16:34.268 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=309 reason=asset HTTP 502 file=manifest.json
+11-20 14:16:34.657 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:16:34.657 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=3/3 delay_ms=1002 reason=asset HTTP 502 file=manifest.json
+11-20 14:16:35.750 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:16:35.751 E/ReactNativeJS( 4732): [AR error] store: refresh failed: asset HTTP 502
+11-20 14:16:35.763 E/unknown:ReactNative( 4732): ?anon_0_@1:2015967
+11-20 14:16:35.763 E/unknown:ReactNative( 4732): SyntheticError@1:162884
+11-20 14:16:35.763 E/unknown:ReactNative( 4732): Wrapper@1:163399
+11-20 14:16:35.763 E/unknown:ReactNative( 4732): _callSuper@1:148272
+11-20 14:16:35.763 E/unknown:ReactNative( 4732): _construct@1:163747
+11-20 14:16:35.763 E/unknown:ReactNative( 4732): _throw@1:594788
+11-20 14:16:35.763 E/unknown:ReactNative( 4732): append@1:1094871
+11-20 14:16:35.763 E/unknown:ReactNative( 4732): asyncGeneratorStep@1:594483
+11-20 14:16:35.763 E/unknown:ReactNative( 4732): console.error: [AR error] store: refresh failed: asset HTTP 502, stack:
+11-20 14:16:35.763 E/unknown:ReactNative( 4732): error@1:1112901
+11-20 14:16:35.763 E/unknown:ReactNative( 4732): mirrorToConsole@1:1094629
+11-20 14:16:35.763 E/unknown:ReactNative( 4732): reactConsoleErrorHandler@1:162449
+11-20 14:16:35.857 W/ReactNativeJS( 4732): [AR warn] degrade: retry.failure action=retryDataLoad detail="asset HTTP 502"
+11-20 14:16:35.860 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:16:35.888 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 004-watchlist-open =====
+11-20 14:17:11.423 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:17:11.423 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:17:11.427 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:17:11.427 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:17:11.596 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:17:11.597 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:17:11.662 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:17:11.844 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:17:11.957 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:17:11.957 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=653 reason=asset HTTP 502 file=manifest.json
+11-20 14:17:12.110 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:17:12.713 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:17:12.714 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=3/3 delay_ms=758 reason=asset HTTP 502 file=manifest.json
+11-20 14:17:13.556 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:17:13.558 E/ReactNativeJS( 4732): [AR error] store: refresh failed: asset HTTP 502
+11-20 14:17:13.562 E/unknown:ReactNative( 4732): ?anon_0_@1:2015967
+11-20 14:17:13.562 E/unknown:ReactNative( 4732): SyntheticError@1:162884
+11-20 14:17:13.562 E/unknown:ReactNative( 4732): Wrapper@1:163399
+11-20 14:17:13.562 E/unknown:ReactNative( 4732): _callSuper@1:148272
+11-20 14:17:13.562 E/unknown:ReactNative( 4732): _construct@1:163747
+11-20 14:17:13.562 E/unknown:ReactNative( 4732): _throw@1:594788
+11-20 14:17:13.562 E/unknown:ReactNative( 4732): append@1:1094871
+11-20 14:17:13.562 E/unknown:ReactNative( 4732): asyncGeneratorStep@1:594483
+11-20 14:17:13.562 E/unknown:ReactNative( 4732): console.error: [AR error] store: refresh failed: asset HTTP 502, stack:
+11-20 14:17:13.562 E/unknown:ReactNative( 4732): error@1:1112901
+11-20 14:17:13.562 E/unknown:ReactNative( 4732): mirrorToConsole@1:1094629
+11-20 14:17:13.562 E/unknown:ReactNative( 4732): reactConsoleErrorHandler@1:162449
+11-20 14:17:13.655 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:17:13.659 W/ReactNativeJS( 4732): [AR warn] degrade: retry.failure action=retryDataLoad detail="asset HTTP 502"
+11-20 14:17:13.732 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:17:13.733 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 005-watchlist =====
+11-20 14:18:13.760 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:18:13.761 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:18:13.840 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:18:13.858 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:18:13.859 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=433 reason=asset HTTP 502 file=manifest.json
+11-20 14:18:14.403 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:18:14.404 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=3/3 delay_ms=1243 reason=asset HTTP 502 file=manifest.json
+11-20 14:18:15.719 E/ReactNativeJS( 4732): [AR error] store: refresh failed: asset HTTP 502
+11-20 14:18:15.719 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:18:15.721 E/unknown:ReactNative( 4732): ?anon_0_@1:2015967
+11-20 14:18:15.721 E/unknown:ReactNative( 4732): SyntheticError@1:162884
+11-20 14:18:15.721 E/unknown:ReactNative( 4732): Wrapper@1:163399
+11-20 14:18:15.721 E/unknown:ReactNative( 4732): _callSuper@1:148272
+11-20 14:18:15.721 E/unknown:ReactNative( 4732): _construct@1:163747
+11-20 14:18:15.721 E/unknown:ReactNative( 4732): _throw@1:594788
+11-20 14:18:15.721 E/unknown:ReactNative( 4732): append@1:1094871
+11-20 14:18:15.721 E/unknown:ReactNative( 4732): asyncGeneratorStep@1:594483
+11-20 14:18:15.721 E/unknown:ReactNative( 4732): console.error: [AR error] store: refresh failed: asset HTTP 502, stack:
+11-20 14:18:15.721 E/unknown:ReactNative( 4732): error@1:1112901
+11-20 14:18:15.721 E/unknown:ReactNative( 4732): mirrorToConsole@1:1094629
+11-20 14:18:15.721 E/unknown:ReactNative( 4732): reactConsoleErrorHandler@1:162449
+11-20 14:18:15.754 W/ReactNativeJS( 4732): [AR warn] degrade: retry.failure action=retryDataLoad detail="asset HTTP 502"
+11-20 14:18:15.755 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:18:15.788 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 006-market-open =====
+11-20 14:19:05.539 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:19:05.539 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:19:05.544 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:19:05.544 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:19:05.670 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:19:05.671 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:19:05.728 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:19:05.893 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:19:05.894 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:19:05.915 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:19:05.917 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=585 reason=asset HTTP 502 file=manifest.json
+11-20 14:19:06.160 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:19:06.586 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:19:06.586 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=3/3 delay_ms=1223 reason=asset HTTP 502 file=manifest.json
+11-20 14:19:07.884 E/ReactNativeJS( 4732): [AR error] store: refresh failed: asset HTTP 502
+11-20 14:19:07.884 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:19:07.886 E/unknown:ReactNative( 4732): ?anon_0_@1:2015967
+11-20 14:19:07.886 E/unknown:ReactNative( 4732): SyntheticError@1:162884
+11-20 14:19:07.886 E/unknown:ReactNative( 4732): Wrapper@1:163399
+11-20 14:19:07.886 E/unknown:ReactNative( 4732): _callSuper@1:148272
+11-20 14:19:07.886 E/unknown:ReactNative( 4732): _construct@1:163747
+11-20 14:19:07.886 E/unknown:ReactNative( 4732): _throw@1:594788
+11-20 14:19:07.886 E/unknown:ReactNative( 4732): append@1:1094871
+11-20 14:19:07.886 E/unknown:ReactNative( 4732): asyncGeneratorStep@1:594483
+11-20 14:19:07.886 E/unknown:ReactNative( 4732): console.error: [AR error] store: refresh failed: asset HTTP 502, stack:
+11-20 14:19:07.886 E/unknown:ReactNative( 4732): error@1:1112901
+11-20 14:19:07.886 E/unknown:ReactNative( 4732): mirrorToConsole@1:1094629
+11-20 14:19:07.886 E/unknown:ReactNative( 4732): reactConsoleErrorHandler@1:162449
+11-20 14:19:08.003 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:19:08.004 W/ReactNativeJS( 4732): [AR warn] degrade: retry.failure action=retryDataLoad detail="asset HTTP 502"
+11-20 14:19:08.037 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 007-market =====
+11-20 14:20:08.075 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:20:08.198 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:20:08.199 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:20:08.251 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:20:08.251 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=445 reason=asset HTTP 502 file=manifest.json
+11-20 14:20:08.817 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:20:08.818 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=3/3 delay_ms=957 reason=asset HTTP 502 file=manifest.json
+11-20 14:20:09.858 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:20:09.860 E/ReactNativeJS( 4732): [AR error] store: refresh failed: asset HTTP 502
+11-20 14:20:09.864 E/unknown:ReactNative( 4732): ?anon_0_@1:2015967
+11-20 14:20:09.864 E/unknown:ReactNative( 4732): SyntheticError@1:162884
+11-20 14:20:09.864 E/unknown:ReactNative( 4732): Wrapper@1:163399
+11-20 14:20:09.864 E/unknown:ReactNative( 4732): _callSuper@1:148272
+11-20 14:20:09.864 E/unknown:ReactNative( 4732): _construct@1:163747
+11-20 14:20:09.864 E/unknown:ReactNative( 4732): _throw@1:594788
+11-20 14:20:09.864 E/unknown:ReactNative( 4732): append@1:1094871
+11-20 14:20:09.864 E/unknown:ReactNative( 4732): asyncGeneratorStep@1:594483
+11-20 14:20:09.864 E/unknown:ReactNative( 4732): console.error: [AR error] store: refresh failed: asset HTTP 502, stack:
+11-20 14:20:09.864 E/unknown:ReactNative( 4732): error@1:1112901
+11-20 14:20:09.864 E/unknown:ReactNative( 4732): mirrorToConsole@1:1094629
+11-20 14:20:09.864 E/unknown:ReactNative( 4732): reactConsoleErrorHandler@1:162449
+11-20 14:20:09.922 W/ReactNativeJS( 4732): [AR warn] degrade: retry.failure action=retryDataLoad detail="asset HTTP 502"
+11-20 14:20:09.922 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:20:10.080 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 008-tools-open =====
+11-20 14:20:47.559 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:20:47.559 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:20:47.565 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:20:47.565 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:20:47.650 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:20:47.651 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:20:47.763 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:20:47.767 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:20:47.767 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:20:47.767 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:20:47.767 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:20:47.767 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:20:47.767 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:20:47.977 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:20:48.133 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:20:48.389 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:20:48.390 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=462 reason=asset HTTP 502 file=manifest.json
+11-20 14:20:48.543 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:20:48.981 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:20:48.981 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=3/3 delay_ms=1072 reason=asset HTTP 502 file=manifest.json
+11-20 14:20:50.185 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:20:50.186 E/ReactNativeJS( 4732): [AR error] store: refresh failed: asset HTTP 502
+11-20 14:20:50.189 E/unknown:ReactNative( 4732): ?anon_0_@1:2015967
+11-20 14:20:50.189 E/unknown:ReactNative( 4732): SyntheticError@1:162884
+11-20 14:20:50.189 E/unknown:ReactNative( 4732): Wrapper@1:163399
+11-20 14:20:50.189 E/unknown:ReactNative( 4732): _callSuper@1:148272
+11-20 14:20:50.189 E/unknown:ReactNative( 4732): _construct@1:163747
+11-20 14:20:50.189 E/unknown:ReactNative( 4732): _throw@1:594788
+11-20 14:20:50.189 E/unknown:ReactNative( 4732): append@1:1094871
+11-20 14:20:50.189 E/unknown:ReactNative( 4732): asyncGeneratorStep@1:594483
+11-20 14:20:50.189 E/unknown:ReactNative( 4732): console.error: [AR error] store: refresh failed: asset HTTP 502, stack:
+11-20 14:20:50.189 E/unknown:ReactNative( 4732): error@1:1112901
+11-20 14:20:50.189 E/unknown:ReactNative( 4732): mirrorToConsole@1:1094629
+11-20 14:20:50.189 E/unknown:ReactNative( 4732): reactConsoleErrorHandler@1:162449
+11-20 14:20:50.308 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:20:50.315 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:20:50.316 W/ReactNativeJS( 4732): [AR warn] degrade: retry.failure action=retryDataLoad detail="asset HTTP 502"
+11-20 14:20:50.362 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 009-tools =====
+11-20 14:21:50.418 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:21:50.473 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:21:50.474 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:21:50.582 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:21:50.583 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=597 reason=asset HTTP 502 file=manifest.json
+11-20 14:21:51.295 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:21:51.295 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=3/3 delay_ms=605 reason=asset HTTP 502 file=manifest.json
+11-20 14:21:51.978 E/ReactNativeJS( 4732): [AR error] store: refresh failed: asset HTTP 502
+11-20 14:21:51.978 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:21:51.980 E/unknown:ReactNative( 4732): ?anon_0_@1:2015967
+11-20 14:21:51.980 E/unknown:ReactNative( 4732): SyntheticError@1:162884
+11-20 14:21:51.980 E/unknown:ReactNative( 4732): Wrapper@1:163399
+11-20 14:21:51.980 E/unknown:ReactNative( 4732): _callSuper@1:148272
+11-20 14:21:51.980 E/unknown:ReactNative( 4732): _construct@1:163747
+11-20 14:21:51.980 E/unknown:ReactNative( 4732): _throw@1:594788
+11-20 14:21:51.980 E/unknown:ReactNative( 4732): append@1:1094871
+11-20 14:21:51.980 E/unknown:ReactNative( 4732): asyncGeneratorStep@1:594483
+11-20 14:21:51.980 E/unknown:ReactNative( 4732): console.error: [AR error] store: refresh failed: asset HTTP 502, stack:
+11-20 14:21:51.980 E/unknown:ReactNative( 4732): error@1:1112901
+11-20 14:21:51.980 E/unknown:ReactNative( 4732): mirrorToConsole@1:1094629
+11-20 14:21:51.980 E/unknown:ReactNative( 4732): reactConsoleErrorHandler@1:162449
+11-20 14:21:52.036 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:21:52.037 W/ReactNativeJS( 4732): [AR warn] degrade: retry.failure action=retryDataLoad detail="asset HTTP 502"
+11-20 14:21:52.088 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 010-trends-open =====
+11-20 14:22:29.581 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:22:29.581 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:22:29.586 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:22:29.586 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:22:29.626 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:22:29.626 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:22:29.626 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:22:29.626 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:22:29.626 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:22:29.626 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:22:29.626 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:22:30.141 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:22:30.145 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:22:30.145 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:22:30.145 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:22:30.145 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:22:30.145 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:22:30.146 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:22:30.146 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:22:30.308 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:22:30.384 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:22:30.597 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:22:30.597 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=323 reason=asset HTTP 502 file=manifest.json
+11-20 14:22:30.778 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:22:31.036 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:22:31.036 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=3/3 delay_ms=1133 reason=asset HTTP 502 file=manifest.json
+11-20 14:22:32.250 E/ReactNativeJS( 4732): [AR error] store: refresh failed: asset HTTP 502
+11-20 14:22:32.250 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:22:32.251 E/unknown:ReactNative( 4732): ?anon_0_@1:2015967
+11-20 14:22:32.251 E/unknown:ReactNative( 4732): SyntheticError@1:162884
+11-20 14:22:32.251 E/unknown:ReactNative( 4732): Wrapper@1:163399
+11-20 14:22:32.251 E/unknown:ReactNative( 4732): _callSuper@1:148272
+11-20 14:22:32.251 E/unknown:ReactNative( 4732): _construct@1:163747
+11-20 14:22:32.251 E/unknown:ReactNative( 4732): _throw@1:594788
+11-20 14:22:32.251 E/unknown:ReactNative( 4732): append@1:1094871
+11-20 14:22:32.251 E/unknown:ReactNative( 4732): asyncGeneratorStep@1:594483
+11-20 14:22:32.251 E/unknown:ReactNative( 4732): console.error: [AR error] store: refresh failed: asset HTTP 502, stack:
+11-20 14:22:32.251 E/unknown:ReactNative( 4732): error@1:1112901
+11-20 14:22:32.251 E/unknown:ReactNative( 4732): mirrorToConsole@1:1094629
+11-20 14:22:32.251 E/unknown:ReactNative( 4732): reactConsoleErrorHandler@1:162449
+11-20 14:22:32.278 W/ReactNativeJS( 4732): [AR warn] degrade: retry.failure action=retryDataLoad detail="asset HTTP 502"
+11-20 14:22:32.281 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:22:32.312 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 011-trends =====
+11-20 14:23:32.344 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:23:32.401 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:23:32.491 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:23:32.492 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=2/3 delay_ms=288 reason=asset HTTP 502 file=manifest.json
+11-20 14:23:32.897 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:23:32.898 W/ReactNativeJS( 4732): [AR warn] payload: retry attempt=3/3 delay_ms=1057 reason=asset HTTP 502 file=manifest.json
+11-20 14:23:34.060 E/ReactNativeJS( 4732): [AR error] store: refresh failed: asset HTTP 502
+11-20 14:23:34.060 W/ReactNativeJS( 4732): [AR warn] degrade: fetch.httpError status=502 url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json?%E2%80%A6 ctx=manifest
+11-20 14:23:34.064 E/unknown:ReactNative( 4732): ?anon_0_@1:2015967
+11-20 14:23:34.064 E/unknown:ReactNative( 4732): SyntheticError@1:162884
+11-20 14:23:34.064 E/unknown:ReactNative( 4732): Wrapper@1:163399
+11-20 14:23:34.064 E/unknown:ReactNative( 4732): _callSuper@1:148272
+11-20 14:23:34.064 E/unknown:ReactNative( 4732): _construct@1:163747
+11-20 14:23:34.064 E/unknown:ReactNative( 4732): _throw@1:594788
+11-20 14:23:34.064 E/unknown:ReactNative( 4732): append@1:1094871
+11-20 14:23:34.064 E/unknown:ReactNative( 4732): asyncGeneratorStep@1:594483
+11-20 14:23:34.064 E/unknown:ReactNative( 4732): console.error: [AR error] store: refresh failed: asset HTTP 502, stack:
+11-20 14:23:34.064 E/unknown:ReactNative( 4732): error@1:1112901
+11-20 14:23:34.064 E/unknown:ReactNative( 4732): mirrorToConsole@1:1094629
+11-20 14:23:34.064 E/unknown:ReactNative( 4732): reactConsoleErrorHandler@1:162449
+11-20 14:23:34.189 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:23:34.190 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:23:34.191 W/ReactNativeJS( 4732): [AR warn] degrade: retry.failure action=retryDataLoad detail="asset HTTP 502"
+11-20 14:23:34.223 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 012-search-open =====
+11-20 14:24:10.681 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:24:10.681 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:24:10.683 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:24:10.683 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:24:10.726 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:24:10.728 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:24:10.728 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:24:10.729 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:24:10.729 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:24:10.729 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:24:10.729 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:24:10.918 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:24:11.889 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:24:11.983 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:24:11.984 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:24:12.410 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:24:14.794 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:24:15.563 W/System  ( 4732): A resource failed to call close. 
+11-20 14:24:27.646 W/ReactNativeJS( 4732): [AR warn] store: ensureHistoryBanks compact asset failed: Call to function 'ArHistoryCodec.inflatePayloadAsync' has been rejected.\n→ Caused by: java.lang.IllegalArgumentException: History exceeds safe native heap budget
+11-20 14:24:28.001 W/ReactNativeJS( 4732): [AR warn] degrade: store.ensureFailed fn=ensureBankInsights error="Call to function 'ArHistoryCodec.inflatePayloadAsync' has been rejected.\n→ Caused by: java.lang.IllegalArgumentException: History exceeds safe native heap budget"
+11-20 14:24:28.001 W/ReactNativeJS( 4732): [AR warn] store: ensureBankInsights failed: Call to function 'ArHistoryCodec.inflatePayloadAsync' has been rejected.\n→ Caused by: java.lang.IllegalArgumentException: History exceeds safe native heap budget
+11-20 14:24:28.262 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:24:28.263 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 013-search =====
+11-20 14:24:32.634 W/System  ( 4732): A resource failed to call close. 
+11-20 14:24:32.635 W/System  ( 4732): A resource failed to call close. 
+11-20 14:24:35.710 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@1e47d94
+11-20 14:24:35.716 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@104c03d
+11-20 14:24:35.865 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@7fc8c93
+11-20 14:24:35.881 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@b06fb0b
+11-20 14:24:36.104 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@97de2d4
+11-20 14:24:36.263 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@ffd1632
+11-20 14:24:36.295 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@831df83
+11-20 14:24:36.313 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@1a84500
+===== 014-bank-rates-open =====
+11-20 14:24:43.508 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:24:43.508 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:24:43.510 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:24:43.510 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:24:43.579 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:24:43.579 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:24:43.579 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:24:43.579 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:24:43.579 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:24:43.579 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:24:43.579 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:24:43.792 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 015-bank-rates =====
+
+===== 016-compare-open =====
+11-20 14:24:59.598 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:24:59.598 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:24:59.605 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:24:59.605 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:24:59.676 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:24:59.676 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:24:59.676 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:24:59.676 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:24:59.676 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:24:59.676 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:24:59.676 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:24:59.911 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:24:59.912 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 017-compare =====
+
+===== 018-calculator-open =====
+11-20 14:25:14.770 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:25:14.770 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:25:14.780 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:25:14.781 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:25:14.883 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:25:14.883 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:25:14.883 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:25:14.883 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:25:14.883 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:25:14.883 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:25:14.883 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:25:15.012 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:25:15.907 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 019-calculator =====
+
+===== 020-projections-open =====
+11-20 14:25:30.729 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:25:30.729 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:25:30.731 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:25:30.731 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:25:30.776 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:25:30.777 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:25:30.777 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:25:30.777 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:25:30.777 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:25:30.777 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:25:30.777 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:25:31.353 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:25:31.361 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:25:31.361 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:25:31.361 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:25:31.361 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:25:31.361 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:25:31.361 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:25:31.361 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+===== 021-projections =====
+
+===== 022-research-open =====
+11-20 14:25:46.365 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:25:46.365 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:25:46.370 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:25:46.370 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:25:46.447 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:25:46.456 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:25:46.456 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:25:46.457 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:25:46.457 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:25:46.457 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:25:46.457 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:25:46.509 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:25:52.096 W/System  ( 4732): A resource failed to call close. 
+11-20 14:25:52.097 W/System  ( 4732): A resource failed to call close. 
+===== 023-research =====
+
+===== 024-rba-open =====
+11-20 14:26:02.755 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:26:02.755 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:26:02.766 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:26:02.766 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:26:02.865 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:26:02.865 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:26:02.866 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:26:02.866 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:26:02.866 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:26:02.866 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:26:02.866 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:26:03.122 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:26:03.123 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 025-rba =====
+
+===== 026-rba-scrolled-open =====
+11-20 14:26:18.744 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:26:18.744 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:26:18.749 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:26:18.749 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:26:18.806 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:26:18.807 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:26:19.133 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:26:19.134 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 027-rba-scrolled =====
+
+===== 028-rba-response-open =====
+11-20 14:26:35.520 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:26:35.520 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:26:35.524 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:26:35.524 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:26:35.578 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:26:35.578 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:26:35.578 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:26:35.579 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:26:35.579 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:26:35.579 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:26:35.579 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:26:35.640 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:26:36.413 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@1a742d8
+11-20 14:26:36.464 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@c11c01
+11-20 14:26:36.477 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@87cb9f2
+11-20 14:26:36.481 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@ef1843
+11-20 14:26:36.495 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@603eec0
+11-20 14:26:36.497 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@aeb57f9
+===== 029-rba-response =====
+11-20 14:26:43.619 W/System  ( 4732): A resource failed to call close. 
+===== 030-settings-open =====
+11-20 14:26:51.517 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:26:51.518 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:26:51.537 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:26:51.537 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:26:51.646 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:26:51.647 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:26:51.647 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:26:51.647 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:26:51.647 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:26:51.648 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:26:51.648 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:26:51.988 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 031-settings =====
+
+===== 032-about-open =====
+11-20 14:27:06.997 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:27:06.997 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:27:07.005 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:27:07.005 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:27:07.143 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:27:07.143 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:27:07.143 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:27:07.143 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:27:07.143 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:27:07.144 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:27:07.144 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:27:07.420 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:27:07.421 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 033-about =====
+
+===== 034-profile-open =====
+11-20 14:27:22.283 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:27:22.283 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:27:22.290 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:27:22.290 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:27:22.361 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:27:22.361 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:27:22.361 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:27:22.361 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:27:22.361 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:27:22.361 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:27:22.361 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:27:22.565 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:27:23.430 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 035-profile =====
+
+===== 036-terms-open =====
+11-20 14:27:38.164 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:27:38.164 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:27:38.169 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:27:38.169 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:27:38.245 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:27:38.245 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:27:38.245 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:27:38.245 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:27:38.245 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:27:38.245 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:27:38.245 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:27:38.429 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 037-terms =====
+
+===== 038-third-party-open =====
+11-20 14:27:53.201 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:27:53.201 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:27:53.207 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:27:53.207 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:27:53.297 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:27:53.297 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:27:53.297 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:27:53.297 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:27:53.297 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:27:53.298 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:27:53.298 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:27:53.593 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:27:53.594 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 039-third-party =====
+
+===== 040-catalogue-open =====
+11-20 14:28:08.377 W/unknown:BridgelessReact( 4732): ReactContext.onHostPause()
+11-20 14:28:08.377 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostPause(activity)
+11-20 14:28:08.386 W/unknown:BridgelessReact( 4732): ReactContext.onHostResume()
+11-20 14:28:08.386 W/unknown:BridgelessReact( 4732): ReactHost{0}.onHostResume(activity)
+11-20 14:28:08.442 W/[RNScreens]( 4732): backTitle prop is not available on Android
+11-20 14:28:08.442 W/[RNScreens]( 4732): backTitleFontFamily prop is not available on Android
+11-20 14:28:08.442 W/[RNScreens]( 4732): backTitleVisible prop is not available on Android
+11-20 14:28:08.442 W/[RNScreens]( 4732): disableBackButtonMenu prop is not available on Android
+11-20 14:28:08.442 W/[RNScreens]( 4732): largeTitleFontFamily prop is not available on Android
+11-20 14:28:08.442 W/[RNScreens]( 4732): largeTitleFontWeight prop is not available on Android
+11-20 14:28:08.442 W/[RNScreens]( 4732): largeTitleHideShadow prop is not available on Android
+11-20 14:28:08.513 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:28:08.518 W/unknown:ReactNative( 4732): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-20 14:28:09.359 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@e5e98a3
+11-20 14:28:09.387 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@4248f9d
+11-20 14:28:09.407 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@5b94d64
+11-20 14:28:09.409 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@91d4383
+11-20 14:28:09.502 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@8f1e420
+11-20 14:28:09.505 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@81aab05
+11-20 14:28:09.507 W/unknown:WrappingUtils( 4732): Don't know how to round that drawable: com.facebook.react.views.image.g$b@5bb9198
+===== 041-catalogue =====
+11-20 14:28:16.777 W/System  ( 4732): A resource failed to call close. 

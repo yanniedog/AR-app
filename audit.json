@@ -1,0 +1,34 @@
+{
+  "kind": "live",
+  "url": "https://paste.rs/ezbI3",
+  "outcome": null,
+  "elapsedMs": 1069550,
+  "visibleOutcome": [
+    "Navigate up",
+    "App health audit",
+    "Account",
+    "Verified upload",
+    "Verified upload",
+    "Uploaded",
+    "https://paste.rs/ezbI3",
+    "https://paste.c-net.org/7b98c78a-d2ac-d951-369b-d71b4499f6d0",
+    "Copy paste.rs link",
+    "Copy paste.rs link",
+    "Copy paste.c-net.org link",
+    "Copy paste.c-net.org link",
+    "Audit history",
+    "Retained runs",
+    "1 / 120",
+    "Live checks",
+    "Live checks",
+    "Performance",
+    "Performance",
+    "UX & fluidity"
+  ],
+  "logStatus": 200,
+  "logContentUrl": "https://paste.c-net.org/7b98c78a-d2ac-d951-369b-d71b4499f6d0",
+  "logBytes": 862390,
+  "debugLog": {
+    "error": "Upload and copy link not found"
+  }
+}
