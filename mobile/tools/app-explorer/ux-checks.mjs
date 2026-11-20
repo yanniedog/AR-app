@@ -369,7 +369,7 @@ export const ratio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
 /**
  * Contrast between the dominant background and the glyph colour inside a box. Glyph pixels are
  * those that differ visibly from the background; the glyph colour is the strongest quartile of
- * them, so anti-aliased edges do not dilute it. Null when the box holds no ink.
+ * them, so anti-aliased edges do not dilute it. When nothing differs visibly the strongest pixel difference is returned.
  */
 export function boxContrast(png, bounds) {
   const x1 = Math.max(0, bounds[0]);
@@ -391,8 +391,10 @@ export function boxContrast(png, bounds) {
   let bgKey = 0, best = 0;
   for (const [k, v] of hist) if (v > best) { best = v; bgKey = k; }
   const bg = lum(((bgKey >> 10) & 31) << 3, ((bgKey >> 5) & 31) << 3, (bgKey & 31) << 3);
-  const glyph = px.map(l => ratio(l, bg)).filter(r => r >= 1.25).sort((a, b) => b - a);
-  if (glyph.length < 3) return null;
+  const all = px.map(l => ratio(l, bg)).sort((a, b) => b - a);
+  const glyph = all.filter(r => r >= 1.25);
+  // Text that is present but never differs visibly from its background is the worst contrast, not an unmeasurable box.
+  if (glyph.length < 3) return all[0];
   return glyph[Math.floor((glyph.length - 1) * 0.25)];
 }
 
@@ -403,6 +405,7 @@ export function contrastFindings({ screen, nodes, png, pkg, density = 320, limit
   const texts = appNodes(nodes, pkg).filter(n => n.text && !/\n/.test(n.text) && n.cls !== 'EditText')
     .sort((a, b) => area(b.bounds) - area(a.bounds)).slice(0, limit);
   for (const n of texts) {
+    if (n.text.trim().length < 2) continue;
     const r = boxContrast(png, n.bounds);
     if (r == null) continue;
     const large = (n.bounds[3] - n.bounds[1]) / dp >= 24;

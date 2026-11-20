@@ -7,7 +7,7 @@ import path from 'path';
 const dir = path.join(__dirname, '..', 'tools', 'app-explorer');
 const PKG = 'com.eyex.australianrates';
 
-type N = { text?: string; desc?: string; cls?: string; clickable?: boolean; scrollable?: boolean; enabled?: boolean; pkg?: string; bounds: number[] };
+type N = { text?: string; desc?: string; cls?: string; selected?: boolean; clickable?: boolean; scrollable?: boolean; enabled?: boolean; pkg?: string; bounds: number[] };
 const node = (n: N) => ({ text: '', desc: '', id: '', cls: 'View', clickable: false, scrollable: false, checked: false, selected: false, enabled: true, pkg: PKG, ...n });
 const row = (product: string, bank: string, comparison: number, advertised: number, y: number) =>
   node({ desc: `${product}, ${bank}, Comparison rate ${comparison.toFixed(2)}%, Advertised rate ${advertised.toFixed(2)}% · Variable`, clickable: true, bounds: [0, y, 720, y + 200] });
@@ -110,6 +110,7 @@ describe('app explorer UX review', () => {
 
   it('checks displayed rates for impossible values, duplicates and sort order', () => {
     const r = review({ rates: [
+      node({ text: 'Home loans', selected: true, bounds: [0, 200, 200, 260] }),
       node({ text: 'Sort · Comparison rate', bounds: [0, 100, 300, 150] }),
       row('Choice Home Loan', 'Bank A', 6.1, 6.0, 300),
       row('Basic Loan', 'Bank B', 5.9, 6.5, 500),
@@ -236,5 +237,35 @@ console.log(JSON.stringify({ a: a && [a.width, a.height, a.data.toString('base64
     expect(Buffer.from(got.a[2], 'base64').equals(rgba)).toBe(true);
     expect(Buffer.from(got.b[2], 'base64').equals(rgba)).toBe(true);
     expect(got.bad).toBeNull();
+  });
+
+  it('ignores Remove and Save controls when reading rate rows', () => {
+    const r = review({ saved: [
+      row('Basic Loan', 'Bank B', 5.9, 5.8, 300),
+      node({ desc: 'Remove, Basic Loan, Bank B, Comparison rate 7.20%, Advertised rate 7.10%', clickable: true, bounds: [600, 300, 720, 420] }),
+      node({ desc: 'Save, Basic Loan, Bank B, Comparison rate 7.30%', clickable: true, bounds: [600, 500, 720, 620] }),
+    ] });
+    expect(r.findings.filter(f => f.check === 'accuracy')).toEqual([]);
+  });
+
+  it('expects deposits to sort highest first and loans lowest first', () => {
+    const list = (tab: string, rates: number[]) => ({ [`${tab}`]: [
+      node({ text: tab, selected: true, clickable: true, bounds: [0, 200, 200, 260] }),
+      node({ text: 'Sort · Advertised rate', bounds: [0, 100, 300, 150] }),
+      ...rates.map((x, i) => node({ desc: `Product ${i}, Bank ${i}, Advertised rate ${x.toFixed(2)}%`, clickable: true, bounds: [0, 300 + i * 200, 720, 480 + i * 200] })),
+    ] });
+    const sortFlag = (r: ReturnType<typeof review>) => r.findings.some(f => f.check === 'accuracy' && /with sort by/.test(f.detail));
+    expect(sortFlag(review(list('Savings', [5.1, 4.8, 4.2])))).toBe(false);
+    expect(sortFlag(review(list('Savings', [4.2, 4.8, 5.1])))).toBe(true);
+    expect(sortFlag(review(list('Home loans', [5.1, 4.8, 4.2])))).toBe(true);
+    expect(sortFlag(review(list('Home loans', [4.2, 4.8, 5.1])))).toBe(false);
+  });
+
+  it('reports very faint or invisible text as low contrast instead of skipping it', () => {
+    const faint = (x: number, y: number) => (x > 20 && x < 300 && y > 300 && y < 340 && (x + y) % 3 === 0 ? [240, 240, 240] : [255, 255, 255]);
+    const blank = () => [255, 255, 255];
+    const node = { text: 'Rate', bounds: [20, 300, 300, 340] };
+    expect(review({ rates: [node] }, [], { png: { rates: faint } }).findings.filter(f => f.check === 'contrast')).toHaveLength(1);
+    expect(review({ rates: [node] }, [], { png: { rates: blank } }).findings.filter(f => f.check === 'contrast')).toHaveLength(1);
   });
 });

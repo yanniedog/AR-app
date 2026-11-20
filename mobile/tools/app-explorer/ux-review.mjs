@@ -39,7 +39,7 @@ export function parseRows(nodes) {
   const rows = [];
   for (const n of nodes) {
     const d = n.desc || '';
-    if (/^Save, /.test(d)) continue;
+    if (/^(Save|Remove), /.test(d)) continue;
     const head = /^(.+?), (.+?), (?=(?:Comparison|Advertised|Ongoing) rate \d)/.exec(d);
     if (!head) continue;
     const row = { product: head[1], provider: head[2], comparison: null, advertised: null, ongoing: null, tier: (/#(\d+)/.exec(d) || [])[1] || '', y: n.bounds[1], at: [Math.round((n.bounds[0] + n.bounds[2]) / 2), Math.round((n.bounds[1] + n.bounds[3]) / 2)] };
@@ -53,7 +53,7 @@ export function parseRows(nodes) {
  * Accuracy checks that need no external data, plus a comparison against a published sample
  * ([{product, provider, comparison, advertised}]) when one is supplied.
  */
-export function accuracyFindings({ screen, nodes, sample, sortedBy }) {
+export function accuracyFindings({ screen, nodes, sample, sortedBy, lowerIsBetter }) {
   const rows = parseRows(nodes);
   const out = [];
   const add = (severity, text, detail, at) => out.push({ check: 'accuracy', severity, screen, text, at: at || [0, 0], detail });
@@ -84,11 +84,13 @@ export function accuracyFindings({ screen, nodes, sample, sortedBy }) {
     add(differ ? 'major' : 'minor', `${r.product}, ${r.provider}`, differ ? `shown ${list.length} times with different rates` : `row shown ${list.length} times`, r.at);
   }
   const key = METRIC[sortedBy];
-  if (key) {
+  // Loans list the lowest rate first, deposits the highest. Without a known section the direction is unknown.
+  if (key && typeof lowerIsBetter === 'boolean') {
     const list = rows.filter(r => r[key] != null).sort((a, b) => a.y - b.y);
     for (let i = 1; i < list.length; i++) {
-      if (list[i][key] + 0.005 < list[i - 1][key]) {
-        add('major', `${list[i].product}, ${list[i].provider}`, `listed below ${list[i - 1][key]}% but is ${list[i][key]}% with sort by ${sortedBy.toLowerCase()}`, list[i].at);
+      const out = lowerIsBetter ? list[i][key] + 0.005 < list[i - 1][key] : list[i][key] > list[i - 1][key] + 0.005;
+      if (out) {
+        add('major', `${list[i].product}, ${list[i].provider}`, `listed after ${list[i - 1][key]}% but is ${list[i][key]}% with sort by ${sortedBy.toLowerCase()}`, list[i].at);
         break;
       }
     }
@@ -153,7 +155,8 @@ export async function reviewRun(dir, { sample } = {}) {
     const png = loadPng(path.join(dir, 'screens', `${s.slug}.png`));
     if (png) { list.push(...contrastFindings({ screen: s.name, nodes: s.nodes, png, pkg: PKG, density })); contrastMeasured += 1; }
     const sortedBy = (s.nodes.map(n => /^Sort · ((?:Comparison|Advertised|Ongoing) rate)/.exec(n.text || n.desc || '')).find(Boolean) || [])[1] || null;
-    const acc = accuracyFindings({ screen: s.name, nodes: s.nodes, sample, sortedBy });
+    const section = (s.nodes.find(n => n.selected && /^(Home loans|Savings|Term deposits)$/.test((n.text || n.desc || '').trim())) || {}).text;
+    const acc = accuracyFindings({ screen: s.name, nodes: s.nodes, sample, sortedBy, lowerIsBetter: section ? section === 'Home loans' : undefined });
     list.push(...acc.findings);
     if (s.step.settleMs >= 5000 && !/cold/.test(s.name)) list.push({ check: 'slow', severity: s.step.settleMs >= 10000 ? 'major' : 'minor', screen: s.name, text: '', at: [0, 0], detail: `${(s.step.settleMs / 1000).toFixed(1)} s to settle` });
     findings.push(...list);
