@@ -73,3 +73,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/pr-auto-merge-reconcile.mjs release
+      - name: Start the full audit for the newest untested APK
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/pr-auto-merge-reconcile.mjs explore
