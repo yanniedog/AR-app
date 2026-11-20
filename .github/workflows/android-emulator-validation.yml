@@ -1,9 +1,14 @@
 name: Android emulator validation artifact
 
-# Build-only evidence for an isolated emulator. Public APK publication remains
+# Build and audit the exact candidate in an isolated emulator. Public APK publication remains
 # exclusively in the existing protected release workflows.
 on:
   workflow_dispatch:
+    inputs:
+      run_audit:
+        description: Run the live audit on the emulator after building
+        type: boolean
+        default: false
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
@@ -21,7 +26,7 @@ jobs:
     name: nativeRelease x86_64 (artifact only)
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 100
     defaults:
       run:
         working-directory: mobile
@@ -75,6 +80,7 @@ jobs:
       - name: Assemble native release-mode x86_64 APK
         env:
           NODE_ENV: production
+          EXPO_PUBLIC_AR_CI_RBA_DIAGNOSTICS: "1"
         run: |
           set -euo pipefail
           cd android
@@ -139,3 +145,33 @@ jobs:
           retention-days: 3
           compression-level: 0
           if-no-files-found: error
+      - name: Prepare isolated emulator acceleration
+        if: github.event_name == 'pull_request' || inputs.run_audit
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run live audit on the candidate APK
+        if: github.event_name == 'pull_request' || inputs.run_audit
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 4096M
+          disk-size: 6G
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          disable-animations: true
+          emulator-boot-timeout: 900
+          script: MODE=audit AUDIT=live FRESH=true PRIVATE_AUDIT=true AUDIT_TIMEOUT_MIN=30 APK=mobile/android-emulator-artifact/validation.apk OUT=mobile/android-emulator-audit bash mobile/tools/app-explorer/ci-run.sh
+      - name: Keep candidate audit evidence
+        if: always() && (github.event_name == 'pull_request' || inputs.run_audit)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-audit-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            mobile/android-emulator-artifact/metadata.json
+            mobile/android-emulator-audit/
+          if-no-files-found: ignore
+          retention-days: 3

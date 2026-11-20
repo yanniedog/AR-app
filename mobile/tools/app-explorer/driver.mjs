@@ -32,6 +32,7 @@ function parseArgs(argv) {
     else if (key === '--routes') args.routes = next().split(',').map(s => s.trim()).filter(Boolean);
     else if (key === '--fresh') args.fresh = true;
     else if (key === '--audit') args.audit = next();
+    else if (key === '--private-audit') args.privateAudit = true;
     else if (key === '--audit-timeout-min') args.auditTimeoutMin = Number(next());
     else throw new Error(`Unknown argument ${key}`);
   }
@@ -501,10 +502,25 @@ class Explorer {
     sh('settings put system screen_off_timeout 2147483647', { allowFail: true });
     const entry = await this.openAudit();
     if (entry.error) return;
-    const upload = findNode(this.current.nodes, 'Public upload');
-    if (upload && !upload.checked) {
-      const sw = this.current.nodes.find(n => /Switch/.test(n.cls) && Math.abs(centre(n)[1] - centre(upload)[1]) < 60);
-      if (sw && !sw.checked) { sh(`input tap ${centre(sw).join(' ')}`); await sleep(500); }
+    const privateAudit = this.args.privateAudit;
+    if (privateAudit) {
+      // Validate the exact PR build without using either public log destination.
+      if (!await this.find('No audit history', 5000)) throw new Error('Private audit requires a fresh install with no audit history');
+      const { nodes } = await dumpUi();
+      const destination = { id: 'audit-local-destination' };
+      if (!findNode(nodes, destination)) {
+        const upload = findNode(nodes, 'Public upload');
+        if (!upload || !upload.enabled) throw new Error('Cannot disable public upload');
+        sh(`input tap ${centre(upload).join(' ')}`);
+        const local = await this.find(destination, 5000);
+        if (!local) throw new Error('Local audit-log destination not confirmed');
+      }
+    } else {
+      const upload = findNode(this.current.nodes, 'Public upload');
+      if (upload && !upload.checked) {
+        const sw = this.current.nodes.find(n => /Switch/.test(n.cls) && Math.abs(centre(n)[1] - centre(upload)[1]) < 60);
+        if (sw && !sw.checked) { sh(`input tap ${centre(sw).join(' ')}`); await sleep(500); }
+      }
     }
     const startSel = kind === 'local' ? [{ id: 'audit-start-local' }, 'Local audit'] : [{ id: 'audit-start-live' }, 'Live audit'];
     let start = null;
@@ -512,12 +528,15 @@ class Explorer {
     if (!start) return this.record('audit start', { error: `${kind} audit button not found` });
     const priorUrls = new Set(this.current.nodes.map(n => `${n.text} ${n.desc}`).join('\n').match(/https:\/\/paste\.(?:rs|c-net\.org)\/[A-Za-z0-9._~-]+/g) || []);
     const t0 = Date.now();
+    const startPid = appPid();
+    if (privateAudit && !startPid) throw new Error('Audit process was not running before start');
     sh(`input tap ${centre(start).join(' ')}`);
     console.log(`Audit (${kind}) started`);
     const deadline = t0 + timeoutMin * 60000;
     let lastShot = 0;
     let url = null;
     let outcome = null;
+    let rbaNavigationProven = false;
     let idleAtHome = 0;
     let lastCounter = null;
     let lastProgressAt = Date.now();
@@ -526,16 +545,19 @@ class Explorer {
       await sleep(5000);
       const { nodes } = await dumpUi();
       if (dismissSystemDialog(nodes)) continue;
-      if (!appPid()) {
+      const pid = appPid();
+      if (!pid || (privateAudit && pid !== startPid)) {
         outcome = 'app crashed';
         await this.snapshot('audit crashed', { error: 'app process died during audit', auditElapsedMs: Date.now() - t0 });
-        await this.relaunch();
-        await this.record('relaunch after audit crash', {}, 60000);
-        await this.openAudit();
+        if (!privateAudit) {
+          await this.relaunch();
+          await this.record('relaunch after audit crash', {}, 60000);
+          await this.openAudit();
+        }
         break;
       }
       const texts = nodes.map(n => `${n.text} ${n.desc}`);
-      const found = (texts.join('\n').match(/https:\/\/paste\.(?:rs|c-net\.org)\/[A-Za-z0-9._~-]+/g) || []).find(u => !priorUrls.has(u));
+      const found = !privateAudit && (texts.join('\n').match(/https:\/\/paste\.(?:rs|c-net\.org)\/[A-Za-z0-9._~-]+/g) || []).find(u => !priorUrls.has(u));
       if (found) url = found;
       if (texts.some(t => /Audit runner failed/.test(t))) outcome = 'runner failed';
       if (texts.some(t => /Audit cancelled/.test(t))) outcome = 'cancelled';
@@ -558,6 +580,17 @@ class Explorer {
       // Completed on the audit screen without a visible URL: look for it lower down.
       const onAuditHome = texts.some(t => /App health audit/.test(t)) && texts.some(t => /Last audit/.test(t));
       const runningNow = nodes.some(n => n.id === 'audit-start-live' && !n.enabled) || texts.some(t => /^(Loading|Running)/.test(t.trim()));
+      if (privateAudit) {
+        const completed = nodes.some(n => /^(Successful|Needs review|Failed|Incomplete)\s*·\s*\S/.test(n.text));
+        if (onAuditHome && completed && nodes.some(n => n.id === 'audit-start-live' && n.enabled)) {
+          const rbaReady = nodes.some(n => n.id === 'audit-rba-round-trips-complete');
+          rbaNavigationProven = rbaReady || nodes.some(n => n.id === 'audit-rba-navigation-only');
+          outcome = rbaReady ? 'completed' : rbaNavigationProven
+            ? 'RBA navigation completed; readiness failed' : 'missing cold or warm RBA round trip';
+          break;
+        }
+        continue;
+      }
       if (onAuditHome && !runningNow && Date.now() - t0 > 30000) {
         idleAtHome += 1;
         const hit = await this.scrollUntil({ contains: 'paste.' }, 10);
@@ -569,16 +602,25 @@ class Explorer {
       }
     }
     const elapsedMs = Date.now() - t0;
-    const final = await this.snapshot('audit finished', { auditElapsedMs: elapsedMs, auditUrl: url, auditOutcome: outcome, error: url ? undefined : `no uploaded log URL (${outcome || 'timeout or upload failure'})` });
-    // Capture the result screen top to bottom.
-    this.swipe('up', 0.9); this.swipe('up', 0.9);
-    for (let i = 0; i < 12; i += 1) {
-      await this.snapshot(`audit result ${i + 1}`);
-      this.swipe('down', 0.7);
-      await sleep(400);
+    if (privateAudit && appPid() !== startPid) {
+      outcome = 'app crashed';
+      rbaNavigationProven = false;
     }
-    const audit = { kind, url, outcome, elapsedMs, visibleOutcome: final.step.visible.slice(0, 20) };
-    if (url) {
+    if (privateAudit && !outcome) outcome = 'timed out';
+    const final = await this.snapshot('audit finished', { auditElapsedMs: elapsedMs, auditUrl: url, auditOutcome: outcome, error: privateAudit
+      ? (outcome === 'completed' ? undefined : outcome)
+      : (url ? undefined : `no uploaded log URL (${outcome || 'timeout or upload failure'})`) });
+    // Capture the result screen top to bottom.
+    if (!privateAudit) {
+      this.swipe('up', 0.9); this.swipe('up', 0.9);
+      for (let i = 0; i < 12; i += 1) {
+        await this.snapshot(`audit result ${i + 1}`);
+        this.swipe('down', 0.7);
+        await sleep(400);
+      }
+    }
+    const audit = { kind, url, outcome, elapsedMs, ...(privateAudit ? { rbaNavigationProven } : {}), visibleOutcome: final.step.visible.slice(0, 20) };
+    if (url && !privateAudit) {
       try {
         const { body, status, contentUrl } = await fetchUploadedLog(url);
         audit.logStatus = status;
@@ -589,7 +631,7 @@ class Explorer {
         audit.logError = String(error.message || error);
       }
     }
-    audit.debugLog = await this.uploadDebugLog();
+    if (!privateAudit) audit.debugLog = await this.uploadDebugLog();
     this.audit = audit;
     fs.writeFileSync(path.join(this.out, 'audit.json'), JSON.stringify(audit, null, 2));
     console.log(`Audit ${kind}: ${url ? `log ${audit.logBytes ?? '?'} bytes from ${url}` : 'no log URL'} after ${Math.round(elapsedMs / 1000)} s`);
@@ -738,12 +780,15 @@ function appVersion() {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.privateAudit && (!args.fresh || args.mode !== 'audit')) {
+    throw new Error('Private validation requires --mode audit and --fresh');
+  }
   adb(['wait-for-device'], { timeout: 180000 });
   for (const key of ['window_animation_scale', 'transition_animation_scale', 'animator_duration_scale']) {
     sh(`settings put global ${key} 0`, { allowFail: true });
   }
   sh(`pm grant ${PKG} android.permission.POST_NOTIFICATIONS`, { allowFail: true });
-  if (args.fresh) sh(`pm clear ${PKG}`, { allowFail: true });
+  if (args.fresh) sh(`pm clear ${PKG}`, { allowFail: !args.privateAudit });
   sh('input keyevent 3', { allowFail: true });
   for (let i = 0; i < 10; i += 1) {
     if (!dismissSystemDialog((await dumpUi()).nodes)) break;
@@ -779,6 +824,9 @@ async function main() {
   const report = ex.finish(meta);
   const bad = report.steps.filter(s => !s.alive).length;
   console.log(`Done: ${report.steps.length} steps, ${bad} crashes. Report at ${path.join(ex.out, 'report.md')}`);
+  if (args.privateAudit && (bad || report.audit?.outcome !== 'completed')) {
+    throw new Error(`Android audit validation did not complete without a crash: ${report.audit?.outcome ?? 'no audit report'}`);
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

@@ -2570,6 +2570,7 @@ export async function runJourney(
   let backgroundResponsiveness = EMPTY_RESPONSIVENESS;
   let backResponsiveness = EMPTY_RESPONSIVENESS;
   let routeError: string | undefined;
+  let rbaSourceUnavailable = false;
   let productDataFailure = false;
   let destinationDiagnostic: AuditCheck['diagnostic'];
   let journeyStage: AuditDiagnosticStage = 'route';
@@ -2604,6 +2605,7 @@ export async function runJourney(
         destinationReadinessAbort.abort();
       }
     }, 50);
+    const readinessStarted = now();
     let visibleReady: UserVisibleReady;
     try {
       journeyStage = 'readiness';
@@ -2615,6 +2617,18 @@ export async function runJourney(
       destinationDiagnostic = captureAuditDiagnostic(visibleReady.snapshot, 'complete');
       readinessStepExpired = visibleReady.stepExpired;
       backgroundUnsettled = visibleReady.settled === false;
+    } catch (caught) {
+      if (journey.id !== 'rba' || !(caught instanceof PerformanceAuditReadinessProbeError)
+        || !caught.snapshot.surfaces.some(surface => surface.id === journey.expectedSurface
+          && surface.probes.some(probe => probe.id === 'rba.data' && probe.status === 'error'))) throw caught;
+      // A failed official data load is still a failed journey. Measure actual
+      // Back on the rendered error screen rather than silently resetting it.
+      rbaSourceUnavailable = true;
+      routeError = formatAuditError(caught);
+      destinationDiagnostic = captureAuditDiagnostic(caught.snapshot, 'readiness');
+      forwardWindow = { start: forwardResponsivenessAt, end: monitor.snapshot() };
+      visibleReady = { snapshot: caught.snapshot, elapsedMs: now() - readinessStarted, settled: false, stepExpired: false };
+      backgroundUnsettled = true;
     } finally {
       clearInterval(destinationReadinessGuard);
     }
@@ -2626,7 +2640,7 @@ export async function runJourney(
     }) : null;
     // Read after settle so delayed timer/RAF observations can be clipped to the ready endpoint.
     const backgroundResponsivenessAt = monitor.snapshot();
-    if (!visibleReady.stepExpired) {
+    if (!visibleReady.stepExpired && !rbaSourceUnavailable) {
       await outsideStepBudget(watchdog, () => settleUi());
       journeyStage = 'data';
       const background = await outsideStepBudget(watchdog, () => waitForJourneyData(
@@ -2645,7 +2659,7 @@ export async function runJourney(
       // The measured 650ms stable window already includes route dwell.
       assertDatasetRevision(datasetRevision);
     }
-    if (!visibleReady.stepExpired) {
+    if (!visibleReady.stepExpired && !rbaSourceUnavailable) {
       // First-ready timing stays fixed; terminal evidence includes work that
       // completed (or failed) during the separately measured background settle.
       destinationDiagnostic = captureAuditDiagnostic(performanceAuditReadinessRegistry.snapshot(), 'complete');
@@ -2736,7 +2750,7 @@ export async function runJourney(
     }
     rethrowAuditControl(caught);
     productDataFailure = caught instanceof JourneyBackgroundDataError;
-    routeError = formatAuditError(caught);
+    routeError = routeError ? `${routeError}\n${formatAuditError(caught)}` : formatAuditError(caught);
     const failureSnapshot = caught instanceof PerformanceAuditReadinessTimeoutError || caught instanceof PerformanceAuditReadinessProbeError
       ? caught.snapshot : performanceAuditReadinessRegistry.snapshot();
     destinationDiagnostic = journeyStage === 'back' || journeyStage === 'recovery'
@@ -2847,9 +2861,9 @@ export async function runJourney(
       runtimeErrorMessages: errors.journey.join(' | ') || null,
       incidentalRuntimeErrors: errors.incidental.length,
       incidentalRuntimeErrorMessages: errors.incidental.join(' | ') || null,
-      // routeError covers navigation timeouts, which a pause can manufacture;
-      // only the app's own logged errors count as clock-independent evidence.
-      nonTimingFailure: errors.journey.length > 0 || productDataFailure || (!backContractMet && routeError == null),
+      // Navigation timeouts may be timing-only; explicit probe and runtime
+      // failures remain failures even when Back works.
+      nonTimingFailure: errors.journey.length > 0 || productDataFailure || rbaSourceUnavailable || (!backContractMet && routeError == null),
       stepBudgetOmittedMs: roundMetric((backgroundSettleMs ?? 0) + (originReadinessMs ?? 0)),
       ...responsivenessRecord(visibleResponsiveness),
       ...responsivenessRecord(forwardResponsiveness, 'forward'),

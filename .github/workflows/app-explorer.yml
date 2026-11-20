@@ -170,7 +170,7 @@ jobs:
   # Publishes results as data only: no repository code is checked out or run here.
   publish:
     needs: explore
-    if: always() && needs.explore.result != 'skipped' && needs.explore.result != 'cancelled'
+    if: always() && github.event_name != 'pull_request' && needs.explore.result != 'skipped' && needs.explore.result != 'cancelled'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
