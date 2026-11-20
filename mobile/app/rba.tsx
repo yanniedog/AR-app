@@ -216,22 +216,22 @@ export default function RbaRates() {
         </LedgerSection>
 
         <LedgerSection title="Economists’ cash-rate forecast">
-          {forecasts.length ? <RateOutlookChart key={`forecast:${cashRate}`} label="Economists’ cash-rate forecast" points={forecasts} cashRate={cashRate} selectedIndex={forecastIndex} onSelect={setForecastIndex} onGraphicReady={forecastReady} /> : <LedgerText key={forecastGraphicKey} tone="mutedInk" onLayout={(event) => {
+          <View collapsable={false}>{forecasts.length ? <RateOutlookChart key={`forecast:${cashRate}`} label="Economists’ cash-rate forecast" points={forecasts} cashRate={cashRate} selectedIndex={forecastIndex} onSelect={setForecastIndex} onGraphicReady={forecastReady} /> : <LedgerText key={forecastGraphicKey} tone="mutedInk" onLayout={(event) => {
             if (!loading) forecastReady({
               revision: forecastRevision, expectedCount: 0, pointCount: 0,
               accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true
             });
-          }}>{loading ? uiLabel("Loading") : uiLabel("Forecast unavailable")}</LedgerText>}
+          }}>{loading ? uiLabel("Loading") : uiLabel("Forecast unavailable")}</LedgerText>}</View>
           {outlook?.economists ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA J1', ' ', '·', ' ', 'Survey', ' ', uiDate(outlook.economists.surveyDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.economists.publicationDate), surveyStale ? uiJoin(' ', '·', ' ', 'Older survey') : '')}</LedgerText> : null}
         </LedgerSection>
 
         <LedgerSection title="Bond-market forward rates">
-          {bonds?.length ? <RateOutlookChart key={`bonds:${cashRate}`} label="Bond-market forward rates" points={bonds} cashRate={cashRate} tone="info" selectedIndex={bondIndex} onSelect={setBondIndex} onGraphicReady={bondsReady} /> : <LedgerText key={bondGraphicKey} tone="mutedInk" onLayout={(event) => {
+          <View collapsable={false}>{bonds?.length ? <RateOutlookChart key={`bonds:${cashRate}`} label="Bond-market forward rates" points={bonds} cashRate={cashRate} tone="info" selectedIndex={bondIndex} onSelect={setBondIndex} onGraphicReady={bondsReady} /> : <LedgerText key={bondGraphicKey} tone="mutedInk" onLayout={(event) => {
             if (!loading) bondsReady({
               revision: bondRevision, expectedCount: 0, pointCount: 0,
               accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true
             });
-          }}>{loading ? uiLabel("Loading") : uiLabel("Bond data unavailable")}</LedgerText>}
+          }}>{loading ? uiLabel("Loading") : uiLabel("Bond data unavailable")}</LedgerText>}</View>
           {outlook?.bondForwards ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA F17', ' ', '·', ' ', 'Observed', ' ', uiDate(outlook.bondForwards.observationDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.bondForwards.publicationDate), bondStale ? uiJoin(' ', '·', ' ', 'Older observation') : '')}</LedgerText> : null}
         </LedgerSection>
 
@@ -247,7 +247,7 @@ export default function RbaRates() {
           </View>
         </Disclosure>
         <Disclosure title="Cash-rate history" open={historyOpen} onToggle={() => setHistoryOpen((open) => !open)}>
-          {history.length ? <RbaChart data={history} holds={core?.rba_holds} height={220} /> : <LedgerText tone="mutedInk">{uiLabel("History unavailable")}</LedgerText>}
+          <View collapsable={false}>{history.length ? <RbaChart data={history} holds={core?.rba_holds} height={220} /> : <LedgerText tone="mutedInk">{uiLabel("History unavailable")}</LedgerText>}</View>
         </Disclosure>
         <LedgerAction label="See bank responses" variant="secondary" onPress={() => router.push('/rba-response')} />
       </View>
