@@ -17,6 +17,17 @@ out.push(`explorer run ${runId} on ${run.tag || '?'} (${run.mode || '?'})`, '', 
 if (audit.url) out.push(`Audit log: ${audit.url}`, '');
 if (audit.logContentUrl && audit.logContentUrl !== audit.url) out.push(`Audit log (full file): ${audit.logContentUrl}`, '');
 
+const shots = json('shots/shots-result.json');
+if (read('shots/shots-failed')) out.push('Screenshot pass failed', '');
+if (shots.results) {
+  const repo = process.env.GITHUB_REPOSITORY || 'yanniedog/AR-app';
+  const base = `https://github.com/${repo}/blob/explorer/run-${runId}/shots`;
+  out.push(`Screens: ${shots.count} captured | ${shots.flagged} flagged`, '');
+  for (const r of shots.results.filter(x => x.flags.length)) out.push(`- ${r.name}: ${r.flags.join('; ')}${r.flags.includes('contact sheet failed') ? ` ([thumb](${base}/thumbs/${r.name}.jpg?raw=true))` : ''}`);
+  const sheets = (shots.sheets || []).map(n => `[${n}](${base}/contact-${n}.jpg?raw=true)`);
+  out.push('', sheets.length ? `Contact sheets: ${sheets.join(' | ')}` : 'No screenshots captured', '');
+}
+
 let decoded = null;
 try {
   const wrap = JSON.parse(read('audit-log.txt'));
