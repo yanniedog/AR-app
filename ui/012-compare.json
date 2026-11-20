@@ -1,0 +1,77 @@
+[
+ {
+  "label": "Verified · 1.0.323",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Go back",
+  "flags": "tap",
+  "at": [
+   52,
+   331
+  ]
+ },
+ {
+  "label": "Compare",
+  "at": [
+   202,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   672,
+   331
+  ]
+ },
+ {
+  "label": "Minimum 2 rates",
+  "at": [
+   360,
+   1002
+  ]
+ },
+ {
+  "label": "Choose products",
+  "flags": "tap",
+  "at": [
+   360,
+   1172
+  ]
+ },
+ {
+  "label": "Choose products",
+  "at": [
+   360,
+   1172
+  ]
+ }
+]

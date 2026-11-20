@@ -1,0 +1,175 @@
+[
+ {
+  "label": "Verified · 1.0.323",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Go back",
+  "flags": "tap",
+  "at": [
+   52,
+   331
+  ]
+ },
+ {
+  "label": "RBA",
+  "at": [
+   154,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   672,
+   331
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   894
+  ]
+ },
+ {
+  "label": "Forecast unavailable",
+  "at": [
+   360,
+   364
+  ]
+ },
+ {
+  "label": "Bond-market forward rates",
+  "at": [
+   360,
+   474
+  ]
+ },
+ {
+  "label": "Bond data unavailable",
+  "at": [
+   360,
+   550
+  ]
+ },
+ {
+  "label": "Show Sources",
+  "flags": "tap",
+  "at": [
+   360,
+   751
+  ]
+ },
+ {
+  "label": "Sources",
+  "at": [
+   328,
+   751
+  ]
+ },
+ {
+  "label": "Show Cash-rate history",
+  "flags": "tap",
+  "at": [
+   360,
+   1000
+  ]
+ },
+ {
+  "label": "Cash-rate history",
+  "at": [
+   328,
+   1000
+  ]
+ },
+ {
+  "label": "See bank responses",
+  "flags": "tap",
+  "at": [
+   360,
+   1200
+  ]
+ },
+ {
+  "label": "See bank responses",
+  "at": [
+   360,
+   1200
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap,sel",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "sel",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

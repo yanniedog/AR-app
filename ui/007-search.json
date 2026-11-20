@@ -1,0 +1,421 @@
+[
+ {
+  "label": "Verified · 1.0.323",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   361,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   673,
+   331
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   459
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   457
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   459
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   457
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   459
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   457
+  ]
+ },
+ {
+  "label": "Search",
+  "flags": "tap",
+  "at": [
+   386,
+   581
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "flags": "tap",
+  "at": [
+   80,
+   703
+  ]
+ },
+ {
+  "label": "Filter",
+  "at": [
+   80,
+   725
+  ]
+ },
+ {
+  "label": "Sort · Comparison rate",
+  "flags": "tap",
+  "at": [
+   223,
+   703
+  ]
+ },
+ {
+  "label": "Comparison",
+  "at": [
+   223,
+   725
+  ]
+ },
+ {
+  "label": "Compare",
+  "flags": "tap",
+  "at": [
+   386,
+   703
+  ]
+ },
+ {
+  "label": "Compare",
+  "at": [
+   386,
+   725
+  ]
+ },
+ {
+  "label": "Lenders",
+  "flags": "tap",
+  "at": [
+   524,
+   703
+  ]
+ },
+ {
+  "label": "Lenders",
+  "at": [
+   524,
+   725
+  ]
+ },
+ {
+  "label": "Search actions",
+  "flags": "tap",
+  "at": [
+   640,
+   703
+  ]
+ },
+ {
+  "label": "More",
+  "at": [
+   640,
+   725
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1080
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   819
+  ]
+ },
+ {
+  "label": "Edit",
+  "flags": "tap",
+  "at": [
+   121,
+   819
+  ]
+ },
+ {
+  "label": "Edit",
+  "at": [
+   147,
+   820
+  ]
+ },
+ {
+  "label": "Owner occupied",
+  "flags": "tap",
+  "at": [
+   349,
+   819
+  ]
+ },
+ {
+  "label": "Owner occupied",
+  "at": [
+   349,
+   819
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "flags": "tap",
+  "at": [
+   588,
+   819
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "at": [
+   601,
+   819
+  ]
+ },
+ {
+  "label": "Eligibility unverified · 857",
+  "at": [
+   360,
+   891
+  ]
+ },
+ {
+  "label": "View Broken Hill Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   983
+  ]
+ },
+ {
+  "label": "Choice Home Loan, Broken Hill Bank, Comparison rate 5.99%, Advertised rate 5.94% · Variable · Principal & interest · Own",
+  "flags": "tap",
+  "at": [
+   384,
+   983
+  ]
+ },
+ {
+  "label": "Broken Hill Bank · Choice Home Loan",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   943
+  ]
+ },
+ {
+  "label": "Save, Choice Home Loan, Broken Hill Bank, Comparison rate 5.99%",
+  "id": "rate-save:Broken%20Hill%20Bank%7C54%7CRESIDENTIAL_MORTGAGES%7CChoice%20Home%20Loan:1",
+  "flags": "tap",
+  "at": [
+   640,
+   983
+  ]
+ },
+ {
+  "label": "View Cairns bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1127
+  ]
+ },
+ {
+  "label": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank, Comparison rate 6.00%, Advertised rate 6.54% · Variable · Principa",
+  "flags": "tap",
+  "at": [
+   384,
+   1127
+  ]
+ },
+ {
+  "label": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1087
+  ]
+ },
+ {
+  "label": "Save, CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank, Comparison rate 6.00%",
+  "id": "rate-save:Cairns%20bank%7CL21_CLASSIC_PI_60_80%7CRESIDENTIAL_MORTGAGES%7CCLASSIC%20HOME%20LOAN%20VARIABLE%2060-80%20LVR%20PI:1",
+  "flags": "tap",
+  "at": [
+   640,
+   1127
+  ]
+ },
+ {
+  "label": "View MoveBank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1271
+  ]
+ },
+ {
+  "label": "Everyday Home Loan, MoveBank, Comparison rate 6.15%, Advertised rate 6.09% · Variable · Principal & interest · Owner occ",
+  "flags": "tap",
+  "at": [
+   384,
+   1271
+  ]
+ },
+ {
+  "label": "MoveBank · Everyday Home Loan",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1231
+  ]
+ },
+ {
+  "label": "Save, Everyday Home Loan, MoveBank, Comparison rate 6.15%",
+  "id": "rate-save:MoveBank%7C3b68aefd-3bd6-4674-940a-137fb97563bb%7CRESIDENTIAL_MORTGAGES%7CEveryday%20Home%20Loan:30",
+  "flags": "tap",
+  "at": [
+   640,
+   1271
+  ]
+ },
+ {
+  "label": "View Police Credit Union Ltd · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1371
+  ]
+ },
+ {
+  "label": "Low Rate Home Loan Special Offer - Owner Occupied, Police Credit Union Ltd, Comparison rate 6.18%, Advertised rate 6.14%",
+  "flags": "tap",
+  "at": [
+   384,
+   1372
+  ]
+ },
+ {
+  "label": "Police Credit Union Ltd · Low Rate Home Loan Special Offer - Owner Occupied",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1374
+  ]
+ },
+ {
+  "label": "Save, Low Rate Home Loan Special Offer - Owner Occupied, Police Credit Union Ltd, Comparison rate 6.18%",
+  "id": "rate-save:Police%20Credit%20Union%20Ltd%7COO_LRHL_SPEC_OFF_MAX_80_LVR%7CRESIDENTIAL_MORTGAGES%7CLow%20Rate%20Home%20Loan%20Special%20Offer%20-%20Owner%20Occupied:1",
+  "flags": "tap",
+  "at": [
+   640,
+   1380
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
