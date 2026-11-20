@@ -614,8 +614,6 @@ export default function RatesWorkspace() {
   const preparedResults = criteriaPending ? { ...cooperativeResults, rows: EMPTY_RATE_ROWS, ready: false, error: null }
     : indexedRows ? { ...cooperativeResults, rows: indexedRows, ready: true, error: null } : cooperativeResults;
   const rows = preparedResults.rows;
-  const firstResultsReady = preparedResults.ready;
-  useEffect(() => { if (firstResultsReady) bootMark('rates-ready'); }, [firstResultsReady]);
   // Ancillary facet inventories must not compete with the matching-result
   // pipeline while the current pricing/filter request is still unresolved.
   const filterOptions = useSearchFilterOptions(
@@ -823,6 +821,8 @@ export default function RatesWorkspace() {
   const searchPending = intentPending || (availability === 'unlisted' ? !catalogueDetails
     : section === 'Mortgage' && !mortgageCriteriaReady && !isDefaultMortgageBrowse ? false
     : detailFiltersPending || searchIndexLoading || !publicPricing.ready || !preparedResults.ready);
+  const ratesSettled = core != null && !searchPending;
+  useEffect(() => { if (ratesSettled) bootMark('rates-ready'); }, [ratesSettled]);
   const presented = useRef<{ rows: typeof pageRows; section: SectionKey; availability: RateAvailability;
     core: typeof core; catalogue: typeof catalogue; revision: number; scenarioFor: typeof rowScenario;
     unverified: WeakSet<RateRow> } | null>(null);
