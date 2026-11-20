@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { ChartText as SvgText } from '../charts/ChartText';
@@ -64,6 +64,18 @@ export function RateOutlookChart({
   const color = theme.ledger[tone];
   const path = valid.map((point, i) => `${i ? 'L' : 'M'} ${x(point.date)} ${y(point.value)}`).join(' ');
   const summary = uiJoin(label, ' · ', ...valid.map(point => uiJoin(outlookMonth(point.date), ' · ', uiChartPercent(point.value), ' · ')));
+
+  const graphicReadyRef = React.useRef(onGraphicReady);
+  graphicReadyRef.current = onGraphicReady;
+  const pointCountForReady = hasFiniteChartPath(path) ? valid.length : 0;
+  const expectedCount = points.length;
+  const summaryReady = summary.trim().length > 0 && pointCountForReady > 0;
+  // The SVG is no longer remounted on selection, so layout events do not repeat: report readiness for each revision/selection from the measured container.
+  useEffect(() => {
+    if (!selected || width <= left + right) return;
+    graphicReadyRef.current?.({ revision, expectedCount, pointCount: pointCountForReady,
+      accessibleSummary: summaryReady, layoutMeasured: true, emptyStateRendered: false });
+  }, [selected, width, revision, index, expectedCount, pointCountForReady, summaryReady]);
 
   if (!selected) return <LedgerText key={revision} tone="mutedInk" onLayout={(event) => {
     onGraphicReady?.({ revision, expectedCount: points.length, pointCount: 0,
