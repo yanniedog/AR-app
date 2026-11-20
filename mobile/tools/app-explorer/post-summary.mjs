@@ -1,0 +1,51 @@
+// Builds the markdown posted to GitHub when an explorer run ends.
+// Usage: node post-summary.mjs <explorer-out dir> <run id>
+import fs from 'node:fs';
+import path from 'node:path';
+import zlib from 'node:zlib';
+
+const [dir, runId] = process.argv.slice(2);
+const read = f => { try { return fs.readFileSync(path.join(dir, f), 'utf8'); } catch { return ''; } };
+const json = f => { try { return JSON.parse(read(f)); } catch { return {}; } };
+
+const run = json('run.json');
+const audit = json('audit.json');
+const report = read('report.md');
+const out = [];
+const auditLine = (report.match(/^\*\*Audit.*$/m) || ['no audit line'])[0];
+out.push(`explorer run ${runId} on ${run.tag || '?'} (${run.mode || '?'})`, '', auditLine, '');
+if (audit.url) out.push(`Audit log: ${audit.url}`, '');
+
+let decoded = null;
+try {
+  const wrap = JSON.parse(read('audit-log.txt'));
+  decoded = JSON.parse(zlib.gunzipSync(Buffer.from(wrap.gzip_base64, 'base64')).toString('utf8'));
+} catch { /* crash or no log */ }
+
+if (decoded) {
+  const checks = decoded.checks || [];
+  const count = s => checks.filter(c => c.status === s).length;
+  out.push(`Checks: ${checks.length} | pass ${count('pass')} | warn ${count('warn')} | fail ${count('fail')}`, '');
+  const failed = checks.filter(c => c.status === 'fail');
+  const byCode = {};
+  for (const c of failed) byCode[c.failureCode || 'none'] = (byCode[c.failureCode || 'none'] || 0) + 1;
+  out.push('Failures by code: ' + JSON.stringify(byCode), '');
+  out.push('| check | kind | ms | code |', '| --- | --- | --- | --- |');
+  for (const c of failed.slice(0, 60)) {
+    out.push(`| ${c.id} | ${c.kind} | ${Math.round(c.durationMs || 0)} | ${c.failureCode || ''} |`);
+  }
+  if (failed.length > 60) out.push(`| ... ${failed.length - 60} more in the results branch | | | |`);
+}
+
+const logcat = read('logcat.txt');
+const crash = logcat.split('\n').filter(l => /AndroidRuntime.*(FATAL EXCEPTION|addViewAt|Caused by|Exception)/.test(l)).slice(0, 12);
+if (crash.length) {
+  out.push('', 'Crash:', '```', ...crash.map(l => l.slice(0, 220)), '```');
+  const journeys = logcat.split('\n').filter(l => /perf-audit.*"id":"journey-/.test(l)).slice(-6)
+    .map(l => (l.match(/"id":"(journey-[^"]+)".*?"status":"(\w+)"/) || []).slice(1).join(' '));
+  if (journeys.length) out.push('', 'Last journeys before crash: ' + journeys.join(', '));
+}
+out.push('', `Results branch: explorer/run-${runId}`);
+let body = out.join('\n');
+if (body.length > 60000) body = body.slice(0, 60000) + '\n...truncated';
+process.stdout.write(body);
