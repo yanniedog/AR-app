@@ -74,6 +74,7 @@ for (const [i, chunk] of [results.slice(0, 10), results.slice(10, 20)].entries()
   const files = chunk.filter(r => r.thumb).flatMap(r => ['-label', `${r.name}${r.flags.length ? ' !' : ''}`, path.join(out, 'thumbs', `${r.name}.jpg`)]);
   if (files.length) im('montage', [...files, '-tile', '5x2', '-geometry', '240x+4+4', '-pointsize', '14', '-quality', '60', path.join(out, `contact-${i + 1}.jpg`)]);
   if (fs.existsSync(path.join(out, `contact-${i + 1}.jpg`))) sheets.push(i + 1);
+  else if (files.length) for (const r of chunk.filter(x => x.thumb)) r.flags.push('contact sheet failed');
 }
 // Full-size PNGs stay out of the results branch; thumbnails and sheets are enough.
 if (results.every(r => r.thumb || !r.keepPng)) fs.rmSync(path.join(out, 'screens'), { recursive: true, force: true });

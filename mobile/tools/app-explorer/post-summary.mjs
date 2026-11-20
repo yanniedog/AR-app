@@ -23,7 +23,7 @@ if (shots.results) {
   const repo = process.env.GITHUB_REPOSITORY || 'yanniedog/AR-app';
   const base = `https://github.com/${repo}/blob/explorer/run-${runId}/shots`;
   out.push(`Screens: ${shots.count} captured | ${shots.flagged} flagged`, '');
-  for (const r of shots.results.filter(x => x.flags.length)) out.push(`- ${r.name}: ${r.flags.join('; ')}`);
+  for (const r of shots.results.filter(x => x.flags.length)) out.push(`- ${r.name}: ${r.flags.join('; ')}${r.flags.includes('contact sheet failed') ? ` ([thumb](${base}/thumbs/${r.name}.jpg?raw=true))` : ''}`);
   const sheets = (shots.sheets || []).map(n => `[${n}](${base}/contact-${n}.jpg?raw=true)`);
   out.push('', sheets.length ? `Contact sheets: ${sheets.join(' | ')}` : 'No screenshots captured', '');
 }
