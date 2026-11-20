@@ -150,7 +150,7 @@ import {
   encodePerformanceAuditEvent,
   omitNullishDeep,
 } from '../lib/performanceAuditLog';
-import { yieldToUi } from '../lib/yieldToUi';
+import { yieldToPaintFrames, yieldToUi } from '../lib/yieldToUi';
 import { appendAuditReturnDiagnostic, captureAuditDiagnostic, scoreAuditTargetProbeEvidence, type AuditDiagnosticStage } from '../lib/performanceAuditDiagnostic';
 import { setPassiveAuditPaused } from '../lib/passiveAudit';
 import { publishPerformanceAuditAfterFinalization } from '../lib/performanceAuditFinalization';
@@ -371,7 +371,8 @@ async function awaitAuditWorkWithTimeout<T>(
   }
 }
 
-const JOURNEY_UNMOUNT_GRACE_MS = 150;
+const JOURNEY_UNMOUNT_GRACE_MS = 400;
+const JOURNEY_UNMOUNT_GRACE_FRAMES = 4;
 
 async function settleUiUnchecked(): Promise<void> {
   // Navigation commits and the readiness registry validate the destination.
@@ -2680,6 +2681,7 @@ export async function runJourney(
         await outsideStepBudget(watchdog, async () => {
           await settleUi();
           // Let Fabric finish unmounting the left screen before the next route mounts.
+          await yieldToPaintFrames(JOURNEY_UNMOUNT_GRACE_FRAMES);
           await delay(JOURNEY_UNMOUNT_GRACE_MS);
         });
         assertSessionActive(watchdog);
