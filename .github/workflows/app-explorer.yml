@@ -40,7 +40,7 @@ on:
     # Cheap check every 30 min: runs the full crawl + audit once per new app-v release.
     - cron: '7,37 * * * *'
   workflow_run:
-    # Starts the full crawl + audit as soon as a release run finishes publishing an APK.
+    # Does not fire for token-dispatched release runs; pr-auto-merge.yml dispatches the audit (nonce auto) instead.
     workflows: [mobile-android-apk]
     types: [completed]
   pull_request:
@@ -185,6 +185,11 @@ jobs:
       - name: Push results branch and prune old ones
         env:
           GH_TOKEN: ${{ github.token }}
+          AUTO_NONCE: ${{ inputs.nonce }}
+          AUTO_ACTOR: ${{ github.actor }}
+          AUTO_MODE: ${{ inputs.mode }}
+          AUTO_KIND: ${{ inputs.audit }}
+          EXPLORE_RESULT: ${{ needs.explore.result }}
         run: |
           set -euo pipefail
           remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
@@ -198,7 +203,13 @@ jobs:
           git push -q "$remote" "HEAD:refs/heads/$branch"
           echo "Results: branch $branch"
           tag=$(node -e 'try{console.log(require("./run.json").tag||"")}catch{console.log("")}')
-          if { [ "$GITHUB_EVENT_NAME" = schedule ] || [ "$GITHUB_EVENT_NAME" = workflow_run ]; } && [ -n "$tag" ]; then
+          # Mark a release audited only after a genuinely finished audit: the explore job succeeded,
+          # audit.json has a log URL and no failure outcome. The dispatcher's own run is recognised
+          # by the bot actor (users cannot spoof it) plus full/live mode, never by the nonce alone.
+          finished=$(node -e 'try{const a=require("./audit.json");console.log(a.url&&!a.outcome?"yes":"no")}catch{console.log("no")}')
+          auto=no
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$AUTO_NONCE" = auto ] && [ "$AUTO_ACTOR" = 'github-actions[bot]' ] && [ "$AUTO_MODE" = full ] && [ "$AUTO_KIND" = live ]; then auto=yes; fi
+          if { [ "$GITHUB_EVENT_NAME" = schedule ] || [ "$GITHUB_EVENT_NAME" = workflow_run ] || [ "$auto" = yes ]; } && [ "$EXPLORE_RESULT" = success ] && [ "$finished" = yes ] && [ -n "$tag" ]; then
             git push -q "$remote" "HEAD:refs/heads/explorer/tested/$tag"
           fi
           git ls-remote --heads "$remote" 'explorer/run-*' | awk '{print $2}' | sed 's#refs/heads/##' \
