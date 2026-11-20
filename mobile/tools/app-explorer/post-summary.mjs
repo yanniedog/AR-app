@@ -20,7 +20,7 @@ if ((audit.kind || /audit|full/.test(run.mode || '')) && !audit.url) out.push(`A
 {
   const repo = process.env.GITHUB_REPOSITORY || 'yanniedog/AR-app';
   const raw = f => `https://github.com/${repo}/blob/explorer/run-${runId}/${f}?raw=true`;
-  const files = ['logcat.txt', 'report.md', 'audit.json'].filter(f => fs.existsSync(path.join(dir, f)));
+  const files = ['logcat.txt', 'report.md', 'audit.json', 'ux-review.md'].filter(f => fs.existsSync(path.join(dir, f)));
   if (files.length) out.push(`Run files: ${files.map(f => `[${f}](${raw(f)})`).join(' | ')}`, '');
 }
 
@@ -34,6 +34,9 @@ if (shots.results) {
   const sheets = (shots.sheets || []).map(n => `[${n}](${base}/contact-${n}.jpg?raw=true)`);
   out.push('', sheets.length ? `Contact sheets: ${sheets.join(' | ')}` : 'No screenshots captured', '');
 }
+
+const ux = json('ux-review.json');
+if (ux.summaryLines) out.push(...ux.summaryLines, '');
 
 let decoded = null;
 try {
