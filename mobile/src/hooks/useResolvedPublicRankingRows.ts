@@ -171,7 +171,7 @@ export function useResolvedPublicRankingRows(options: {
   };
   const [storedSnapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [leadingSnapshot, setLeadingSnapshot] = useState<{ request: typeof request; attempt: number; key: string;
-    scope: typeof EMPTY_MORTGAGE } | null>(null);
+    until: number; scope: typeof EMPTY_MORTGAGE } | null>(null);
   const completed = useRef<{ key: string; request: typeof request; catalogue: PublicCatalogueView;
     from: number; until: number; snapshot: Snapshot }[]>([]);
   const requestKey = JSON.stringify([request.section, request.sectionScenarioKey, request.mortgageInputs,
@@ -311,8 +311,9 @@ export function useResolvedPublicRankingRows(options: {
             const early = await mortgageComparisonRowsCooperatively(prefix, req.mortgageInputs, req.mortgageContext, control);
             if (cancelled || flightRef.current !== flight) return;
             if (requestRef.current !== req) { stats.restarts++; continue; }
+            if (Date.now() >= validity.until()) { stats.restarts++; setLeadingSnapshot(null); continue; }
             if (early && !control.cancelled() && !early.invalid) {
-              setLeadingSnapshot({ request: req, attempt, key: leadingScopeKey(leading), scope: early });
+              setLeadingSnapshot({ request: req, attempt, key: leadingScopeKey(leading), until: validity.until(), scope: early });
             }
           }
           setProgress({ request: req, attempt, stage: 'scope' });
@@ -323,7 +324,7 @@ export function useResolvedPublicRankingRows(options: {
           if (cancelled || flightRef.current !== flight) return;
           if (requestRef.current !== req) { stats.restarts++; continue; }
           if (!mortgage || control.cancelled()) return;
-          if (Date.now() >= validity.until()) { stats.restarts++; continue; }
+          if (Date.now() >= validity.until()) { stats.restarts++; setLeadingSnapshot(null); continue; }
           clock.current.until = validity.until();
           finished = true;
           const value = { request: req, attempt, candidates, resolution, mortgage, error: null };
@@ -404,9 +405,10 @@ export function useResolvedPublicRankingRows(options: {
     candidates: synchronous?.candidates ?? (current ? snapshot!.candidates : []),
     resolution: synchronous?.resolution ?? (current ? snapshot!.resolution : EMPTY_RESOLUTION),
     mortgageScope: synchronous?.mortgage ?? (current ? snapshot!.mortgage : EMPTY_MORTGAGE),
-    /** Verified prefix of the ranked scope, only while the full pass is still running. */
-    leadingScope: !ready && leadingSnapshot?.request === request && leadingSnapshot.attempt === attempt
-      && leadingSnapshot.key === leadingScopeKey(leadingScope) ? leadingSnapshot.scope : null,
+    /** Verified prefix of the ranked scope. It outlives the full pass so the caller can keep
+     * showing it until its own result preparation lands; it never outlives its pricing validity. */
+    leadingScope: leadingSnapshot?.request === request && leadingSnapshot.attempt === attempt
+      && leadingSnapshot.key === leadingScopeKey(leadingScope) && observedAt < leadingSnapshot.until ? leadingSnapshot.scope : null,
     ready,
     error: current ? snapshot!.error : null,
     retry: () => setAttempt(value => value + 1),

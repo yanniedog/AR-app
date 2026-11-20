@@ -426,10 +426,11 @@ export default function RatesWorkspace() {
   // Default rate ranking: scope the leading rows first so page one can paint
   // before the whole book has been scoped. Anything else waits for the full pass.
   const leadingScope = useMemo((): LeadingScopeRequest | null => section === 'Mortgage' && sortKey === 'rate' && task.page === 1
-    && !path.length && !hierarchyScoped
+    && !path.length && !hierarchyScoped && !query.trim() && !filters.factCriteria.length && !hasMandatoryRequirements()
     ? { limit: Math.max(LEADING_SCOPE_MIN_ROWS, normalizeRatesPageSize(prefs.ratesPageSize) * LEADING_SCOPE_PAGES),
       sortKey: 'rate', metric: depositRankMetric, mortgageMetric: mortgageRateMetric } : null,
-  [section, sortKey, task.page, path.length, hierarchyScoped, prefs.ratesPageSize, depositRankMetric, mortgageRateMetric]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [section, sortKey, task.page, path.length, hierarchyScoped, query, filters.factCriteria.length, suitabilityRevision, prefs.ratesPageSize, depositRankMetric, mortgageRateMetric]);
   const cooperativePricing = useResolvedPublicRankingRows({
     sourceRows: task.intentError || !pricingActive || indexedPricing ? EMPTY_RATE_ROWS : sourceRates,
     // Empty sourceRows alone still expands catalogue offers. Pass an explicit
@@ -647,13 +648,13 @@ export default function RatesWorkspace() {
   // equals the final first page once the prefix holds a full page of matches.
   const leadingPage = useMemo(() => {
     const scope = cooperativePricing.leadingScope;
-    if (!scope || !leadingScope || publicPricing.ready || indexedPricing || section !== 'Mortgage' || availability !== 'listed' || task.intentError
-      || debouncedQuery.trim() || resultFilters.factCriteria.length || task.page !== 1 || !(mortgageCriteriaReady || isDefaultMortgageBrowse)
+    if (!scope || !leadingScope || indexedPricing || section !== 'Mortgage' || availability !== 'listed' || task.intentError
+      || query.trim() || debouncedQuery.trim() || resultFilters.factCriteria.length || task.page !== 1 || !(mortgageCriteriaReady || isDefaultMortgageBrowse)
       || hasMandatoryRequirements()) return null;
     const ranked = filterRows(sortRows(scope.rows, 'rate', section, depositRankMetric, mortgageRateMetric), resultFilters, filterDetails, null, section);
     return ranked.length >= pageSize ? { rows: ranked.slice(0, pageSize), unverified: scope.unverifiedRows } : null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cooperativePricing.leadingScope, leadingScope, publicPricing.ready, indexedPricing, section, availability, task.intentError, debouncedQuery,
+  }, [cooperativePricing.leadingScope, leadingScope, indexedPricing, section, availability, task.intentError, query, debouncedQuery,
     resultFilters, task.page, mortgageCriteriaReady, isDefaultMortgageBrowse, depositRankMetric, mortgageRateMetric, filterDetails, pageSize, suitabilityRevision]);
   const resultRowKey = useCallback((row: ResultRow, i: number) => ratesResultRowKey(row, pagination.offset + i), [pagination.offset]);
   const catalogueOptions = useMemo(() => ({ ...EMPTY_SEARCH_FILTER_OPTIONS,

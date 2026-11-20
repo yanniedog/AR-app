@@ -557,15 +557,14 @@ describe('leading scope', () => {
   const settle = async (until: () => boolean) => {
     for (let step = 0; step < 300 && !until(); step++) await act(async () => { await jest.advanceTimersByTimeAsync(10); });
   };
-  // The first scope call is the leading prefix; hold the full pass open so each
-  // test observes the state between the two.
-  let release: (() => void) | null = null, calls = 0;
+  // Hold every full-book scope call (more rows than the prefix limit) until released.
+  let gates: (() => void)[] = [];
+  const releaseAll = () => { const open = gates; gates = []; open.forEach(resolve => resolve()); };
   beforeEach(() => {
-    renders.length = 0; release = null;
+    renders.length = 0; gates = [];
     const real = mortgageComparison.mortgageComparisonRowsCooperatively;
-    calls = 0;
     jest.spyOn(mortgageComparison, 'mortgageComparisonRowsCooperatively').mockImplementation(async (...args) => {
-      if (++calls > 1 && !release) await new Promise<void>(resolve => { release = resolve; });
+      if (args[0].length > lead.limit) await new Promise<void>(resolve => { gates.push(resolve); });
       return real(...args);
     });
   });
@@ -578,11 +577,12 @@ describe('leading scope', () => {
       const early = renders.find(value => !value.ready && value.leadingScope != null);
       expect(early).toBeDefined();
       expect(early!.work.pricingStage).toBe('scope');
-      act(() => release?.());
+      act(() => releaseAll());
       await settle(() => renders.some(value => value.ready));
       const final = renders[renders.length - 1];
       expect(final.ready).toBe(true);
-      expect(final.leadingScope).toBeNull();
+      // The prefix stays available after the full scope so the caller can keep showing it until its own results land.
+      expect(final.leadingScope).toBe(early!.leadingScope);
       expect(early!.leadingScope!.rows.length).toBeLessThanOrEqual(lead.limit);
       for (const item of early!.leadingScope!.rows) expect(final.mortgageScope.rows).toContain(item);
       const page = (rows: RateRow[]) => sortRows(rows, 'rate', 'Mortgage', 'base', 'headline').slice(0, 25);
@@ -591,25 +591,27 @@ describe('leading scope', () => {
     } finally { act(() => tree.unmount()); }
   });
 
-  test('never publishes a prefix without a request, or for a different sort or limit', async () => {
+  test('never publishes a prefix without a request, and each limit or sort change hides it on its own', async () => {
     let tree!: ReactTestRenderer; act(() => { tree = TestRenderer.create(<Probe leadingScope={null} />); });
     try {
-      await settle(() => release != null);
+      await settle(() => gates.length > 0);
       expect(renders.every(value => value.leadingScope === null)).toBe(true);
-    } finally { act(() => tree.unmount()); }
-    renders.length = 0; calls = 0; release = null; clearReusablePublicPricing();
+    } finally { act(() => { releaseAll(); tree.unmount(); }); }
+    renders.length = 0; clearReusablePublicPricing();
     act(() => { tree = TestRenderer.create(<Probe />); });
     try {
       await settle(() => renders.some(value => value.leadingScope != null));
       expect(renders[renders.length - 1].leadingScope).not.toBeNull();
-      act(() => tree.update(<Probe leadingScope={{ ...lead, sortKey: 'bank' }} />));
-      expect(renders[renders.length - 1].leadingScope).toBeNull();
       act(() => tree.update(<Probe leadingScope={{ ...lead, limit: 61 }} />));
       expect(renders[renders.length - 1].leadingScope).toBeNull();
-    } finally { act(() => tree.unmount()); }
+      act(() => tree.update(<Probe />));
+      expect(renders[renders.length - 1].leadingScope).not.toBeNull();
+      act(() => tree.update(<Probe leadingScope={{ ...lead, sortKey: 'bank' }} />));
+      expect(renders[renders.length - 1].leadingScope).toBeNull();
+    } finally { act(() => { releaseAll(); tree.unmount(); }); }
   });
 
-  test('an input change discards the earlier prefix and the new request publishes its own', async () => {
+  test('an input change discards the earlier prefix and the new request publishes its own before its full pass', async () => {
     let tree!: ReactTestRenderer; act(() => { tree = TestRenderer.create(<Probe />); });
     try {
       await settle(() => renders.some(value => value.leadingScope != null));
@@ -617,12 +619,40 @@ describe('leading scope', () => {
       expect(stale).not.toBeNull();
       act(() => tree.update(<Probe lvr="50" />));
       expect(renders[renders.length - 1].leadingScope).toBeNull();
-      act(() => release?.());
+      // Let the superseded full pass end; the new request then runs its own prefix first and holds its own full pass.
+      act(() => releaseAll());
+      await settle(() => renders[renders.length - 1].leadingScope != null && gates.length > 0);
+      const fresh = renders[renders.length - 1];
+      expect(fresh.ready).toBe(false);
+      expect(fresh.leadingScope).not.toBe(stale);
+      expect(fresh.leadingScope!.rows.every(item => item.lvr_tier === 'lvr_0-60%')).toBe(true);
+      act(() => releaseAll());
       await settle(() => renders[renders.length - 1].ready);
       const final = renders[renders.length - 1];
-      expect(final.ready).toBe(true);
       expect(final.mortgageScope.rows).toHaveLength(source.length / 2);
       expect(final.mortgageScope.rows.every(item => item.lvr_tier === 'lvr_0-60%')).toBe(true);
-    } finally { act(() => tree.unmount()); }
+    } finally { act(() => { releaseAll(); tree.unmount(); }); }
+  });
+
+  test('a prefix is dropped when its pricing validity ends before the full pass', async () => {
+    const expiry = Date.parse(AS_OF) + 2000;
+    const timed = catalogue([programme({ effectiveTo: new Date(expiry).toISOString() })]);
+    const timedSource = source.map(item => ({ ...item, product_key: row.product_key }));
+    let latest!: ReturnType<typeof useResolvedPublicRankingRows>;
+    function Timed() {
+      const inputs = React.useMemo(() => ({ loanAmount: '', lvr: '70' }), []);
+      latest = useResolvedPublicRankingRows({ candidates: timedSource, catalogue: timed, section: 'Mortgage', sectionScenario: scenario,
+        mortgageContext: context, mortgageInputs: inputs, applyMortgageScope: true, leadingScope: lead,
+        rowScenario: () => scenario, resolutionContextKey: '{}', focused: true, interactive: true, revision: 1 });
+      return null;
+    }
+    let tree!: ReactTestRenderer; act(() => { tree = TestRenderer.create(<Timed />); });
+    try {
+      await settle(() => latest.leadingScope != null);
+      expect(latest.leadingScope).not.toBeNull();
+      act(() => { jest.setSystemTime(expiry); });
+      act(() => tree.update(<Timed />));
+      expect(latest.leadingScope).toBeNull();
+    } finally { act(() => { releaseAll(); tree.unmount(); }); }
   });
 });
