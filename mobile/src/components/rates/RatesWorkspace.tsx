@@ -821,8 +821,8 @@ export default function RatesWorkspace() {
   const searchPending = intentPending || (availability === 'unlisted' ? !catalogueDetails
     : section === 'Mortgage' && !mortgageCriteriaReady && !isDefaultMortgageBrowse ? false
     : detailFiltersPending || searchIndexLoading || !publicPricing.ready || !preparedResults.ready);
-  useEffect(() => { if (preparedResults.ready) bootMark('rows-prepared'); }, [preparedResults.ready]);
-  useEffect(() => { if (publicPricing.ready) bootMark('pricing-ready'); }, [publicPricing.ready]);
+  useEffect(() => { if (core != null && preparedResults.ready) bootMark('rows-prepared'); }, [core, preparedResults.ready]);
+  useEffect(() => { if (core != null && publicPricing.ready) bootMark('pricing-ready'); }, [core, publicPricing.ready]);
   const ratesSettled = core != null && !searchPending;
   useEffect(() => { if (ratesSettled) bootMark('rates-ready'); }, [ratesSettled]);
   const presented = useRef<{ rows: typeof pageRows; section: SectionKey; availability: RateAvailability;
