@@ -136,7 +136,7 @@ export const UI_LABELS = [
   'Quarter', 'quarters', 'Locked', 'Data unavailable', 'Try again', 'Device lock required',
   'Network error', 'Timed out', 'Server error', 'Publishing pending', 'App update required', 'Last attempt',
   'Device settings', 'Confirm app lock', 'Confirm unlock', 'Preparing', 'Uploading',
-  'Verifying', 'Copying', 'Copy link', 'Retry verification', 'Upload another copy', 'Retry upload',
+  'Verifying', 'Copying', 'Copy link', 'Copy paste.rs link', 'Copy paste.c-net.org link', 'Retry verification', 'Upload another copy', 'Retry upload',
   'Add my rate', 'Add scenario', 'Amount added to offset', 'App health audit', 'Approximate',
   'Approximate history', 'Assumptions', 'Australian Rates', 'Balance at term end', 'Basis / fees',
   'Blocked', 'Bond-market forward rates', 'Bonus period', 'Bonus period remaining',
