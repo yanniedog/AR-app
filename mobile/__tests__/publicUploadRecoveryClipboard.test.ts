@@ -111,3 +111,20 @@ it('Clear forgets a completed public report retry and suppresses a late verified
   expect(modules.log.uploadDebugLog).toHaveBeenCalledTimes(1);
   expect(modules.log.verifyDebugLogUpload).not.toHaveBeenCalled();
 });
+
+it('copies the paste.rs link or the paste.c-net.org link on request without re-uploading', async () => {
+  const { log, sharing, delivery, clipboard } = reload();
+  const share = 'https://paste.rs/short';
+  jest.mocked(log.uploadDebugLog).mockResolvedValue({ ...result, shareUrl: share });
+  jest.mocked(log.saveDebugLogUploadReceipt).mockImplementation(async (value, createdAt, hash) => ({ ...result, ...value, schemaVersion: 1,
+    createdAt: createdAt ?? new Date().toISOString(), contentSha256: hash }));
+  await delivery.uploadCompletedPerformanceAudit(report);
+  expect(sharing.getDebugLogUploadSnapshot()).toMatchObject({ verified: true, url: share, shareUrl: share, contentUrl: result.url });
+  await sharing.copyDebugLogUploadLink('share');
+  expect(clipboard.setStringAsync).toHaveBeenLastCalledWith(share);
+  await sharing.copyDebugLogUploadLink('content');
+  expect(clipboard.setStringAsync).toHaveBeenLastCalledWith(result.url);
+  expect(sharing.getDebugLogUploadSnapshot()).toMatchObject({ phase: 'copied', verified: true });
+  expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
+  expect(log.verifyDebugLogUpload).toHaveBeenCalledTimes(1);
+});
