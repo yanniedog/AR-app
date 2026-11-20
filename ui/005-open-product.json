@@ -1,0 +1,230 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Basic Home Loan Variable LVR 70-80%",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Bank First",
+  "at": [
+   72,
+   361
+  ]
+ },
+ {
+  "label": "Basic Home Loan Variable LVR 70-80%",
+  "at": [
+   414,
+   293
+  ]
+ },
+ {
+  "label": "Bank First",
+  "flags": "tap",
+  "at": [
+   201,
+   389
+  ]
+ },
+ {
+  "label": "Bank First",
+  "at": [
+   201,
+   361
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   414,
+   457
+  ]
+ },
+ {
+  "label": "Comparison rate",
+  "at": [
+   360,
+   577
+  ]
+ },
+ {
+  "label": "6.39%",
+  "at": [
+   360,
+   645
+  ]
+ },
+ {
+  "label": "6.34% Advertised rate",
+  "at": [
+   360,
+   713
+  ]
+ },
+ {
+  "label": "Advertised ↑ 25 bps · 17 Oct 2026 · 6.09% → 6.34%",
+  "at": [
+   360,
+   777
+  ]
+ },
+ {
+  "label": "Source date 15 Oct 2026",
+  "at": [
+   360,
+   837
+  ]
+ },
+ {
+  "label": "Save",
+  "flags": "tap",
+  "at": [
+   190,
+   987
+  ]
+ },
+ {
+  "label": "Save",
+  "at": [
+   217,
+   988
+  ]
+ },
+ {
+  "label": "Calculate",
+  "flags": "tap",
+  "at": [
+   530,
+   987
+  ]
+ },
+ {
+  "label": "Calculate",
+  "at": [
+   531,
+   987
+  ]
+ },
+ {
+  "label": "Hide Rate details",
+  "flags": "tap",
+  "at": [
+   360,
+   1213
+  ]
+ },
+ {
+  "label": "Rate details",
+  "at": [
+   328,
+   1213
+  ]
+ },
+ {
+  "label": "Rate type",
+  "at": [
+   297,
+   1313
+  ]
+ },
+ {
+  "label": "Variable",
+  "at": [
+   637,
+   1313
+  ]
+ },
+ {
+  "label": "Term",
+  "at": [
+   291,
+   1365
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   1365
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

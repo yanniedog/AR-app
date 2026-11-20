@@ -1,0 +1,34 @@
+{
+  "kind": "live",
+  "url": "https://paste.c-net.org/5d169676-0cdc-2340-c7f8-a5a367d98ed1",
+  "outcome": null,
+  "elapsedMs": 1009694,
+  "visibleOutcome": [
+    "Navigate up",
+    "App health audit",
+    "Account",
+    "https://paste.c-net.org/5d169676-0cdc-2340-c7f8-a5a367d98ed1",
+    "Copy link",
+    "Copy link",
+    "Audit history",
+    "Retained runs",
+    "1 / 120",
+    "Live checks",
+    "Live checks",
+    "Performance",
+    "Performance",
+    "UX & fluidity",
+    "UX & fluidity",
+    "Coverage",
+    "Coverage",
+    "Failures",
+    "Failures",
+    "Check completion"
+  ],
+  "logStatus": 200,
+  "logContentUrl": "https://paste.c-net.org/5d169676-0cdc-2340-c7f8-a5a367d98ed1",
+  "logBytes": 838746,
+  "debugLog": {
+    "error": "Upload and copy link not found"
+  }
+}
