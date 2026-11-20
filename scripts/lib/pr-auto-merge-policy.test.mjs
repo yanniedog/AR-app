@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decidePullRequest, isBaseSyncCommit, decideReleaseCatchUp, isReleasePath, needsBranchUpdate, RELEASE_SETTLE_MS } from './pr-auto-merge-policy.mjs';
+import { decideExploreDispatch, decidePullRequest, isBaseSyncCommit, decideReleaseCatchUp, isReleasePath, needsBranchUpdate, RELEASE_SETTLE_MS } from './pr-auto-merge-policy.mjs';
 
 const ctx = (commitAuthors = ['yanniedog', 'claude']) => ({ owner: 'yanniedog', repo: 'yanniedog/AR-app',
   trustedAuthors: ['yanniedog', 'claude'], commitAuthors });
@@ -59,4 +59,12 @@ test('only genuine update-branch merges from main are recognised as sync commits
   assert.equal(isBaseSyncCommit({ ...sync, parentCount: 1 }), false);
   assert.equal(isBaseSyncCommit({ ...sync, message: 'Add feature' }), false);
   assert.equal(isBaseSyncCommit({ ...sync, authorLogin: 'someone-else' }), false);
+});
+
+test('the explorer audit starts once per untested published release', () => {
+  const base = { tag: 'app-v1', tested: false, inFlight: false };
+  assert.equal(decideExploreDispatch(base).dispatch, true);
+  assert.equal(decideExploreDispatch({ ...base, tag: '' }).dispatch, false);
+  assert.equal(decideExploreDispatch({ ...base, tested: true }).dispatch, false);
+  assert.equal(decideExploreDispatch({ ...base, inFlight: true }).dispatch, false);
 });

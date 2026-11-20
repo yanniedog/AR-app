@@ -40,7 +40,7 @@ on:
     # Cheap check every 30 min: runs the full crawl + audit once per new app-v release.
     - cron: '7,37 * * * *'
   workflow_run:
-    # Starts the full crawl + audit as soon as a release run finishes publishing an APK.
+    # Does not fire for token-dispatched release runs; pr-auto-merge.yml dispatches the audit (nonce auto) instead.
     workflows: [mobile-android-apk]
     types: [completed]
   pull_request:
@@ -185,6 +185,7 @@ jobs:
       - name: Push results branch and prune old ones
         env:
           GH_TOKEN: ${{ github.token }}
+          AUTO_NONCE: ${{ inputs.nonce }}
         run: |
           set -euo pipefail
           remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
@@ -198,7 +199,7 @@ jobs:
           git push -q "$remote" "HEAD:refs/heads/$branch"
           echo "Results: branch $branch"
           tag=$(node -e 'try{console.log(require("./run.json").tag||"")}catch{console.log("")}')
-          if { [ "$GITHUB_EVENT_NAME" = schedule ] || [ "$GITHUB_EVENT_NAME" = workflow_run ]; } && [ -n "$tag" ]; then
+          if { [ "$GITHUB_EVENT_NAME" = schedule ] || [ "$GITHUB_EVENT_NAME" = workflow_run ] || [ "$AUTO_NONCE" = auto ]; } && [ -n "$tag" ]; then
             git push -q "$remote" "HEAD:refs/heads/explorer/tested/$tag"
           fi
           git ls-remote --heads "$remote" 'explorer/run-*' | awk '{print $2}' | sed 's#refs/heads/##' \
