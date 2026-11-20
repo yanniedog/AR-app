@@ -105,7 +105,7 @@ export const UI_LABELS = [
   'Show', 'Hide', 'Expand', 'Collapse', 'More', 'Less', 'Ascending', 'Descending',
   'Newest', 'Oldest', 'Name', 'Date', 'Version', 'Build', 'Update', 'Install',
   'Download', 'Downloaded', 'Download failed', 'Update available', 'Up to date',
-  'Pause', 'Resume', 'Stop', 'Start', 'Local audit', 'Live audit', 'Public upload', 'Next audit upload', 'Next destination', 'Audit', 'Performance audit',
+  'Pause', 'Resume', 'Elapsed', 'Stop', 'Start', 'Local audit', 'Live audit', 'Public upload', 'Next audit upload', 'Next destination', 'Audit', 'Performance audit',
   'HTTP verified', 'HTTP failed', 'HTTP unresolved', 'HTTP timeouts', 'HTTP restrictions', 'HTTP redirects', 'Rejected addresses', 'HTTP attempts / destinations', 'HTTP not attempted', 'HTTP attempt evidence missing', 'Unverified links',
   'Debug log', 'Report', 'Upload', 'Upload report', 'Uploaded', 'Upload failed', 'Upload status', 'Clear cache',
   'Reset app', 'Delete local data', 'Data deleted', 'Authentication required', 'Unlock',

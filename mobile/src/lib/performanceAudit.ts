@@ -632,9 +632,13 @@ function pauseTrackingApplies(): boolean {
   return auditState.status === 'queued' || auditState.status === 'running';
 }
 
-export function pausePerformanceAudit(): void {
+/** A pause the user chose stays until the user resumes it; foreground returns only clear system pauses. */
+let manualPause = false;
+
+export function pausePerformanceAudit(source: 'manual' | 'system' = 'manual'): void {
   if (!pauseTrackingApplies()) return;
   if (auditState.paused || auditState.cancelRequested) return;
+  manualPause = source === 'manual';
   pauseCount += 1;
   markAuditEntryInterrupted();
   emit({ ...auditState, paused: true });
@@ -645,13 +649,16 @@ export function getPerformanceAuditPauseCount(): number {
   return pauseCount;
 }
 
-export function resumePerformanceAudit(): void {
+export function resumePerformanceAudit(source: 'manual' | 'system' = 'manual'): void {
   if (!auditState.paused) return;
+  if (source === 'system' && manualPause) return;
+  manualPause = false;
   emit({ ...auditState, paused: false });
 }
 
 export function cancelPerformanceAudit(): void {
   if (auditState.status !== 'queued' && auditState.status !== 'running') return;
+  manualPause = false;
   emit({
     ...auditState,
     cancelRequested: true,
