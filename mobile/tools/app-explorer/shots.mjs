@@ -30,7 +30,15 @@ const results = [];
 fs.mkdirSync(path.join(out, 'thumbs'), { recursive: true });
 for (const s of manifest) {
   const step = report.steps.find(st => st.name === s.name);
+  const nav = report.steps.find(st => st.name === `${s.name}-open`);
   const r = { name: s.name, why: s.why, flags: [] };
+  // Failures while opening the route count against the shot even if a later step looks healthy.
+  if (nav) {
+    if (!nav.alive) r.flags.push('app died opening route');
+    if (nav.error) r.flags.push(`open error: ${nav.error.slice(0, 80)}`);
+    if (nav.settleTimedOut) r.flags.push('open never settled');
+    if (nav.log?.errors?.length) r.flags.push(`${nav.log.errors.length} log errors opening`);
+  }
   if (!step) r.flags.push('not captured');
   else {
     if (!step.alive) r.flags.push('app dead');
@@ -44,8 +52,10 @@ for (const s of manifest) {
     if (fs.existsSync(png)) {
       const sd = parseFloat(im('convert', [png, '-colorspace', 'Gray', '-format', '%[fx:standard_deviation]', 'info:']));
       if (!Number.isNaN(sd) && sd < 0.03) r.flags.push(`near blank (sd ${sd.toFixed(3)})`);
-      im('convert', [png, '-resize', '240x', '-quality', '55', path.join(out, 'thumbs', `${s.name}.jpg`)]);
-      r.thumb = true;
+      const thumb = path.join(out, 'thumbs', `${s.name}.jpg`);
+      im('convert', [png, '-resize', '240x', '-quality', '55', thumb]);
+      if (fs.existsSync(thumb)) r.thumb = true;
+      else { r.flags.push('thumbnail failed'); r.keepPng = true; }
     }
   }
   results.push(r);
@@ -57,6 +67,6 @@ for (const [i, chunk] of [results.slice(0, 10), results.slice(10, 20)].entries()
   if (fs.existsSync(path.join(out, `contact-${i + 1}.jpg`))) sheets.push(i + 1);
 }
 // Full-size PNGs stay out of the results branch; thumbnails and sheets are enough.
-fs.rmSync(path.join(out, 'screens'), { recursive: true, force: true });
+if (results.every(r => r.thumb || !r.keepPng)) fs.rmSync(path.join(out, 'screens'), { recursive: true, force: true });
 fs.writeFileSync(path.join(out, 'shots-result.json'), JSON.stringify({ count: results.filter(r => r.thumb).length, flagged: results.filter(r => r.flags.length).length, sheets, results }, null, 1));
 console.log(`shots: ${results.filter(r => r.thumb).length} captured, ${results.filter(r => r.flags.length).length} flagged`);
