@@ -23,7 +23,8 @@ if (shots.results) {
   const base = `https://github.com/${repo}/blob/explorer/run-${runId}/shots`;
   out.push(`Screens: ${shots.count} captured | ${shots.flagged} flagged`, '');
   for (const r of shots.results.filter(x => x.flags.length)) out.push(`- ${r.name}: ${r.flags.join('; ')}`);
-  out.push('', `Contact sheets: [1](${base}/contact-1.jpg?raw=true) | [2](${base}/contact-2.jpg?raw=true)`, '');
+  const sheets = (shots.sheets || []).map(n => `[${n}](${base}/contact-${n}.jpg?raw=true)`);
+  out.push('', sheets.length ? `Contact sheets: ${sheets.join(' | ')}` : 'No screenshots captured', '');
 }
 
 let decoded = null;

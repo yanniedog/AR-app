@@ -102,16 +102,16 @@
   "why": "profile"
  },
  {
-  "name": "audit-screen",
-  "open": "/performance-audit",
+  "name": "terms",
+  "open": "/terms",
   "scroll": 0,
-  "why": "audit screen"
+  "why": "terms"
  },
  {
-  "name": "debug-log",
-  "open": "/debug-log",
+  "name": "third-party",
+  "open": "/third-party-notices",
   "scroll": 0,
-  "why": "debug log"
+  "why": "third-party notices"
  },
  {
   "name": "catalogue",

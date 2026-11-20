@@ -50,11 +50,13 @@ for (const s of manifest) {
   }
   results.push(r);
 }
+const sheets = [];
 for (const [i, chunk] of [results.slice(0, 10), results.slice(10, 20)].entries()) {
   const files = chunk.filter(r => r.thumb).flatMap(r => ['-label', `${r.name}${r.flags.length ? ' !' : ''}`, path.join(out, 'thumbs', `${r.name}.jpg`)]);
   if (files.length) im('montage', [...files, '-tile', '5x2', '-geometry', '240x+4+4', '-pointsize', '14', '-quality', '60', path.join(out, `contact-${i + 1}.jpg`)]);
+  if (fs.existsSync(path.join(out, `contact-${i + 1}.jpg`))) sheets.push(i + 1);
 }
 // Full-size PNGs stay out of the results branch; thumbnails and sheets are enough.
 fs.rmSync(path.join(out, 'screens'), { recursive: true, force: true });
-fs.writeFileSync(path.join(out, 'shots-result.json'), JSON.stringify({ count: results.filter(r => r.thumb).length, flagged: results.filter(r => r.flags.length).length, results }, null, 1));
+fs.writeFileSync(path.join(out, 'shots-result.json'), JSON.stringify({ count: results.filter(r => r.thumb).length, flagged: results.filter(r => r.flags.length).length, sheets, results }, null, 1));
 console.log(`shots: ${results.filter(r => r.thumb).length} captured, ${results.filter(r => r.flags.length).length} flagged`);
