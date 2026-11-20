@@ -69,6 +69,15 @@ describe('bounded audit evidence', () => {
       .toMatchObject({ metrics: { httpAttempted: true, httpIssue: 'timeout' } });
   });
 
+  it('names the destination of a failing link checkpoint only', () => {
+    const metrics = { httpAttempted: true, statusCode: 404, host: 'example.com.au', destinationPath: '/rates' };
+    expect(compactAuditCheckCheckpoint({ id: 'external-link-2', label: 'Link', kind: 'network',
+      status: 'fail', durationMs: 12, metrics })).toMatchObject({ metrics: { host: 'example.com.au', destinationPath: '/rates' } });
+    const warn = compactAuditCheckCheckpoint({ id: 'external-link-3', label: 'Link', kind: 'network',
+      status: 'warn', durationMs: 12, metrics }) as { metrics?: Record<string, unknown> };
+    expect(warn.metrics?.host).toBeUndefined();
+  });
+
   it('references long canonical metrics without truncating their duplicate journal copy', () => {
     const check = { id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 500,
       metrics: { renderRevisionBefore: 'r'.repeat(3000), readinessEvidence: 'p'.repeat(4000), maxFrameGapMs: 350 },

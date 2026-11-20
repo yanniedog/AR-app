@@ -211,6 +211,12 @@ export function compactAuditCheckCheckpoint(check: Parameters<typeof compactAudi
       'statusCode', 'handlerAttempted', 'httpAttempted', 'httpSelected', 'handlerResolution', 'httpIssue']) {
       if (check.metrics[key] != null) metrics[key] = check.metrics[key];
     }
+    // A failing link must name its destination so the log alone identifies it.
+    if (check.status === 'fail') {
+      for (const key of ['host', 'destinationPath']) {
+        if (typeof check.metrics[key] === 'string') metrics[key] = check.metrics[key];
+      }
+    }
     const checkpoint = compactAuditCheckForLog({ ...check, metrics });
     // Thousands of repeated destination labels, paths and description fields
     // exceed the journal even when each field is individually short. The ID
