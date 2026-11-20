@@ -42,6 +42,7 @@ import {
 } from './assetState';
 import { assertNoRevisionRollback, samePayloadIdentity } from './payloadRevision';
 import { bindStagedSpread, normalizeStagedOptionalAsset, type StagedOptionalAssets } from './stagedOptionalAssets';
+import { bootMark } from '../lib/bootTrace';
 import { verifiedDetailsSha } from './detailsIdentity';
 import { classifyLoadFailure, failureMeansOffline } from './loadFailure';
 
@@ -322,6 +323,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
       };
       try {
         const rolling = await fetchManifest(undefined, onProgress);
+        bootMark('manifest');
         set({ offline: false, lastCheckedAt: new Date().toISOString() });
 
         const finalizeStarted = Date.now();
@@ -337,6 +339,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         const resolution = await resolveFinalizedManifest(rolling, {
           verifiedDated: get().manifest,
         });
+        bootMark('resolved');
         onProgress({
           phase: 'finalize',
           fileName: 'dates-index.json',
@@ -576,6 +579,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             onProgress,
           },
         );
+        bootMark('core-fetched');
         if (core.run_date !== remote.run_date) throw new Error('Core publication date mismatch');
         // Verify the entire immutable edition before advertising it. Staging
         // details by content hash keeps the installed offline edition usable if
@@ -636,6 +640,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           },
           text,
         );
+        bootMark('core-saved');
         if (!canAdopt()) return false;
         // Publish the exact asset bindings after the core commits, but before
         // exposing its values: an on-screen ensure must not race a missing sidecar.
