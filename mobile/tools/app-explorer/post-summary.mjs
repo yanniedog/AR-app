@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import { renderOutcome } from './session-verdict.mjs';
 
 const [dir, runId] = process.argv.slice(2);
 const read = f => { try { return fs.readFileSync(path.join(dir, f), 'utf8'); } catch { return ''; } };
@@ -12,8 +13,11 @@ const run = json('run.json');
 const audit = json('audit.json');
 const report = read('report.md');
 const out = [];
+const sessionVerdict = json('report.json').session;
 const auditLine = (report.match(/^\*\*Audit.*$/m) || report.match(/^Mode .*$/m) || ['no run summary'])[0];
-out.push(`explorer run ${runId} on ${run.tag || '?'} (${run.mode || '?'})`, '', auditLine, '');
+out.push(`explorer run ${runId} on ${run.tag || '?'} (${run.mode || '?'})`, '');
+if (sessionVerdict) out.push(...renderOutcome(sessionVerdict));
+out.push(auditLine, '');
 if (audit.url) out.push(`Audit log: ${audit.url}`, '');
 if (audit.logContentUrl && audit.logContentUrl !== audit.url) out.push(`Audit log (full file): ${audit.logContentUrl}`, '');
 if ((audit.kind || /audit|full/.test(run.mode || '')) && !audit.url) out.push(`Audit log: no URL${audit.outcome ? ` (outcome: ${audit.outcome})` : ''}`, '');

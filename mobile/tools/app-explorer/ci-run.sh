@@ -10,6 +10,7 @@ adb install -r -g app.apk
 args=(--mode "${MODE:-crawl}" --out explorer-out)
 if [ "${FRESH:-true}" = true ]; then args+=(--fresh); fi
 if [ -f baseline.json ]; then args+=(--baseline baseline.json); fi
+if [ -f session-baseline.json ]; then args+=(--session-baseline session-baseline.json); fi
 if [ "${MODE:-crawl}" = audit ] || [ "${MODE:-crawl}" = full ]; then args+=(--audit "${AUDIT:-live}" --audit-timeout-min 120); fi
 if [ -n "${ROUTES:-}" ]; then args+=(--routes "$ROUTES"); fi
 if [ "${MODE:-crawl}" = script ]; then
