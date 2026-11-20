@@ -247,7 +247,7 @@ export default function RbaRates() {
           </View>
         </Disclosure>
         <Disclosure title="Cash-rate history" open={historyOpen} onToggle={() => setHistoryOpen((open) => !open)}>
-          {history.length ? <RbaChart data={history} holds={core?.rba_holds} height={220} /> : <LedgerText tone="mutedInk">{uiLabel("History unavailable")}</LedgerText>}
+          <View collapsable={false}>{history.length ? <RbaChart data={history} holds={core?.rba_holds} height={220} /> : <LedgerText tone="mutedInk">{uiLabel("History unavailable")}</LedgerText>}</View>
         </Disclosure>
         <LedgerAction label="See bank responses" variant="secondary" onPress={() => router.push('/rba-response')} />
       </View>
