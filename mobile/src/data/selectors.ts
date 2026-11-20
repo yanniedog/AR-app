@@ -352,6 +352,52 @@ export function sortRows(
     .map(({ row }) => row);
 }
 
+/** The `limit` leading rows of `sortRows(rows, ...)`, returned in input order.
+ * Bounded selection with the exact comparator and tie order of the full sort,
+ * so large books can name their first page without sorting every row. */
+export function leadingSortedRowsInInputOrder(
+  rows: readonly RateRow[],
+  limit: number,
+  sortKey: SortKey,
+  section: SectionKey,
+  metric: RankMetric = 'base',
+  mortgageMetric: MortgageRateMetric = 'comparison',
+): RateRow[] {
+  const eligible = mandatoryEligibleRows(rows as RateRow[]);
+  if (limit <= 0) return [];
+  if (eligible.length <= limit) return [...eligible];
+  const lowerIsBetter = SECTIONS[section].lowerIsBetter;
+  const worse = (a: PreparedSortRow, b: PreparedSortRow) =>
+    comparePreparedRows(a, b, sortKey, section, lowerIsBetter, mortgageMetric) > 0;
+  // Max-heap on "worse": the root is the weakest of the current leaders.
+  const heap: PreparedSortRow[] = [];
+  const up = (from: number) => {
+    let at = from;
+    while (at > 0) {
+      const parent = (at - 1) >> 1;
+      if (!worse(heap[at], heap[parent])) break;
+      [heap[at], heap[parent]] = [heap[parent], heap[at]]; at = parent;
+    }
+  };
+  const down = (from: number) => {
+    let at = from;
+    for (;;) {
+      const left = at * 2 + 1, right = left + 1;
+      let top = at;
+      if (left < heap.length && worse(heap[left], heap[top])) top = left;
+      if (right < heap.length && worse(heap[right], heap[top])) top = right;
+      if (top === at) break;
+      [heap[at], heap[top]] = [heap[top], heap[at]]; at = top;
+    }
+  };
+  for (let index = 0; index < eligible.length; index++) {
+    const item = prepareSortRow(eligible[index], index, sortKey, section, metric, mortgageMetric);
+    if (heap.length < limit) { heap.push(item); up(heap.length - 1); }
+    else if (worse(heap[0], item)) { heap[0] = item; down(0); }
+  }
+  return heap.sort((a, b) => a.originalIndex - b.originalIndex).map(({ row }) => row);
+}
+
 const lenderProductCache = new WeakMap<RateRow[], WeakMap<object, Map<string, RateRow[]>>>();
 const NO_LENDER_DETAILS = {};
 

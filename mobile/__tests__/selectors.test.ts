@@ -9,6 +9,7 @@ import {
   findByKey,
   compareProviderGroupsByRate,
   groupByProvider,
+  leadingSortedRowsInInputOrder,
   normalizeSortKey,
   queryAndSort,
   rankFraction,
@@ -1095,5 +1096,31 @@ describe('selectors', () => {
     const missing: ProviderGroup = { provider: 'No Rate', rows: [], bestBySection: {} };
     expect(compareProviderGroupsByRate(withRate, missing, 'Savings')).toBeLessThan(0);
     expect(compareProviderGroupsByRate(missing, withRate, 'Savings')).toBeGreaterThan(0);
+  });
+});
+
+describe('leadingSortedRowsInInputOrder', () => {
+  // Deterministic rows with many equal rates, missing comparison rates and shared provider/name ties.
+  const book = Array.from({ length: 400 }, (_, i) => mk({
+    provider: `Bank ${i % 7}`, product_name: `Loan ${i % 5}`, product_key: `k${i}`,
+    rate: i % 11 === 0 ? 'n/a' : String(0.05 + ((i * 37) % 23) / 1000),
+    comparison_rate: i % 13 === 0 ? undefined : String(0.06 + ((i * 53) % 29) / 1000),
+  }));
+  const cases: [SortKey, RankMetric, MortgageRateMetric][] = [
+    ['rate', 'base', 'headline'], ['rate', 'base', 'comparison'], ['comparison', 'base', 'headline'], ['bank', 'base', 'headline'],
+  ];
+  test.each(cases)('names exactly the first rows of the full sort for %s/%s/%s, in input order', (sortKey, metric, mortgageMetric) => {
+    for (const limit of [1, 5, 40, 399, 400, 900]) {
+      const full = sortRows(book, sortKey, 'Mortgage', metric, mortgageMetric);
+      const leaders = leadingSortedRowsInInputOrder(book, limit, sortKey, 'Mortgage', metric, mortgageMetric);
+      const expected = new Set(full.slice(0, limit));
+      expect(new Set(leaders)).toEqual(expected);
+      expect(leaders).toEqual(book.filter(row => expected.has(row)));
+      // Sorting the leaders alone reproduces the head of the full ranking.
+      expect(sortRows(leaders, sortKey, 'Mortgage', metric, mortgageMetric)).toEqual(full.slice(0, limit));
+    }
+  });
+  test('a non-positive limit selects nothing', () => {
+    expect(leadingSortedRowsInInputOrder(book, 0, 'rate', 'Mortgage')).toEqual([]);
   });
 });

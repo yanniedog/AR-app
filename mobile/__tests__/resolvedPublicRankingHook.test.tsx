@@ -3,10 +3,12 @@ import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
-import { clearReusablePublicPricing, useResolvedPublicRankingRows } from '../src/hooks/useResolvedPublicRankingRows';
+import * as mortgageComparison from '../src/data/mortgageComparison';
+import { sortRows } from '../src/data/selectors';
+import { clearReusablePublicPricing, useResolvedPublicRankingRows, type LeadingScopeRequest } from '../src/hooks/useResolvedPublicRankingRows';
 import { AS_OF, catalogue, product, programme, row } from '../testUtils/publicRateJourney';
 import sample from '../assets/sample/core.json';
-import type { CorePayload } from '../src/types';
+import type { CorePayload, RateRow } from '../src/types';
 import type { RateConditionContext } from '../src/data/rateConditions';
 
 beforeEach(() => {
@@ -534,4 +536,93 @@ test('shard hydration retains warm programme quotes and revalidates corrected co
     expect(latest.resolution.rows.find(value => value.product_key === products[0].productKey)?.rate).toBe('0.03');
     expect(latest.work.pricingIndexHits).toBeGreaterThanOrEqual(47);
   } finally { act(() => tree.unmount()); }
+});
+
+describe('leading scope', () => {
+  const lead: LeadingScopeRequest = { limit: 60, sortKey: 'rate', metric: 'base', mortgageMetric: 'headline' };
+  const source = Array.from({ length: 3_000 }, (_, i) => ({ ...row, product_key: `k${i}`, product_name: `Loan ${i}`,
+    rate: String(0.05 + ((i * 7919) % 3000) / 100_000), lvr_tier: i % 2 ? 'lvr_60-80%' : 'lvr_0-60%' }));
+  const core = { ...sample, sections: { ...sample.sections, Mortgage: { ...sample.sections.Mortgage, rates: source } } } as unknown as CorePayload;
+  const context: RateConditionContext = { core, details: null, manifest: null, coreIntegrity: null };
+  const view = { ...catalogue(), status: 'unavailable' as const }, scenario = {};
+  const renders: ReturnType<typeof useResolvedPublicRankingRows>[] = [];
+  function Probe({ leadingScope = lead, lvr = '70' }: { leadingScope?: LeadingScopeRequest | null; lvr?: string }) {
+    const inputs = React.useMemo(() => ({ loanAmount: '', lvr }), [lvr]);
+    const value = useResolvedPublicRankingRows({ sourceRows: source, catalogue: view, section: 'Mortgage', sectionScenario: scenario,
+      mortgageContext: context, mortgageInputs: inputs, applyMortgageScope: true, leadingScope,
+      rowScenario: () => scenario, resolutionContextKey: '{}', focused: true, interactive: true, revision: 1 });
+    renders.push(value);
+    return null;
+  }
+  const settle = async (until: () => boolean) => {
+    for (let step = 0; step < 300 && !until(); step++) await act(async () => { await jest.advanceTimersByTimeAsync(10); });
+  };
+  // The first scope call is the leading prefix; hold the full pass open so each
+  // test observes the state between the two.
+  let release: (() => void) | null = null, calls = 0;
+  beforeEach(() => {
+    renders.length = 0; release = null;
+    const real = mortgageComparison.mortgageComparisonRowsCooperatively;
+    calls = 0;
+    jest.spyOn(mortgageComparison, 'mortgageComparisonRowsCooperatively').mockImplementation(async (...args) => {
+      if (++calls > 1 && !release) await new Promise<void>(resolve => { release = resolve; });
+      return real(...args);
+    });
+  });
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  test('publishes a verified ranked prefix before the full scope, then the full scope keeps the same leaders', async () => {
+    let tree!: ReactTestRenderer; act(() => { tree = TestRenderer.create(<Probe />); });
+    try {
+      await settle(() => renders.some(value => value.leadingScope != null));
+      const early = renders.find(value => !value.ready && value.leadingScope != null);
+      expect(early).toBeDefined();
+      expect(early!.work.pricingStage).toBe('scope');
+      act(() => release?.());
+      await settle(() => renders.some(value => value.ready));
+      const final = renders[renders.length - 1];
+      expect(final.ready).toBe(true);
+      expect(final.leadingScope).toBeNull();
+      expect(early!.leadingScope!.rows.length).toBeLessThanOrEqual(lead.limit);
+      for (const item of early!.leadingScope!.rows) expect(final.mortgageScope.rows).toContain(item);
+      const page = (rows: RateRow[]) => sortRows(rows, 'rate', 'Mortgage', 'base', 'headline').slice(0, 25);
+      expect(page(early!.leadingScope!.rows)).toEqual(page(final.mortgageScope.rows));
+      expect(final.mortgageScope.rows).toHaveLength(source.length / 2);
+    } finally { act(() => tree.unmount()); }
+  });
+
+  test('never publishes a prefix without a request, or for a different sort or limit', async () => {
+    let tree!: ReactTestRenderer; act(() => { tree = TestRenderer.create(<Probe leadingScope={null} />); });
+    try {
+      await settle(() => release != null);
+      expect(renders.every(value => value.leadingScope === null)).toBe(true);
+    } finally { act(() => tree.unmount()); }
+    renders.length = 0; calls = 0; release = null; clearReusablePublicPricing();
+    act(() => { tree = TestRenderer.create(<Probe />); });
+    try {
+      await settle(() => renders.some(value => value.leadingScope != null));
+      expect(renders[renders.length - 1].leadingScope).not.toBeNull();
+      act(() => tree.update(<Probe leadingScope={{ ...lead, sortKey: 'bank' }} />));
+      expect(renders[renders.length - 1].leadingScope).toBeNull();
+      act(() => tree.update(<Probe leadingScope={{ ...lead, limit: 61 }} />));
+      expect(renders[renders.length - 1].leadingScope).toBeNull();
+    } finally { act(() => tree.unmount()); }
+  });
+
+  test('an input change discards the earlier prefix and the new request publishes its own', async () => {
+    let tree!: ReactTestRenderer; act(() => { tree = TestRenderer.create(<Probe />); });
+    try {
+      await settle(() => renders.some(value => value.leadingScope != null));
+      const stale = renders[renders.length - 1].leadingScope;
+      expect(stale).not.toBeNull();
+      act(() => tree.update(<Probe lvr="50" />));
+      expect(renders[renders.length - 1].leadingScope).toBeNull();
+      act(() => release?.());
+      await settle(() => renders[renders.length - 1].ready);
+      const final = renders[renders.length - 1];
+      expect(final.ready).toBe(true);
+      expect(final.mortgageScope.rows).toHaveLength(source.length / 2);
+      expect(final.mortgageScope.rows.every(item => item.lvr_tier === 'lvr_0-60%')).toBe(true);
+    } finally { act(() => tree.unmount()); }
+  });
 });

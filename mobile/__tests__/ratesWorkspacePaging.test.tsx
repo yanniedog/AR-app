@@ -6,6 +6,7 @@ import TestRenderer, { act } from 'react-test-renderer';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import { EMPTY_FILTERS } from '../src/data/selectors';
 import { captureRatesSession, restoreRatesSession, initializeRatesSession, updateRatesSection, recordRatesScroll, useRatesSession } from '../src/data/ratesSession';
+import * as mortgageComparisonModule from '../src/data/mortgageComparison';
 import { clearMortgageComparison, setMortgageComparisonInputs, useMortgageComparison } from '../src/data/mortgageComparison';
 
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
@@ -1124,6 +1125,76 @@ test('loaded legacy mortgage edits settle in the same render without reloading d
     expect(list().data.length).toBeGreaterThan(0);
     expect(list().data.every((row: any) => row.rate === '0.03')).toBe(true); expect(updating()).toBe(false);
   } finally { act(() => tree.unmount()); jest.useRealTimers(); }
+});
+
+test('a large cold mortgage book paints a verified first page before the full scope, then settles on the same rows', async () => {
+  jest.useFakeTimers();
+  const loaded = Array.from({ length: 900 }, (_, i) => ({ ...rows[i % rows.length], product_key: `book-${i}`, product_name: `Loan ${i}`,
+    rate: String(0.04 + ((i * 7919) % 900) / 10000), comparison_rate: String(0.05 + ((i * 7919) % 900) / 10000),
+    rate_index: i + 1, lvr_tier: 'lvr_=80%', balance_min: 100000, balance_max: 900000 }));
+  const fixture = selectedConstraintFixture('Mortgage', loaded, []);
+  mockStore.setState((state: any) => ({ source: 'cache', core: fixture.core, manifest: fixture.manifest, details: fixture.details,
+    coreIntegrity: fixture.coreIntegrity, prefs: { ...state.prefs, ratesPageSize: 10, mortgageRateMetric: 'headline' } }));
+  useMortgageComparison.setState({ loanAmount: '650000', lvr: '72' });
+  install();
+  // The first scope call is the leading prefix; hold the full pass open.
+  const real = mortgageComparisonModule.mortgageComparisonRowsCooperatively;
+  let calls = 0, release: (() => void) | null = null;
+  jest.spyOn(mortgageComparisonModule, 'mortgageComparisonRowsCooperatively').mockImplementation(async (...args) => {
+    if (++calls > 1 && !release) await new Promise<void>(resolve => { release = resolve; });
+    return real(...args);
+  });
+  const tree = mount(), list = () => tree.root.findByType('FlashList').props;
+  const updating = () => tree.root.findAllByType('AppText').some((node: any) => String(node.props.children).includes('Updating'));
+  try {
+    expect(list().data).toEqual([]);
+    for (let step = 0; step < 300 && !release; step++) await act(async () => { await jest.advanceTimersByTimeAsync(10); });
+    expect(release).not.toBeNull();
+    // Full pass still running: page one is already on screen, flagged as updating, with no page count.
+    const early = list().data;
+    expect(early).toHaveLength(10);
+    expect(updating()).toBe(true);
+    expect(list().ListFooterComponent).toBeNull();
+    const rates = early.map((row: any) => Number(row.rate));
+    expect(rates).toEqual([...rates].sort((a, b) => a - b));
+    act(() => release?.());
+    for (let step = 0; step < 300 && updating(); step++) await act(async () => { await jest.advanceTimersByTimeAsync(10); });
+    expect(updating()).toBe(false);
+    // Settling keeps the same rows in the same order: no reorder, no layout jump.
+    expect(list().data).toEqual(early);
+    expect(list().data.every((row: any, i: number) => row === early[i])).toBe(true);
+    expect(list().ListFooterComponent).not.toBeNull();
+  } finally { act(() => tree.unmount()); jest.restoreAllMocks(); jest.useRealTimers(); }
+});
+
+test('a non-default sort or a typed query never shows an unverified leading page', async () => {
+  jest.useFakeTimers();
+  const loaded = Array.from({ length: 900 }, (_, i) => ({ ...rows[i % rows.length], product_key: `book-${i}`, product_name: `Loan ${i}`,
+    rate: String(0.04 + ((i * 7919) % 900) / 10000), rate_index: i + 1, lvr_tier: 'lvr_=80%', balance_min: 100000, balance_max: 900000 }));
+  const fixture = selectedConstraintFixture('Mortgage', loaded, []);
+  mockStore.setState((state: any) => ({ source: 'cache', core: fixture.core, manifest: fixture.manifest, details: fixture.details,
+    coreIntegrity: fixture.coreIntegrity, prefs: { ...state.prefs, ratesPageSize: 10 } }));
+  useMortgageComparison.setState({ loanAmount: '650000', lvr: '72' });
+  install();
+  const real = mortgageComparisonModule.mortgageComparisonRowsCooperatively;
+  let release: (() => void) | null = null, calls = 0;
+  jest.spyOn(mortgageComparisonModule, 'mortgageComparisonRowsCooperatively').mockImplementation(async (...args) => {
+    calls++;
+    if (!release) await new Promise<void>(resolve => { release = resolve; });
+    return real(...args);
+  });
+  for (const patch of [{ sort: 'bank' as const }, { query: 'Loan 1' }]) {
+    calls = 0; release = null;
+    act(() => updateRatesSection('Mortgage', { sort: 'rate', query: '', ...patch }));
+    const tree = mount(), list = () => tree.root.findByType('FlashList').props;
+    try {
+      for (let step = 0; step < 300 && !release; step++) await act(async () => { await jest.advanceTimersByTimeAsync(10); });
+      // The only scope call is the full pass; nothing ranked is shown before it ends.
+      expect(calls).toBe(1);
+      expect(list().data).toEqual([]);
+    } finally { act(() => { release?.(); tree.unmount(); }); }
+  }
+  jest.restoreAllMocks(); jest.useRealTimers();
 });
 
 test('cold-launch Mortgage browses standard OO+PI <=80% LVR rates, omits pagination when empty, and renders clean Sort/Search sheets', () => {

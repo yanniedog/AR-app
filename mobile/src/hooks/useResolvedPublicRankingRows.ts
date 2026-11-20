@@ -19,12 +19,24 @@ import { nextPublicPricingBoundary } from '../data/publicRateResolver';
 import type { PublicProgramme } from '../data/publicRateModel';
 import type { RateScenario } from '../data/publicRateModel';
 import { scheduleAfterInteractions, scheduleAfterNavigation, yieldToUi } from '../lib/yieldToUi';
+import { leadingSortedRowsInInputOrder, type MortgageRateMetric, type RankMetric, type SortKey } from '../data/selectors';
 import type { RateRow, SectionKey } from '../types';
 import { getMandatoryEligibilityRevision } from '../data/eligibilityGate';
 import { getSuitabilityRevision } from '../data/suitabilityGate';
 
 /** Pricing is heavier than filter/sort; keep the sync path for tiny fixtures only. */
 export const SYNCHRONOUS_PUBLIC_PRICING_ROW_LIMIT = 48;
+
+/** Rank-ordered prefix whose scope is verified before the full pass finishes. */
+export interface LeadingScopeRequest {
+  /** Rows to scope ahead of the full pass; the caller keeps its page inside this prefix. */
+  limit: number;
+  sortKey: SortKey;
+  metric: RankMetric;
+  mortgageMetric: MortgageRateMetric;
+}
+export const leadingScopeKey = (value: LeadingScopeRequest | null | undefined) => value
+  ? JSON.stringify([value.limit, value.sortKey, value.metric, value.mortgageMetric]) : '';
 
 const EMPTY_RESOLUTION: PublicRankingResolution = {
   rows: [], priced: 0, unresolved: 0, complete: false,
@@ -94,13 +106,18 @@ export function useResolvedPublicRankingRows(options: {
   interactive?: boolean;
   revision: number;
   prepareMortgageIndex?: boolean;
+  /** Scope this rank-ordered prefix first and publish it as `leadingScope`. */
+  leadingScope?: LeadingScopeRequest | null;
   /** Complete caller-owned semantics of rowScenario, beyond the section scenario. */
   resolutionContextKey?: string;
 }) {
   const {
     sourceRows = EMPTY_RESOLUTION.rows, candidates: providedCandidates = null, catalogue, section, sectionScenario, rowScenario,
     mortgageInputs, mortgageContext, applyMortgageScope = false, focused, interactive = false, revision, prepareMortgageIndex = false, resolutionContextKey,
+    leadingScope = null,
   } = options;
+  const leadingRef = useRef(leadingScope);
+  leadingRef.current = leadingScope;
   const [, wakeClock] = useState(0);
   const clock = useRef({ until: Infinity, observedAt: Date.now(), revision: 0 });
   const observedAt = Date.now();
@@ -153,6 +170,8 @@ export function useResolvedPublicRankingRows(options: {
     error: string | null;
   };
   const [storedSnapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [leadingSnapshot, setLeadingSnapshot] = useState<{ request: typeof request; attempt: number; key: string;
+    scope: typeof EMPTY_MORTGAGE } | null>(null);
   const completed = useRef<{ key: string; request: typeof request; catalogue: PublicCatalogueView;
     from: number; until: number; snapshot: Snapshot }[]>([]);
   const requestKey = JSON.stringify([request.section, request.sectionScenarioKey, request.mortgageInputs,
@@ -282,6 +301,20 @@ export function useResolvedPublicRankingRows(options: {
           if (cancelled || flightRef.current !== flight) return;
           if (requestRef.current !== req) { stats.restarts++; continue; }
           if (!resolution) return;
+          const leading = leadingRef.current;
+          if (leading && req.applyMortgageScope && req.mortgageInputs && resolution.rows.length > leading.limit) {
+            // Scope only the rows that can lead the ranked list. Row matching is
+            // independent per row, so the first admitted rows here are exactly
+            // the first admitted rows of the full pass.
+            const prefix = leadingSortedRowsInInputOrder(resolution.rows, leading.limit, leading.sortKey, req.section,
+              leading.metric, leading.mortgageMetric);
+            const early = await mortgageComparisonRowsCooperatively(prefix, req.mortgageInputs, req.mortgageContext, control);
+            if (cancelled || flightRef.current !== flight) return;
+            if (requestRef.current !== req) { stats.restarts++; continue; }
+            if (early && !control.cancelled() && !early.invalid) {
+              setLeadingSnapshot({ request: req, attempt, key: leadingScopeKey(leading), scope: early });
+            }
+          }
           setProgress({ request: req, attempt, stage: 'scope' });
           const mortgage = await timing.measure('mortgageScopeMs', async () => req.applyMortgageScope && req.mortgageInputs
             ? await mortgageComparisonRowsCooperatively(
@@ -371,6 +404,9 @@ export function useResolvedPublicRankingRows(options: {
     candidates: synchronous?.candidates ?? (current ? snapshot!.candidates : []),
     resolution: synchronous?.resolution ?? (current ? snapshot!.resolution : EMPTY_RESOLUTION),
     mortgageScope: synchronous?.mortgage ?? (current ? snapshot!.mortgage : EMPTY_MORTGAGE),
+    /** Verified prefix of the ranked scope, only while the full pass is still running. */
+    leadingScope: !ready && leadingSnapshot?.request === request && leadingSnapshot.attempt === attempt
+      && leadingSnapshot.key === leadingScopeKey(leadingScope) ? leadingSnapshot.scope : null,
     ready,
     error: current ? snapshot!.error : null,
     retry: () => setAttempt(value => value + 1),
