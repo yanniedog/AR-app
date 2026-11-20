@@ -43,6 +43,7 @@ for (const s of manifest) {
     if (!nav.alive) r.flags.push('app died opening route');
     if (nav.error) r.flags.push(`open error: ${nav.error.slice(0, 80)}`);
     if (nav.settleTimedOut) r.flags.push('open never settled');
+    if (nav.anr) r.flags.push('ANR opening route');
     if (nav.log?.errors?.length) r.flags.push(`${nav.log.errors.length} log errors opening`);
   }
   if (!step) r.flags.push('not captured');
@@ -50,6 +51,7 @@ for (const s of manifest) {
     if (!step.alive) r.flags.push('app dead');
     if (step.error) r.flags.push(`step error: ${step.error.slice(0, 80)}`);
     if (step.settleTimedOut) r.flags.push('never settled');
+    if (step.anr) r.flags.push('ANR');
     if (step.log?.errors?.length) r.flags.push(`${step.log.errors.length} log errors`);
     const bad = (step.visible || []).find(v => FLAG_TEXT.test(v));
     if (bad) r.flags.push(`text: ${bad.slice(0, 50)}`);
