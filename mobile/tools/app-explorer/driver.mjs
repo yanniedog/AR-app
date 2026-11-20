@@ -153,7 +153,7 @@ function bodyOf(nodes) {
 }
 const bodyLabelled = nodes => bodyOf(nodes).filter(n => n.text || n.desc).length;
 /** Real content, not chrome: several labelled items, or many nodes when it is mostly graphic. */
-const contentful = nodes => { const body = bodyOf(nodes); return body.filter(n => n.text || n.desc).length >= 6 || body.length >= 14; };
+const contentful = nodes => { const body = bodyOf(nodes); return !errorStateOf(nodes) && (body.filter(n => n.text || n.desc).length >= 6 || body.length >= 14); };
 const isBlank = nodes => nodes.length > 0 && bodyLabelled(nodes) < 2 && bodyOf(nodes).length < 5;
 
 const ERROR_TEXT = /\b(failed|couldn.t|could not|unable to|something went wrong|unavailable|no results|nothing (saved|here|to show)|no saved|no data|error)\b/i;

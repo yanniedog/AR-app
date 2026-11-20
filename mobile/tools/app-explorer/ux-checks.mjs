@@ -25,6 +25,7 @@ export const FIXES = {
   'slow': 'Show content first and defer the slow work',
   'slow-first-value': 'Show cached rates on launch before the refresh',
   'first-run-gate': 'Remove the gate; land on rates',
+  'no-first-value': 'Show cached rates on launch instead of an error screen',
   'intimidating-first-run': 'Remove the input or permission request from first launch',
   'nav-inconsistent': 'Use the same top-level destinations on every screen',
   'no-return-reason': 'Show what changed since the last visit',

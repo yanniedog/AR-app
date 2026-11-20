@@ -126,6 +126,7 @@ describe('app explorer UX review', () => {
     const r = review({ 'cold-start': [
       { text: 'Continue', clickable: true, bounds: [100, 1200, 620, 1320] },
       { text: 'Enter setup key to continue', bounds: [100, 600, 620, 700] },
+      row('Basic Loan', 'Bank B', 5.9, 5.8, 300),
     ] }, [{ settleMs: 17000, firstContentMs: 16000 }]);
     expect(checks(r)).toEqual(expect.arrayContaining(['first-run-gate', 'slow-first-value', 'intimidating-first-run']));
     expect(r.rubric.find(x => x.key === 'onboarding')!.score).toBeLessThan(5);
@@ -278,5 +279,24 @@ console.log(JSON.stringify({ a: a && [a.width, a.height, a.data.toString('base64
     expect(acc).toHaveLength(1);
     expect(acc[0].text).toBe('Basic Loan, Bank B');
     expect(acc[0].detail).toMatch(/payable rate 31% outside/);
+  });
+
+  it('accepts a published 0% deposit rate but not a 0% loan rate', () => {
+    const tab = (name: string) => node({ text: name, selected: true, bounds: [0, 200, 200, 260] });
+    const zero = node({ desc: 'Everyday Saver, Bank C, Rate 0.00%', clickable: true, bounds: [0, 300, 720, 500] });
+    const bad = (r: ReturnType<typeof review>) => r.findings.some(f => f.check === 'accuracy' && /outside/.test(f.detail));
+    expect(bad(review({ savings: [tab('Savings'), zero] }))).toBe(false);
+    expect(bad(review({ loans: [tab('Home loans'), node({ desc: 'Basic Loan, Bank B, Advertised rate 0.00%', clickable: true, bounds: [0, 300, 720, 500] })] }))).toBe(true);
+  });
+
+  it('does not report first value or a completed best-rate task when launch ends on Data unavailable', () => {
+    const r = review({ 'cold-start': [
+      { text: 'Data unavailable', bounds: [100, 600, 620, 660] },
+      { text: 'Try again', clickable: true, bounds: [100, 900, 620, 1020] },
+    ] }, [{ firstContentMs: 1500, settleMs: 1500 }]);
+    expect(r.firstRun.firstValueMs).toBeNull();
+    expect(r.tasks.find(t => t.task === 'Find the best rate')).toMatchObject({ taps: null, ms: null });
+    expect(checks(r)).toContain('no-first-value');
+    expect(r.rubric.find(x => x.key === 'onboarding')!.score).toBeLessThan(5);
   });
 });

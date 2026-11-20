@@ -8,7 +8,7 @@ import { checkScreen, contrastFindings, decodePng, FIXES } from './ux-checks.mjs
 export const PKG = 'com.eyex.australianrates';
 const LEGAL = /^\/?(about|terms|privacy|third-party-notices|licen[cs]es?)$/i;
 /** Anything that may frustrate, confuse or intimidate a user, or make them less likely to return. */
-export const FRUSTRATION = new Set(['dead-end', 'dead-end-state', 'spinner-no-result', 'slow', 'slow-first-value', 'jargon', 'clutter',
+export const FRUSTRATION = new Set(['dead-end', 'dead-end-state', 'spinner-no-result', 'slow', 'slow-first-value', 'no-first-value', 'jargon', 'clutter',
   'no-primary-action', 'tap-target', 'crowded-targets', 'nav-inconsistent', 'first-run-gate', 'intimidating-first-run',
   'no-return-reason', 'no-engagement-hook', 'truncated-text']);
 const RUBRIC = [
@@ -18,8 +18,8 @@ const RUBRIC = [
   ['comfort', 'Comfort', ['tap-target', 'spinner-no-result', 'slow']],
   ['helpfulness', 'Helpfulness', ['dead-end-state', 'spinner-no-result', 'dead-end']],
   ['appropriateness', 'Appropriateness', ['prose', 'accuracy']],
-  ['onboarding', 'Onboarding ease', ['slow-first-value', 'first-run-gate']],
-  ['barriers', 'Barriers to entry and use', ['slow-first-value', 'first-run-gate', 'dead-end-state']],
+  ['onboarding', 'Onboarding ease', ['slow-first-value', 'no-first-value', 'first-run-gate']],
+  ['barriers', 'Barriers to entry and use', ['slow-first-value', 'no-first-value', 'first-run-gate', 'dead-end-state']],
   ['engagement', 'Engagement hooks', ['no-engagement-hook', 'no-return-reason']],
   ['frustration', 'Frustration and abandonment risk', [...FRUSTRATION]],
 ];
@@ -73,7 +73,9 @@ export function accuracyFindings({ screen, nodes, sample, sortedBy, lowerIsBette
     group.push(r);
     groups.set(`${r.provider}|${r.product}|${r.tier}`, group);
     for (const k of RATE_KEYS) {
-      if (r[k] != null && (r[k] <= 0 || r[k] > 25)) add('major', name, `${k} rate ${r[k]}% outside 0 to 25`, r.at);
+      // A published 0% is valid on deposits; on loans a rate must be above zero.
+      const zeroOk = lowerIsBetter === false || k === 'rate';
+      if (r[k] != null && ((zeroOk ? r[k] < 0 : r[k] <= 0) || r[k] > 25)) add('major', name, `${k} rate ${r[k]}% outside ${zeroOk ? '0' : 'above 0'} to 25`, r.at);
     }
     if (r.comparison != null && r.advertised != null && r.comparison + 0.005 < r.advertised) {
       add('minor', name, `comparison ${r.comparison}% is below advertised ${r.advertised}%`, r.at);
@@ -112,26 +114,32 @@ function loadPng(file) {
   try { return decodePng(fs.readFileSync(file)); } catch { return null; }
 }
 
-/** Time from launch to rates first showing, only when the driver measured it. */
-function firstRunMetrics(report, firstNodes) {
-  const first = (report.steps || [])[0] || {};
-  const ms = first.firstContentMs;
-  const gates = (firstNodes || []).filter(n => n.pkg === PKG && n.clickable && FIRST_RUN_GATE.test((n.text || n.desc || '').trim())).map(n => (n.text || n.desc).trim());
-  return { firstValueMs: Number.isFinite(ms) ? ms : null, gates };
+const errorScreen = nodes => nodes.some(n => n.pkg === PKG && /^Data unavailable/i.test((n.text || n.desc || '').trim()));
+const LAUNCH = /open[ -]app|cold[ -]start|launch/i;
+
+/** Time from launch to rates showing: only when the driver measured it and the settled screen holds rate rows. */
+function firstRunMetrics(report, screens) {
+  const first = screens[0] || { nodes: [], step: {} };
+  const rows = parseRows(first.nodes).length;
+  const ms = first.step.firstContentMs;
+  const gates = first.nodes.filter(n => n.pkg === PKG && n.clickable && FIRST_RUN_GATE.test((n.text || n.desc || '').trim())).map(n => (n.text || n.desc).trim());
+  return { firstValueMs: Number.isFinite(ms) && rows > 0 && !errorScreen(first.nodes) ? ms : null, ratesShown: rows > 0, gates };
 }
 
-/** Tap counts and times come from named report steps. Anything the driver did not record is null (unknown). */
-function taskMetrics(report) {
-  const steps = report.steps || [];
-  const step = re => steps.find(s => re.test(s.name || ''));
-  const ms = s => (s && Number.isFinite(s.firstContentMs) ? s.firstContentMs : null);
-  const tapped = s => (s && s.tapped ? 1 : null);
-  const launch = step(/open app|cold start/i);
+/** Tap counts and times come from named report steps. Anything the driver did not record, or that ended on an error screen, is null (unknown). */
+function taskMetrics(report, screens) {
+  const bySlug = new Map(screens.map(s => [s.slug, s]));
+  const step = re => (report.steps || []).find(s => re.test(s.name || ''));
+  const ok = s => s && !errorScreen((bySlug.get(s.slug) || { nodes: [] }).nodes);
+  const ms = s => (ok(s) && Number.isFinite(s.firstContentMs) ? s.firstContentMs : null);
+  const tapped = s => (ok(s) && s.tapped ? 1 : null);
+  const launch = step(LAUNCH);
+  const launchRows = launch && bySlug.has(launch.slug) ? parseRows(bySlug.get(launch.slug).nodes).length : 0;
   const compare = step(/compare/i);
   const lenders = step(/lenders/i);
   const product = step(/open product/i);
   return [
-    { task: 'Find the best rate', taps: ms(launch) != null ? 0 : null, ms: ms(launch) },
+    { task: 'Find the best rate', taps: ms(launch) != null && launchRows > 0 ? 0 : null, ms: launchRows > 0 ? ms(launch) : null },
     { task: 'Compare', taps: tapped(compare), ms: ms(compare) },
     { task: 'Open a lender', taps: tapped(lenders), ms: ms(lenders) },
     { task: 'Open a product', taps: tapped(product), ms: ms(product) },
@@ -171,7 +179,10 @@ export async function reviewRun(dir, { sample } = {}) {
     perScreen.push({ slug: s.slug, name: s.name, elements: r.stats.elements, tappable: r.stats.tappable, rows: acc.rowsChecked, findings: list.length, major: list.filter(x => x.severity === 'major').length });
   }
 
-  const firstRun = firstRunMetrics(report, screens[0] && screens[0].nodes);
+  const firstRun = firstRunMetrics(report, screens);
+  if (screens[0] && LAUNCH.test(screens[0].name) && !firstRun.ratesShown) {
+    findings.push({ check: 'no-first-value', severity: 'major', screen: 'cold start', text: '', at: [0, 0], detail: errorScreen(screens[0].nodes) ? 'launch ended on the data unavailable screen' : 'no rate rows on the first screen' });
+  }
   if (firstRun.firstValueMs != null && firstRun.firstValueMs >= FIRST_VALUE_MINOR_MS) {
     findings.push({ check: 'slow-first-value', severity: firstRun.firstValueMs >= FIRST_VALUE_MAJOR_MS ? 'major' : 'minor', screen: 'cold start', text: '', at: [0, 0], detail: `${(firstRun.firstValueMs / 1000).toFixed(1)} s from launch to rates showing` });
   }
@@ -200,7 +211,7 @@ export async function reviewRun(dir, { sample } = {}) {
     const top = [...mine].sort((a, b) => WEIGHT[b.severity] - WEIGHT[a.severity]).slice(0, 3).map(f => `${f.severity} ${f.screen}: ${f.check}${f.text ? ` "${f.text}"` : ''} (${f.detail}). Fix: ${f.fix}`);
     return { key, title, score: reviewed ? score(weighted, reviewed) : null, findings: mine.length, top };
   });
-  const tasks = taskMetrics(report);
+  const tasks = taskMetrics(report, screens);
   const counts = {};
   for (const f of findings) counts[f.check] = (counts[f.check] || 0) + 1;
   const result = { schemaVersion: 1, screens: reviewed, findingsTotal: findings.length, major: findings.filter(f => f.severity === 'major').length, counts, rubric, tasks, firstRun, hooks, perScreen, findings, sampleChecked: !!sample, contrastMeasured: contrastMeasured > 0 };
