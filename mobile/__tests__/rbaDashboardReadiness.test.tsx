@@ -154,6 +154,14 @@ test('switching real multipoint charts reports readiness for each selection from
   expect(graphics().ready).toBe(true);
 });
 
+test('each unavailable chart state carries its own refresh action', async () => {
+  mockLoad.mockResolvedValue({ ...outlook, economists: null, bondForwards: null });
+  await mount();
+  const refreshActions = () => tree!.root.findAllByType('LedgerAction').filter((node) => node.props.label === 'Refresh outlook');
+  expect(tree!.root.findAllByType('LedgerText').some((node) => node.props.children === 'Forecast unavailable')).toBe(true);
+  expect(refreshActions()).toHaveLength(3);
+});
+
 test('loading cannot certify an empty chart; an actual unavailable placeholder requires positive native layout', async () => {
   let resolve!: (value: RbaMarketOutlook) => void;
   mockLoad.mockReturnValueOnce(new Promise<RbaMarketOutlook>((accept) => { resolve = accept; }));

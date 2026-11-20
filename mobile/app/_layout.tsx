@@ -58,6 +58,7 @@ import {
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider';
 import { HEADER_TYPOGRAPHY } from '../src/theme/typography';
 import { uiLabel, type UiLabel } from '../src/lib/uiCopy';
+import { bootMark } from '../src/lib/bootTrace';
 
 const ROUTE_TITLES: readonly (readonly [string,UiLabel])[] = [
   ['calculator','Calculate'],['product/[key]','Product'],['bank/[provider]','Bank'],['compare','Compare'],
@@ -174,6 +175,7 @@ function RootNavigator() {
       `bootstrap starting version=${Application.nativeApplicationVersion ?? 'unknown'} build=${Application.nativeBuildVersion ?? 'unknown'}`,
     );
     void coldStartLogReset?.then(() => debugLog.flushToFile());
+    bootMark('layout-mounted');
     void bootstrap();
   }, [bootstrap]);
 
@@ -201,7 +203,12 @@ function RootNavigator() {
   }, [performanceAuditActive]);
 
   useEffect(() => {
+    if (hydrated) bootMark('hydrated');
+  }, [hydrated]);
+
+  useEffect(() => {
     if (!firstPaintReady) return;
+    bootMark('splash-hide');
     SplashScreen.hideAsync().catch((err) => logSwallowedError('splash.hide', err));
   }, [firstPaintReady]);
 

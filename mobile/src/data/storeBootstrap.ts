@@ -14,6 +14,7 @@ import { noDataErrorMessage, readValidatedHistoryBanks } from './storeHelpers';
 import { SECTION_ORDER } from '../constants';
 import type { CorePayload } from '../types';
 import { normalizeProductHistoryPayload } from './productHistory';
+import { bootMark } from '../lib/bootTrace';
 import {
   clearSuitabilityIndex,
   closeSuitabilityGateUntilRebuild,
@@ -60,6 +61,7 @@ export function createBootstrapActions(
       try {
         const prefs = get().prefs;
         const cachedBundle = await cache.readBundle();
+        bootMark('cache-read');
         // Retain old sample bytes on disk, but require a verified downloaded dataset.
         const bundle = cachedBundle?.meta.source === 'sample' ? null : cachedBundle;
         const [rawCachedSearch, cachedOptionalMeta, cachedHistory, cachedProductHistory] = await Promise.all([
@@ -127,6 +129,7 @@ export function createBootstrapActions(
             ...(cachedHistory ? { historyBanks: cachedHistory } : {}),
             ...(cachedProductHistory ? { productHistory: cachedProductHistory } : {}),
           });
+          bootMark('core-ready');
           debugLog.info('store', `cached core ready elapsed_ms=${Date.now() - started}`);
           void prepareBankRateHistoryAfterPaint(set, get, bundle.core, bundle.meta.manifest,
             parseHistoryDatesIndex(bundle.meta.historyDatesIndex, bundle.meta.manifest), null,

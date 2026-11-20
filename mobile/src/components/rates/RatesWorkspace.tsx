@@ -5,6 +5,7 @@ import { useFocusMeasurement } from '../../hooks/useFocusMeasurement';
 import { isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../../data/mortgageFacetScope';
 import { useMortgageResultsIndex } from '../../hooks/useMortgageResultsIndex';
 import { profileSectionCount } from '../../data/profile';
+import { bootMark } from '../../lib/bootTrace';
 import { checkDrillOutcome } from '../../lib/degradationLog';
 import { reconcilePublicCompareSelectionTokens } from '../../data/publicCompareSelectionTokens';
 import { publicScenarioForRow } from '../../data/publicRateIntegration';
@@ -613,6 +614,8 @@ export default function RatesWorkspace() {
   const preparedResults = criteriaPending ? { ...cooperativeResults, rows: EMPTY_RATE_ROWS, ready: false, error: null }
     : indexedRows ? { ...cooperativeResults, rows: indexedRows, ready: true, error: null } : cooperativeResults;
   const rows = preparedResults.rows;
+  const firstRowsReady = preparedResults.ready && rows.length > 0;
+  useEffect(() => { if (firstRowsReady) bootMark('rates-ready'); }, [firstRowsReady]);
   // Ancillary facet inventories must not compete with the matching-result
   // pipeline while the current pricing/filter request is still unresolved.
   const filterOptions = useSearchFilterOptions(

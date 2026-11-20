@@ -90,6 +90,18 @@ describe('app explorer UX review', () => {
     expect(small[0].fix).toMatch(/48 dp/);
   });
 
+  it('ignores rows covered by the bottom tab bar for tap size and contrast', () => {
+    const tabs = [
+      { text: 'Rates', clickable: true, bounds: [0, 1392, 240, 1560] },
+      { text: 'Saved', clickable: true, bounds: [240, 1392, 480, 1560] },
+      { text: 'Market', clickable: true, bounds: [480, 1392, 720, 1560] },
+    ];
+    const covered = { text: 'Covered row title', clickable: true, bounds: [20, 1375, 400, 1405] };
+    const faint = (x: number, y: number) => (x > 20 && x < 400 && y > 1375 && y < 1405 ? [250, 250, 250] : [255, 255, 255]);
+    const r = review({ rates: [...tabs, covered] }, [], { png: { rates: faint } });
+    expect(r.findings.filter(f => f.text === 'Covered row title')).toEqual([]);
+  });
+
   it('flags text boxes that overlap but not a parent that contains its child', () => {
     const r = review({ rates: [
       { text: 'Comparison rate 5.99%', bounds: [10, 300, 400, 340] },

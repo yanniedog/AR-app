@@ -57,22 +57,44 @@ const label = n => (n.text || n.desc || n.id || n.cls || '').replace(/\s+/g, ' '
 const IME = /inputmethod|latin|keyboard/i;
 const SYSTEMUI = /^com\.android\.systemui$/;
 const ERROR_TEXT = /^(no |nothing|error|failed|couldn.t|unable|something went wrong|data unavailable|offline)/i;
-const ACTION_TEXT = /\b(retry|try again|refresh|reload|clear|reset|back|add|open|browse)\b/i;
+const ACTION_TEXT = /\b(retry|try again|refresh|reload|clear|reset|back|add|open|browse|start|run|begin|navigate up)\b/i;
 
 export function appNodes(nodes, pkg) {
   return nodes.filter(n => (!pkg || n.pkg === pkg) && area(n.bounds) > 0);
 }
 
+
+/** A node whose edge sits on its scroll container's edge is a sliver of a row that is mostly scrolled out of view. */
+function clippedByScroller(n, scrollers) {
+  return scrollers.some(c => c !== n && contains(c.bounds, n.bounds, 0)
+    && (Math.abs(n.bounds[1] - c.bounds[1]) <= 2 || Math.abs(n.bounds[3] - c.bounds[3]) <= 2));
+}
+
+const TAB_LABELS = /^(Rates|Saved|Market)$/;
+/** Top edge (px) of the bottom tab bar: list rows scrolled underneath it are covered, not low contrast or small. */
+export function bottomBarTop(app, size) {
+  const [, H] = size;
+  const tops = app.filter(n => n.clickable && n.bounds[1] > H * 0.8 && TAB_LABELS.test((n.text || n.desc || '').trim())).map(n => n.bounds[1]);
+  return tops.length ? Math.min(...tops) : Math.round(H * 0.87);
+}
+
 /** Tap targets under the platform minimum. */
-function tapTargets({ screen, app, density }) {
+function tapTargets({ screen, app, density, size }) {
   const out = [];
   const seen = new Set();
   const dp = DP(density);
+  const barTop = bottomBarTop(app, size);
+  const scrollers = app.filter(n => n.scrollable && area(n.bounds) > 0);
   for (const n of app) {
     if (!n.clickable || !n.enabled) continue;
+    // A control cut off by the screen edge or the tab bar reports only its visible sliver.
+    if (n.bounds[3] >= barTop - 2 && n.bounds[1] < barTop && n.bounds[1] > size[1] * 0.5) continue;
+    if (n.bounds[1] <= 2 || n.bounds[3] >= size[1] - 2) continue;
+    if (clippedByScroller(n, scrollers)) continue;
     const w = (n.bounds[2] - n.bounds[0]) / dp;
     const h = (n.bounds[3] - n.bounds[1]) / dp;
-    if (w >= LIMITS.minTapDp && h >= LIMITS.minTapDp) continue;
+    // Rounding of density-independent sizes must not turn 48 into a failure.
+    if (w >= LIMITS.minTapDp - 0.5 && h >= LIMITS.minTapDp - 0.5) continue;
     const key = n.bounds.join(',');
     if (seen.has(key)) continue;
     seen.add(key);
@@ -92,9 +114,10 @@ function tapTargets({ screen, app, density }) {
 function textSize({ screen, app, density }) {
   const out = [];
   const dp = DP(density);
+  const scrollers = app.filter(n => n.scrollable && area(n.bounds) > 0);
   for (const n of app) {
     const t = n.text;
-    if (!t || /\n/.test(t) || n.cls === 'EditText') continue;
+    if (!t || /\n/.test(t) || n.cls === 'EditText' || clippedByScroller(n, scrollers)) continue;
     const h = (n.bounds[3] - n.bounds[1]) / dp;
     if (h < LIMITS.minTextDp) {
       out.push({ check: 'text-size', severity: 'minor', screen, text: label(n), at: centre(n.bounds), detail: `text box ${Math.round(h)} dp tall` });
@@ -400,10 +423,13 @@ export function boxContrast(png, bounds) {
 }
 
 /** Contrast findings for the text nodes of one screen. `png` is an image from decodePng. */
-export function contrastFindings({ screen, nodes, png, pkg, density = 320, limit = 40 }) {
+export function contrastFindings({ screen, nodes, png, pkg, density = 320, limit = 40, size = [png.width, png.height] }) {
   const dp = DP(density);
   const out = [];
-  const texts = appNodes(nodes, pkg).filter(n => n.text && !/\n/.test(n.text) && n.cls !== 'EditText')
+  const app = appNodes(nodes, pkg);
+  const barTop = bottomBarTop(app, size);
+  const scrollers = app.filter(n => n.scrollable && area(n.bounds) > 0);
+  const texts = app.filter(n => n.text && !/\n/.test(n.text) && n.cls !== 'EditText' && !clippedByScroller(n, scrollers) && !app.some(d => !d.enabled && d !== n && contains(d.bounds, n.bounds)) && !(n.bounds[3] > barTop && n.bounds[1] > size[1] * 0.5 && !TAB_LABELS.test(n.text.trim())))
     .sort((a, b) => area(b.bounds) - area(a.bounds)).slice(0, limit);
   for (const n of texts) {
     if (n.text.trim().length < 2) continue;

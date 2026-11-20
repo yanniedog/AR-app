@@ -352,6 +352,18 @@ function drainLogcat() {
   return [...lines].sort().join('\n');
 }
 
+/** The app's one-line launch timeline (bootTrace.ts): ms since JS start per stage. */
+export function bootMarksOf(text) {
+  const m = /\[AR warn\] boot: launch ms ([^\n]*)/.exec(text);
+  if (!m) return null;
+  const out = {};
+  for (const pair of m[1].trim().split(/\s+/)) {
+    const [k, v] = pair.split('=');
+    if (k && Number.isFinite(Number(v))) out[k] = Number(v);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 function classifyLog(text) {
   const lines = text.split('\n').filter(Boolean);
   return {
@@ -409,6 +421,7 @@ class Explorer {
       session: this.sessionFlag || undefined,
       alive: Boolean(pid),
       anr: appAnr || undefined,
+      boot: bootMarksOf(log) || undefined,
       frames,
       memKb: memoryKb(),
       log: classifyLog(log),
@@ -859,6 +872,7 @@ function renderMarkdown(report, baseline) {
       s.error,
       s.log.errors.length && `${s.log.errors.length} errors`,
       s.activityStartMs && `start ${s.activityStartMs}ms`,
+      s.boot && `boot ${Object.entries(s.boot).map(([k, v]) => `${k} ${v}`).join(', ')}`,
     ].filter(Boolean).join('; ');
     lines.push(`| ${s.n} | ${s.name} | ${s.settleMs} | ${delta == null ? '' : (delta > 0 ? '+' : '') + delta} | ${s.frames.frames ? `${s.frames.janky}/${s.frames.frames}` : ''} | ${s.frames.frames ? s.frames.p90 : ''} | ${s.memKb ? Math.round(s.memKb / 1024) : ''} | ${notes} |`);
   }
