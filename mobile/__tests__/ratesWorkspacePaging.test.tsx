@@ -1144,6 +1144,7 @@ test('a large cold mortgage book paints a verified first page before the full sc
     if (++calls > 1 && !release) await new Promise<void>(resolve => { release = resolve; });
     return real(...args);
   });
+  act(() => updateRatesSection('Mortgage', { selectMode: true }));
   const tree = mount(), list = () => tree.root.findByType('FlashList').props;
   const updating = () => tree.root.findAllByType('AppText').some((node: any) => String(node.props.children).includes('Updating'));
   try {
@@ -1155,6 +1156,9 @@ test('a large cold mortgage book paints a verified first page before the full sc
     expect(early).toHaveLength(10);
     expect(updating()).toBe(true);
     expect(list().ListFooterComponent).toBeNull();
+    // Early rows are not in the compare lookup yet: selection is withheld rather than failing with 'Rate unavailable'.
+    expect(tree.root.findAllByType('ProductCard').length).toBeGreaterThan(0);
+    expect(tree.root.findAllByType('ProductCard').every((card: any) => card.props.selectMode === false)).toBe(true);
     const rates = early.map((row: any) => Number(row.rate));
     expect(rates).toEqual([...rates].sort((a, b) => a - b));
     act(() => release?.());
@@ -1164,6 +1168,9 @@ test('a large cold mortgage book paints a verified first page before the full sc
     expect(list().data).toEqual(early);
     expect(list().data.every((row: any, i: number) => row === early[i])).toBe(true);
     expect(list().ListFooterComponent).not.toBeNull();
+    expect(tree.root.findAllByType('ProductCard').every((card: any) => card.props.selectMode === true)).toBe(true);
+    act(() => tree.root.findAllByType('ProductCard')[0].props.onPress());
+    expect(useRatesSession.getState().sections.Mortgage.selected).toHaveLength(1);
   } finally { act(() => tree.unmount()); jest.restoreAllMocks(); jest.useRealTimers(); }
 });
 

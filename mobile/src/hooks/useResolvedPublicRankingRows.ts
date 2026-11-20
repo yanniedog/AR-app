@@ -313,6 +313,8 @@ export function useResolvedPublicRankingRows(options: {
             if (requestRef.current !== req) { stats.restarts++; continue; }
             if (Date.now() >= validity.until()) { stats.restarts++; setLeadingSnapshot(null); continue; }
             if (early && !control.cancelled() && !early.invalid) {
+              // Arm the wake-up now so an expiring prefix withdraws on time, not when the full pass ends.
+              clock.current.until = Math.min(clock.current.until, validity.until());
               setLeadingSnapshot({ request: req, attempt, key: leadingScopeKey(leading), until: validity.until(), scope: early });
             }
           }

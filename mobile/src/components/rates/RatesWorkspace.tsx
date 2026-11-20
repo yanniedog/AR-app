@@ -1129,7 +1129,7 @@ export default function RatesWorkspace() {
       quoteOwner={indexedPricing && !searchPending && !displayedProvisional ? mortgageIndex.index : null}
       rateScenario={displayedScenario(item)} comparisonUnverified={section === 'Mortgage' && displayedUnverified.has(item)}
       auditCell={target === 'Cell' && !displayedProvisional} auditRevision={listRevision} onAuditCellCommit={auditTarget.onCellCommit}
-      selectMode={selectMode} selectionToken={selectionTokenFor(item)} selected={selected.includes(selectionTokenFor(item))} onToggleSelect={toggleSelect} />
+      selectMode={selectMode && !displayedProvisional} selectionToken={selectionTokenFor(item)} selected={selected.includes(selectionTokenFor(item))} onToggleSelect={toggleSelect} />
   ) : <TouchTarget fill onPress={() => openProduct(item.key)} accessibilityRole="button"
       accessibilityLabel={uiJoin(uiProductName({ product_name: item.name ?? '' }),
         item.provider ? uiJoin(', ', uiProviderName({ provider: item.provider })) : null,
