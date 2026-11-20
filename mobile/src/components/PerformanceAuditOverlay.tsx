@@ -1,10 +1,11 @@
 import { uiLabel } from '../lib/uiCopy';
-import React, { memo } from 'react';
+import React, { memo, useEffect, useState, useSyncExternalStore } from 'react';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AuditScreenAwake } from '../../modules/audit-screen-awake';
-import { cancelPerformanceAudit, getPerformanceAuditState } from '../lib/performanceAudit';
+import { cancelPerformanceAudit, getPerformanceAuditState, pausePerformanceAudit, resumePerformanceAudit } from '../lib/performanceAudit';
+import { getPassiveAuditStatus, subscribePassiveAudit } from '../lib/passiveAudit';
 import { uiCount, uiDurationClock, uiJoin } from '../lib/uiCopy';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Card, Row } from './ui';
@@ -15,11 +16,22 @@ export const PerformanceAuditOverlay = memo(function PerformanceAuditOverlay({ s
 }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const passive = useSyncExternalStore(subscribePassiveAudit, getPassiveAuditStatus, getPassiveAuditStatus);
+  const live = state.status === 'queued' || state.status === 'running';
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!live || state.paused) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, [live, state.paused]);
   if (state.status !== 'queued' && state.status !== 'running') return null;
 
   const total = Math.max(1, state.progress.total);
   const fraction = Math.max(0, Math.min(1, state.progress.completed / total));
   const percent = Math.round(fraction * 100);
+  const startedMs = state.startedAt ? Date.parse(state.startedAt) : NaN;
+  const elapsed = Number.isFinite(startedMs) ? uiDurationClock(Math.max(0, now - startedMs)) : uiLabel('Unknown');
   const estimate = state.estimate ? uiDurationClock(state.estimate.remainingMs) : null;
 
   return (
@@ -48,6 +60,12 @@ export const PerformanceAuditOverlay = memo(function PerformanceAuditOverlay({ s
           {state.paused ? uiLabel('Paused') : estimate ? uiJoin('Estimated time', ': ', estimate) : uiLabel('Preparing')}
         </AppText>
         <AppText variant="small" color="textMuted">{uiLabel(state.paused ? 'Paused' : state.progress.label.startsWith('Background work:') ? 'Background checks' : 'Checking')}</AppText>
+        <Row style={{ justifyContent: 'space-between' }}>
+          <AppText variant="small" color="textMuted">{uiJoin('Elapsed', ': ', elapsed)}</AppText>
+          <AppText variant="small" color="textMuted">
+            {uiJoin('Data', ' ', uiCount(passive.completed), ' / ', uiCount(passive.total), ' · ', 'Links', ' ', uiCount(passive.linksCompleted), ' / ', uiCount(passive.linksTotal))}
+          </AppText>
+        </Row>
         <View
           accessibilityRole="progressbar"
           accessibilityLabel="App health audit"
@@ -72,6 +90,14 @@ export const PerformanceAuditOverlay = memo(function PerformanceAuditOverlay({ s
           <AppText variant="tiny" color="textFaint">
             {uiJoin(uiCount(state.progress.completed), ' / ', state.progress.total ? uiCount(state.progress.total) : 'Unknown', ' ', 'Checks')}
           </AppText>
+          <Row style={{ gap: 4 }}>
+          <Button
+            title={state.paused ? 'Resume' : 'Pause'}
+            variant="ghost"
+            disabled={state.cancelRequested}
+            onPress={state.paused ? resumePerformanceAudit : pausePerformanceAudit}
+            style={{ paddingVertical: 8 }}
+          />
           <Button
             title={state.cancelRequested ? 'Cancelling' : 'Cancel'}
             icon="close"
@@ -80,6 +106,7 @@ export const PerformanceAuditOverlay = memo(function PerformanceAuditOverlay({ s
             onPress={cancelPerformanceAudit}
             style={{ paddingVertical: 8 }}
           />
+          </Row>
         </Row>
       </Card>
     </View>
