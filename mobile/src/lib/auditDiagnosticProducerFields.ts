@@ -759,6 +759,7 @@ export const AUDIT_PRODUCER_ENUMS: Record<string, readonly string[]> = {
     "response-rejected",
     "response-unverified",
     "restricted",
+    "server-unavailable",
     "timeout",
     "transport"
   ],
