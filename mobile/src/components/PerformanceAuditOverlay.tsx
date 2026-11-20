@@ -1,5 +1,5 @@
 import { uiLabel } from '../lib/uiCopy';
-import React, { memo, useEffect, useState, useSyncExternalStore } from 'react';
+import React, { memo, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -19,6 +19,20 @@ export const PerformanceAuditOverlay = memo(function PerformanceAuditOverlay({ s
   const passive = useSyncExternalStore(subscribePassiveAudit, getPassiveAuditStatus, getPassiveAuditStatus);
   const live = state.status === 'queued' || state.status === 'running';
   const [now, setNow] = useState(() => Date.now());
+  const pausedMs = useRef(0);
+  const pausedAt = useRef<number | null>(null);
+  useEffect(() => {
+    pausedMs.current = 0;
+    pausedAt.current = null;
+  }, [state.startedAt]);
+  useEffect(() => {
+    if (state.paused) {
+      if (pausedAt.current == null) pausedAt.current = Date.now();
+    } else if (pausedAt.current != null) {
+      pausedMs.current += Date.now() - pausedAt.current;
+      pausedAt.current = null;
+    }
+  }, [state.paused]);
   useEffect(() => {
     if (!live || state.paused) return;
     setNow(Date.now());
@@ -31,7 +45,7 @@ export const PerformanceAuditOverlay = memo(function PerformanceAuditOverlay({ s
   const fraction = Math.max(0, Math.min(1, state.progress.completed / total));
   const percent = Math.round(fraction * 100);
   const startedMs = state.startedAt ? Date.parse(state.startedAt) : NaN;
-  const elapsed = Number.isFinite(startedMs) ? uiDurationClock(Math.max(0, now - startedMs)) : uiLabel('Unknown');
+  const elapsed = Number.isFinite(startedMs) ? uiDurationClock(Math.max(0, (pausedAt.current ?? now) - startedMs - pausedMs.current)) : uiLabel('Unknown');
   const estimate = state.estimate ? uiDurationClock(state.estimate.remainingMs) : null;
 
   return (

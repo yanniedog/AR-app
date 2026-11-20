@@ -32,6 +32,7 @@ test('shows elapsed time and pauses and resumes the run', async () => {
   await act(async () => { tree.update(<PerformanceAuditOverlay state={getPerformanceAuditState()} />); });
   await act(async () => { press('Resume'); });
   expect(getPerformanceAuditState().paused).toBe(false);
+  await act(async () => { tree.unmount(); });
 });
 
 test('a manual pause survives a system foreground resume', () => {
