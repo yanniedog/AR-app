@@ -3,7 +3,7 @@
 // Usage: node ux-review.mjs <explorer-out dir>
 import fs from 'node:fs';
 import path from 'node:path';
-import { checkScreen, contrastFindings, FIXES } from './ux-checks.mjs';
+import { checkScreen, contrastFindings, decodePng, FIXES } from './ux-checks.mjs';
 
 export const PKG = 'com.eyex.australianrates';
 const LEGAL = /^\/?(about|terms|privacy|third-party-notices|licen[cs]es?)$/i;
@@ -98,11 +98,8 @@ export function accuracyFindings({ screen, nodes, sample, sortedBy }) {
 
 const score = (weighted, screens) => Math.max(0, Math.min(5, Math.round(5 * (1 - Math.min(1, weighted / Math.max(1, screens * 0.5))) * 10) / 10));
 
-async function loadPng(file) {
-  try {
-    const { PNG } = await import('pngjs');
-    return PNG.sync.read(fs.readFileSync(file));
-  } catch { return null; }
+function loadPng(file) {
+  try { return decodePng(fs.readFileSync(file)); } catch { return null; }
 }
 
 /** Time from launch to rates first showing, only when the driver measured it. */
@@ -153,7 +150,7 @@ export async function reviewRun(dir, { sample } = {}) {
     const legal = LEGAL.test(s.name) || LEGAL.test(s.step.route || '');
     const r = checkScreen({ screen: s.name, nodes: s.nodes, size: s.size, density, pkg: PKG, settleTimedOut: !!s.step.settleTimedOut, allowProse: legal });
     const list = [...r.findings];
-    const png = await loadPng(path.join(dir, 'screens', `${s.slug}.png`));
+    const png = loadPng(path.join(dir, 'screens', `${s.slug}.png`));
     if (png) { list.push(...contrastFindings({ screen: s.name, nodes: s.nodes, png, pkg: PKG, density })); contrastMeasured += 1; }
     const sortedBy = (s.nodes.map(n => /^Sort · ((?:Comparison|Advertised|Ongoing) rate)/.exec(n.text || n.desc || '')).find(Boolean) || [])[1] || null;
     const acc = accuracyFindings({ screen: s.name, nodes: s.nodes, sample, sortedBy });

@@ -1,4 +1,5 @@
 import { execFileSync } from 'child_process';
+import zlib from 'zlib';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -20,12 +21,11 @@ function review(screens: Record<string, N[]>, steps: Record<string, unknown>[] =
     fs.writeFileSync(path.join(out, 'ui', `${slug}.nodes.json`), JSON.stringify({ size: opts.size ?? [720, 1600], nodes: screens[name].map(node) }));
     const paint = opts.png?.[name];
     if (paint) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { PNG } = require('pngjs');
-      const png = new PNG({ width: 720, height: 1600 });
-      for (let y = 0; y < 1600; y++) for (let x = 0; x < 720; x++) png.data.set([...paint(x, y), 255], (y * 720 + x) * 4);
+      const rgba = Buffer.alloc(720 * 1600 * 4);
+      for (let y = 0; y < 1600; y++) for (let x = 0; x < 720; x++) rgba.set([...paint(x, y), 255], (y * 720 + x) * 4);
+      const png = encodePng(720, 1600, rgba, 4, [0]);
       fs.mkdirSync(path.join(out, 'screens'), { recursive: true });
-      fs.writeFileSync(path.join(out, 'screens', `${slug}.png`), PNG.sync.write(png));
+      fs.writeFileSync(path.join(out, 'screens', `${slug}.png`), png);
     }
   });
   // A node file left by an earlier run, with no step in this run's report.
@@ -41,6 +41,40 @@ function review(screens: Record<string, N[]>, steps: Record<string, unknown>[] =
     rubric: { key: string; score: number }[]; summaryLines: string[]; screens: number;
     tasks: { task: string; taps: number | null; ms: number | null }[]; firstRun: { firstValueMs: number | null };
   };
+}
+
+/** Minimal PNG writer; filters cycle through the given types so the decoder's unfiltering is exercised. */
+function encodePng(width: number, height: number, rgba: Buffer, bpp: 3 | 4, filters: number[]): Buffer {
+  const stride = width * bpp;
+  const rows: Buffer[] = [];
+  const pixels = (y: number) => {
+    const row = Buffer.alloc(stride);
+    for (let x = 0; x < width; x++) for (let c = 0; c < bpp; c++) row[x * bpp + c] = rgba[(y * width + x) * 4 + c];
+    return row;
+  };
+  for (let y = 0; y < height; y++) {
+    const f = filters[y % filters.length];
+    const cur = pixels(y);
+    const prev = y ? pixels(y - 1) : Buffer.alloc(stride);
+    const out = Buffer.alloc(stride + 1);
+    out[0] = f;
+    for (let i = 0; i < stride; i++) {
+      const a = i >= bpp ? cur[i - bpp] : 0, b = prev[i], c = i >= bpp ? prev[i - bpp] : 0;
+      const pa = Math.abs(b - c), pb = Math.abs(a - c), pc = Math.abs(a + b - 2 * c);
+      const pred = f === 1 ? a : f === 2 ? b : f === 3 ? (a + b) >> 1 : f === 4 ? (pa <= pb && pa <= pc ? a : pb <= pc ? b : c) : 0;
+      out[i + 1] = (cur[i] - pred) & 255;
+    }
+    rows.push(out);
+  }
+  const chunk = (type: string, body: Buffer) => {
+    const head = Buffer.alloc(8);
+    head.writeUInt32BE(body.length, 0);
+    head.write(type, 4, 'latin1');
+    return Buffer.concat([head, body, Buffer.alloc(4)]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4); ihdr[8] = 8; ihdr[9] = bpp === 4 ? 6 : 2;
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(Buffer.concat(rows))), chunk('IEND', Buffer.alloc(0))]);
 }
 
 const checks = (r: ReturnType<typeof review>) => r.findings.map(f => f.check);
@@ -185,5 +219,22 @@ describe('app explorer UX review', () => {
     const none = review({ rates: [node] });
     expect(checks(none)).toContain('contrast-not-measured');
     expect(none.summaryLines.join('\n')).toMatch(/Contrast not measured/);
+  });
+
+  it('decodes RGB and RGBA PNGs with every filter type and rejects what it cannot read', () => {
+    const w = 9, h = 10;
+    const rgba = Buffer.alloc(w * h * 4);
+    for (let i = 0; i < w * h; i++) rgba.set([(i * 7) % 256, (i * 13) % 256, (i * 29) % 256, 255], i * 4);
+    const code = `import { decodePng } from ${JSON.stringify(path.join(dir, 'ux-checks.mjs'))};
+const [rgb, rgbaPng, bad] = JSON.parse(process.argv[1]).map(x => Buffer.from(x, 'base64'));
+const a = decodePng(rgb), b = decodePng(rgbaPng);
+console.log(JSON.stringify({ a: a && [a.width, a.height, a.data.toString('base64')], b: b && [b.width, b.height, b.data.toString('base64')], bad: decodePng(bad) }));`;
+    const run = execFileSync(process.execPath, ['--input-type=module', '-e', code, JSON.stringify([
+      encodePng(w, h, rgba, 3, [0, 1, 2, 3, 4]).toString('base64'), encodePng(w, h, rgba, 4, [4, 3, 2, 1, 0]).toString('base64'), Buffer.from('not a png').toString('base64'),
+    ])], { encoding: 'utf8' });
+    const got = JSON.parse(run);
+    expect(Buffer.from(got.a[2], 'base64').equals(rgba)).toBe(true);
+    expect(Buffer.from(got.b[2], 'base64').equals(rgba)).toBe(true);
+    expect(got.bad).toBeNull();
   });
 });

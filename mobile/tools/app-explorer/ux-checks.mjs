@@ -1,3 +1,5 @@
+import zlib from 'node:zlib';
+
 // Deterministic UX checks over one captured screen. Pure functions: nodes in, findings out.
 // Input nodes are the raw parseHierarchy() shape saved by the driver as ui/<slug>.nodes.json.
 // Every finding: { check, severity: 'major'|'minor', screen, text, at:[x,y], detail }.
@@ -28,7 +30,7 @@ export const FIXES = {
   'no-return-reason': 'Show what changed since the last visit',
   'no-engagement-hook': 'Add a save control and a Saved destination',
   'accuracy': 'Fix the displayed figure or its sort',
-  'contrast-not-measured': 'Install pngjs in the explorer job',
+  'contrast-not-measured': 'Check that screenshots are 8-bit RGB or RGBA PNGs',
 };
 
 export const DP = (density = 320) => density / 160;
@@ -309,7 +311,56 @@ export function checkScreen(ctx) {
   return { findings, stats: { elements: cl.count, tappable: c.app.filter(n => n.clickable && n.enabled).length } };
 }
 
-// ---------- contrast from pixels (optional; skipped when pngjs is absent) ----------
+// ---------- contrast from pixels (node:zlib only; undecodable images are reported as not measured) ----------
+
+/** Decode an 8-bit RGB or RGBA non-interlaced PNG to { width, height, data: RGBA }. Null for anything else. */
+export function decodePng(buf) {
+  try {
+    if (buf.length < 33 || buf.readUInt32BE(0) !== 0x89504e47 || buf.readUInt32BE(4) !== 0x0d0a1a0a) return null;
+    let width = 0, height = 0, depth = 0, type = 0, interlace = 0;
+    const idat = [];
+    for (let p = 8; p + 8 <= buf.length;) {
+      const len = buf.readUInt32BE(p);
+      const kind = buf.toString('latin1', p + 4, p + 8);
+      const body = buf.subarray(p + 8, p + 8 + len);
+      if (kind === 'IHDR') { width = body.readUInt32BE(0); height = body.readUInt32BE(4); depth = body[8]; type = body[9]; interlace = body[12]; }
+      else if (kind === 'IDAT') idat.push(body);
+      else if (kind === 'IEND') break;
+      p += 12 + len;
+    }
+    if (depth !== 8 || interlace !== 0 || (type !== 2 && type !== 6) || !width || !height || width * height > 16e6) return null;
+    const bpp = type === 6 ? 4 : 3;
+    const stride = width * bpp;
+    const raw = zlib.inflateSync(Buffer.concat(idat));
+    if (raw.length < (stride + 1) * height) return null;
+    const out = Buffer.alloc(width * height * 4, 255);
+    let prev = Buffer.alloc(stride);
+    for (let y = 0; y < height; y++) {
+      const f = raw[y * (stride + 1)];
+      const line = Buffer.from(raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1)));
+      for (let i = 0; i < stride; i++) {
+        const a = i >= bpp ? line[i - bpp] : 0;
+        const b = prev[i];
+        const c = i >= bpp ? prev[i - bpp] : 0;
+        let add = 0;
+        if (f === 1) add = a;
+        else if (f === 2) add = b;
+        else if (f === 3) add = (a + b) >> 1;
+        else if (f === 4) { const pa = Math.abs(b - c), pb = Math.abs(a - c), pc = Math.abs(a + b - 2 * c); add = pa <= pb && pa <= pc ? a : pb <= pc ? b : c; }
+        else if (f !== 0) return null;
+        line[i] = (line[i] + add) & 255;
+      }
+      for (let x = 0; x < width; x++) {
+        const o = (y * width + x) * 4;
+        out[o] = line[x * bpp]; out[o + 1] = line[x * bpp + 1]; out[o + 2] = line[x * bpp + 2];
+        if (bpp === 4) out[o + 3] = line[x * bpp + 3];
+      }
+      prev = line;
+    }
+    return { width, height, data: out };
+  } catch { return null; }
+}
+
 
 const lin = v => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
 const lum = (r, g, b) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
@@ -345,7 +396,7 @@ export function boxContrast(png, bounds) {
   return glyph[Math.floor((glyph.length - 1) * 0.25)];
 }
 
-/** Contrast findings for the text nodes of one screen. `png` is a decoded pngjs image. */
+/** Contrast findings for the text nodes of one screen. `png` is an image from decodePng. */
 export function contrastFindings({ screen, nodes, png, pkg, density = 320, limit = 40 }) {
   const dp = DP(density);
   const out = [];
