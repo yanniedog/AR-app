@@ -85,6 +85,7 @@ export function RateOutlookChart({
         </View>
       </View>
       <View
+        collapsable={false}
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
         style={{ height, width: '100%' }}
         accessible
@@ -92,7 +93,7 @@ export function RateOutlookChart({
         accessibilityLabel={summary}
       >
         {width > left + right ? (
-          <Svg key={`${revision}:${index}`} width={width} height={height} accessible={false}
+          <Svg width={width} height={height} accessible={false}
             onLayout={(event) => {
               const layoutMeasured = hasPositiveChartLayout(event);
               const pointCount = hasFiniteChartPath(path) ? valid.length : 0;
