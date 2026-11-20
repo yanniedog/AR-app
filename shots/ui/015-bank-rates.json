@@ -1,0 +1,362 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Bank rates",
+  "at": [
+   248,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Bank rates",
+  "at": [
+   360,
+   273
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   190,
+   389
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   190,
+   387
+  ]
+ },
+ {
+  "label": "Gap",
+  "flags": "tap",
+  "at": [
+   530,
+   389
+  ]
+ },
+ {
+  "label": "Gap",
+  "at": [
+   530,
+   387
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   525
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   523
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   525
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   523
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   525
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   523
+  ]
+ },
+ {
+  "label": "Min",
+  "flags": "tap",
+  "at": [
+   81,
+   661
+  ]
+ },
+ {
+  "label": "Min",
+  "at": [
+   81,
+   661
+  ]
+ },
+ {
+  "label": "Mean",
+  "flags": "tap,sel",
+  "at": [
+   207,
+   661
+  ]
+ },
+ {
+  "label": "Mean",
+  "at": [
+   207,
+   661
+  ]
+ },
+ {
+  "label": "Median",
+  "flags": "tap",
+  "at": [
+   355,
+   661
+  ]
+ },
+ {
+  "label": "Median",
+  "at": [
+   355,
+   661
+  ]
+ },
+ {
+  "label": "Max",
+  "flags": "tap",
+  "at": [
+   496,
+   661
+  ]
+ },
+ {
+  "label": "Max",
+  "at": [
+   496,
+   661
+  ]
+ },
+ {
+  "label": "1 year",
+  "flags": "tap",
+  "at": [
+   96,
+   797
+  ]
+ },
+ {
+  "label": "1 year",
+  "at": [
+   96,
+   797
+  ]
+ },
+ {
+  "label": "All",
+  "flags": "tap,sel",
+  "at": [
+   223,
+   797
+  ]
+ },
+ {
+  "label": "All",
+  "at": [
+   217,
+   797
+  ]
+ },
+ {
+  "label": "Big four",
+  "flags": "tap",
+  "at": [
+   362,
+   797
+  ]
+ },
+ {
+  "label": "Big four",
+  "at": [
+   362,
+   797
+  ]
+ },
+ {
+  "label": "All banks",
+  "flags": "tap,sel",
+  "at": [
+   535,
+   797
+  ]
+ },
+ {
+  "label": "All banks",
+  "at": [
+   535,
+   797
+  ]
+ },
+ {
+  "label": "Products · Advertised rate",
+  "at": [
+   360,
+   905
+  ]
+ },
+ {
+  "label": "Missing observations · 8",
+  "at": [
+   360,
+   985
+  ]
+ },
+ {
+  "label": "Previous bank",
+  "flags": "tap",
+  "at": [
+   80,
+   1093
+  ]
+ },
+ {
+  "label": "Choose bank · 360 MMS",
+  "id": "bank-rate-picker",
+  "flags": "tap",
+  "at": [
+   360,
+   1093
+  ]
+ },
+ {
+  "label": "360 MMS",
+  "at": [
+   172,
+   1093
+  ]
+ },
+ {
+  "label": "3M",
+  "at": [
+   172,
+   1093
+  ]
+ },
+ {
+  "label": "360 MMS",
+  "at": [
+   370,
+   1093
+  ]
+ },
+ {
+  "label": "Next bank",
+  "flags": "tap",
+  "at": [
+   640,
+   1093
+  ]
+ },
+ {
+  "label": "8.59%",
+  "at": [
+   360,
+   1213
+  ]
+ },
+ {
+  "label": "Mean · Advertised rate · 20 Nov 2026",
+  "at": [
+   360,
+   1281
+  ]
+ },
+ {
+  "label": "360 MMS · Mean · Advertised rate · 8.59% · 20 Nov 2026 · 256 rates · 114 banks · Observed · 5 days · 16 Nov 2026 – 20 No",
+  "at": [
+   360,
+   1363
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap,sel",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "sel",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

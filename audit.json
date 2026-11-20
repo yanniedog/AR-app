@@ -1,0 +1,31 @@
+{
+  "kind": "live",
+  "url": null,
+  "outcome": "app crashed",
+  "elapsedMs": 136320,
+  "visibleOutcome": [
+    "Verified · 1.0.322",
+    "Install verified update",
+    "Install",
+    "Dismiss update banner",
+    "Go back",
+    "App health audit",
+    "Account",
+    "App health audit",
+    "Last audit",
+    "No audit history",
+    "Estimated time",
+    "09:00",
+    "Local audit",
+    "Local audit",
+    "Live audit",
+    "Live audit",
+    "Public upload",
+    "Next destination",
+    "Public hosting",
+    "Show Upload details"
+  ],
+  "debugLog": {
+    "error": "Upload and copy link not found"
+  }
+}
