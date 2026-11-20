@@ -169,9 +169,13 @@ export function installAppHealthTransportGuard(options: {
     const permittedUpdateManifest = isUpdateManifest && typeof input === 'string' &&
       init?.method === 'GET' && init.credentials === 'omit' && init.body == null && init.headers == null;
     const external = externalRequests.get(url);
-    const permittedExternal = external && typeof input === 'string' &&
-      init?.method === 'HEAD' && init.credentials === 'omit' &&
-      init.body == null && init.headers == null;
+    const rangeHeaders = init?.headers as Record<string, string> | undefined;
+    const permittedExternal = external && typeof input === 'string' && init?.credentials === 'omit' &&
+      init.body == null && (
+        (init.method === 'HEAD' && init.headers == null) ||
+        // The link checker's one-byte confirmation of an unavailable HEAD.
+        (init.method === 'GET' && rangeHeaders != null && !Array.isArray(rangeHeaders) &&
+          Object.keys(rangeHeaders).length === 1 && rangeHeaders.Range === 'bytes=0-0'));
     const permittedOfficialData = typeof input === 'string' && canonicalOfficialPublicDataUrl(input) != null
       && safeOfficialDataInit(init);
     const purpose = permittedUpdateManifest ? 'app-update-manifest'

@@ -126,6 +126,7 @@ export async function auditExternalLink(
   let handlerSettled = !handlerExpected;
   let networkSettled = !options.reachability;
   let fetchStarted = false;
+  let verifiedBy: 'HEAD' | 'GET' = 'HEAD';
   let deadlineExpired = false;
   const handler = options.handler === false
     ? Promise.resolve().then(() => {
@@ -158,10 +159,16 @@ export async function auditExternalLink(
       const init = { redirect: 'manual', credentials: 'omit', cache: 'no-store', signal } as const;
       // Many sites answer HEAD with 404 or 5xx while the page itself loads, so
       // an unavailable HEAD is confirmed once with a one-byte GET.
-      return doFetch(trusted.url, { method: 'HEAD', ...init }).then((head) =>
-        [404, 410, 500, 502, 503, 504].includes(head.status)
-          ? doFetch(trusted.url, { method: 'GET', headers: { Range: 'bytes=0-0' }, ...init })
-          : head);
+      return doFetch(trusted.url, { method: 'HEAD', ...init }).then((head) => {
+        if (![404, 410, 500, 502, 503, 504].includes(head.status)) return head;
+        void head.body?.cancel?.().catch(() => undefined);
+        verifiedBy = 'GET';
+        return doFetch(trusted.url, { method: 'GET', headers: { Range: 'bytes=0-0' }, ...init });
+      }).then((response) => {
+        // Only the status is needed; do not let a server that ignores Range stream the page.
+        void response.body?.cancel?.().catch(() => undefined);
+        return response;
+      });
     }, timeoutMs, deadlineController.signal)
       .then((response) => {
         result.httpStatus = response.status;
@@ -187,8 +194,12 @@ export async function auditExternalLink(
         if ([401, 403, 405, 407, 429, 501].includes(response.status)) {
           result.httpIssue = 'restricted';
           result.reachability = check('unknown', `HTTP ${response.status}: the source blocked the audit request; browser availability is unverified.`);
+        } else if (response.status === 416) {
+          // The server rejected the one-byte range, which still proves the page exists.
+          result.httpIssue = 'restricted';
+          result.reachability = check('unknown', 'HTTP 416: the source rejected the range request; the destination exists but was not fully confirmed.');
         } else if (response.status >= 200 && response.status < 300) {
-          result.reachability = check('pass', `HTTP ${response.status}: the approved destination responded to HEAD.`);
+          result.reachability = check('pass', `HTTP ${response.status}: the approved destination responded to ${verifiedBy}.`);
         } else if ([502, 503, 504].includes(response.status)) {
           result.httpIssue = 'server-unavailable';
           result.reachability = check('unknown', `HTTP ${response.status}: the source was temporarily unavailable; the destination was not confirmed.`);

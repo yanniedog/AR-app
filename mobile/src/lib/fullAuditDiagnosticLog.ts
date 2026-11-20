@@ -38,7 +38,7 @@ const FIXED_TEXT: Record<string, ReadonlySet<string>> = Object.fromEntries(Objec
   platform: 'android ios web', osName: 'Android iOS', jsEngine: 'Hermes hermes jsc SpiderMonkey V8 JavaScriptCore unknown',
   payloadSource: 'remote local bundled cache unknown sample',
   entryMeasurementStatus: 'not-observed interrupted probe-failed timed-out',
-  httpIssue: 'timeout cancelled transport restricted redirect-unverified response-unverified response-rejected',
+  httpIssue: 'timeout cancelled transport restricted redirect-unverified response-unverified response-rejected server-unavailable',
   overall: 'healthy attention bottleneck', auditCoverageProfile: 'basic maximum-safe maximum-safe-coverage-v1',
   measurementMode: 'basic deep route-round-trip semantic-action segmented-payload-capacity',
   // Historical reports still contain this retired producer's classification.
