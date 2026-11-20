@@ -93,7 +93,7 @@ function tapTargets({ screen, app, density, size }) {
   for (const n of app) {
     if (!n.clickable || !n.enabled) continue;
     // A control cut off by the screen edge or the tab bar reports only its visible sliver.
-    if (n.bounds[3] >= barTop - 2 && n.bounds[1] < barTop && n.bounds[1] > size[1] * 0.5) continue;
+    if (n.bounds[3] >= barTop - 2 && n.bounds[1] > size[1] * 0.5 && !TAB_LABELS.test((n.text || n.desc || '').trim())) continue;
     if (n.bounds[1] <= 2 || n.bounds[3] >= size[1] - 2) continue;
     if (clippedByScroller(n, scrollers, app)) continue;
     const w = (n.bounds[2] - n.bounds[0]) / dp;
@@ -116,13 +116,15 @@ function tapTargets({ screen, app, density, size }) {
   return out;
 }
 
-function textSize({ screen, app, density }) {
+function textSize({ screen, app, density, size }) {
   const out = [];
   const dp = DP(density);
+  const barTop = bottomBarTop(app, size);
   const scrollers = app.filter(n => n.scrollable && area(n.bounds) > 0);
   for (const n of app) {
     const t = n.text;
-    if (!t || /\n/.test(t) || n.cls === 'EditText' || clippedByScroller(n, scrollers, app)) continue;
+    if (!t || /\n/.test(t) || n.cls === 'EditText' || !n.enabled || clippedByScroller(n, scrollers, app)) continue;
+    if (n.bounds[3] > barTop && n.bounds[1] > size[1] * 0.5 && !TAB_LABELS.test(t.trim())) continue;
     const h = (n.bounds[3] - n.bounds[1]) / dp;
     if (h < LIMITS.minTextDp) {
       out.push({ check: 'text-size', severity: 'minor', screen, text: label(n), at: centre(n.bounds), detail: `text box ${Math.round(h)} dp tall` });
@@ -434,7 +436,7 @@ export function contrastFindings({ screen, nodes, png, pkg, density = 320, limit
   const app = appNodes(nodes, pkg);
   const barTop = bottomBarTop(app, size);
   const scrollers = app.filter(n => n.scrollable && area(n.bounds) > 0);
-  const texts = app.filter(n => n.text && !/\n/.test(n.text) && n.cls !== 'EditText' && !clippedByScroller(n, scrollers, app) && !app.some(d => !d.enabled && d !== n && contains(d.bounds, n.bounds)) && !(n.bounds[3] > barTop && n.bounds[1] > size[1] * 0.5 && !TAB_LABELS.test(n.text.trim())))
+  const texts = app.filter(n => n.text && !/\n/.test(n.text) && n.cls !== 'EditText' && n.enabled && !clippedByScroller(n, scrollers, app) && !app.some(d => !d.enabled && d !== n && contains(d.bounds, n.bounds)) && !(n.bounds[3] > barTop && n.bounds[1] > size[1] * 0.5 && !TAB_LABELS.test(n.text.trim())))
     .sort((a, b) => area(b.bounds) - area(a.bounds)).slice(0, limit);
   for (const n of texts) {
     if (n.text.trim().length < 2) continue;
