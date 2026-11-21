@@ -1,0 +1,1234 @@
+{
+ "schemaVersion": 1,
+ "screens": 30,
+ "findingsTotal": 67,
+ "major": 2,
+ "counts": {
+  "jargon": 7,
+  "crowded-targets": 31,
+  "contrast": 1,
+  "accuracy": 25,
+  "slow": 1,
+  "slow-first-value": 1,
+  "no-return-reason": 1
+ },
+ "rubric": [
+  {
+   "key": "designConsistency",
+   "title": "Design consistency",
+   "score": 4.9,
+   "findings": 1,
+   "top": [
+    "minor open app: contrast \"Updating\" (4.2:1, needs 4.5:1). Fix: Darken the text or lighten the background"
+   ]
+  },
+  {
+   "key": "layout",
+   "title": "Layout",
+   "score": 5,
+   "findings": 0,
+   "top": []
+  },
+  {
+   "key": "easeOfUse",
+   "title": "Ease of use",
+   "score": 5,
+   "findings": 0,
+   "top": []
+  },
+  {
+   "key": "comfort",
+   "title": "Comfort",
+   "score": 4.7,
+   "findings": 1,
+   "top": [
+    "major relaunch after audit crash: slow (10.3 s to settle). Fix: Show content first and defer the slow work"
+   ]
+  },
+  {
+   "key": "helpfulness",
+   "title": "Helpfulness",
+   "score": 5,
+   "findings": 0,
+   "top": []
+  },
+  {
+   "key": "appropriateness",
+   "title": "Appropriateness",
+   "score": 2.9,
+   "findings": 25,
+   "top": [
+    "minor open app: accuracy \"CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank\" (comparison 6% is below advertised 6.54%). Fix: Fix the displayed figure or its sort",
+    "minor open app: accuracy \"Everyday Home Loan, MoveBank\" (comparison 6.19% is below advertised 6.49%). Fix: Fix the displayed figure or its sort",
+    "minor scroll rates 1: accuracy \"PLUS HOME LOAN FIXED 3YR 60-80 LVR PI, Cairns bank\" (comparison 6.25% is below advertised 6.64%). Fix: Fix the displayed figure or its sort"
+   ]
+  },
+  {
+   "key": "onboarding",
+   "title": "Onboarding ease",
+   "score": 4.7,
+   "findings": 1,
+   "top": [
+    "major cold start: slow-first-value (22.8 s from launch to rates showing). Fix: Show cached rates on launch before the refresh"
+   ]
+  },
+  {
+   "key": "barriers",
+   "title": "Barriers to entry and use",
+   "score": 4.7,
+   "findings": 1,
+   "top": [
+    "major cold start: slow-first-value (22.8 s from launch to rates showing). Fix: Show cached rates on launch before the refresh"
+   ]
+  },
+  {
+   "key": "engagement",
+   "title": "Engagement hooks",
+   "score": 4.9,
+   "findings": 1,
+   "top": [
+    "minor all: no-return-reason (no change or recency signal and no alerts). Fix: Show what changed since the last visit"
+   ]
+  },
+  {
+   "key": "frustration",
+   "title": "Frustration and abandonment risk",
+   "score": 1.1,
+   "findings": 41,
+   "top": [
+    "major relaunch after audit crash: slow (10.3 s to settle). Fix: Show content first and defer the slow work",
+    "major cold start: slow-first-value (22.8 s from launch to rates showing). Fix: Show cached rates on launch before the refresh",
+    "minor open app: jargon \"Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI\" (unexpanded LVR). Fix: Replace the abbreviation with a plain label"
+   ]
+  }
+ ],
+ "tasks": [
+  {
+   "task": "Find the best rate",
+   "taps": 0,
+   "ms": 22821
+  },
+  {
+   "task": "Compare",
+   "taps": null,
+   "ms": null
+  },
+  {
+   "task": "Open a lender",
+   "taps": null,
+   "ms": null
+  },
+  {
+   "task": "Open a product",
+   "taps": 1,
+   "ms": 2646
+  },
+  {
+   "task": "Save a rate",
+   "taps": null,
+   "ms": null
+  }
+ ],
+ "firstRun": {
+  "firstValueMs": 22821,
+  "ratesShown": true,
+  "gates": []
+ },
+ "hooks": {
+  "saveRow": true,
+  "savedTab": true,
+  "alerts": false
+ },
+ "perScreen": [
+  {
+   "slug": "001-open-app",
+   "name": "open app",
+   "elements": 52,
+   "tappable": 31,
+   "rows": 5,
+   "findings": 8,
+   "major": 0
+  },
+  {
+   "slug": "002-scroll-rates-1",
+   "name": "scroll rates 1",
+   "elements": 52,
+   "tappable": 34,
+   "rows": 8,
+   "findings": 10,
+   "major": 0
+  },
+  {
+   "slug": "003-scroll-rates-2",
+   "name": "scroll rates 2",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 2,
+   "major": 0
+  },
+  {
+   "slug": "004-scroll-rates-back",
+   "name": "scroll rates back",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 2,
+   "major": 0
+  },
+  {
+   "slug": "005-open-product",
+   "name": "open product",
+   "elements": 31,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "006-scroll-product",
+   "name": "scroll product",
+   "elements": 24,
+   "tappable": 8,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "007-back-to-rates",
+   "name": "back to rates",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 2,
+   "major": 0
+  },
+  {
+   "slug": "008-open-lenders",
+   "name": "open lenders",
+   "elements": 41,
+   "tappable": 21,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "009-scroll-lenders",
+   "name": "scroll lenders",
+   "elements": 41,
+   "tappable": 21,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "010-back-from-lenders",
+   "name": "back from lenders",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 2,
+   "major": 0
+  },
+  {
+   "slug": "011-switch-to-savings",
+   "name": "switch to savings",
+   "elements": 49,
+   "tappable": 31,
+   "rows": 6,
+   "findings": 4,
+   "major": 0
+  },
+  {
+   "slug": "012-switch-to-home-loans",
+   "name": "switch to home loans",
+   "elements": 57,
+   "tappable": 30,
+   "rows": 7,
+   "findings": 5,
+   "major": 0
+  },
+  {
+   "slug": "013-open-filters",
+   "name": "open filters",
+   "elements": 42,
+   "tappable": 20,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "014-close-filters",
+   "name": "close filters",
+   "elements": 57,
+   "tappable": 30,
+   "rows": 7,
+   "findings": 5,
+   "major": 0
+  },
+  {
+   "slug": "015-open-market",
+   "name": "open market",
+   "elements": 42,
+   "tappable": 13,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "016-open-rba",
+   "name": "open rba",
+   "elements": 25,
+   "tappable": 7,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "017-scroll-rba",
+   "name": "scroll rba",
+   "elements": 21,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "018-back-from-rba",
+   "name": "back from rba",
+   "elements": 42,
+   "tappable": 13,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "019-scroll-market",
+   "name": "scroll market",
+   "elements": 32,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "020-open-saved",
+   "name": "open saved",
+   "elements": 19,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "021-return-to-rates",
+   "name": "return to rates",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 2,
+   "major": 0
+  },
+  {
+   "slug": "022-cold-start",
+   "name": "cold start",
+   "elements": 52,
+   "tappable": 31,
+   "rows": 5,
+   "findings": 7,
+   "major": 0
+  },
+  {
+   "slug": "023-about",
+   "name": "about",
+   "elements": 22,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "024-audit-screen",
+   "name": "audit screen",
+   "elements": 25,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "026-audit-crashed",
+   "name": "audit crashed",
+   "elements": 0,
+   "tappable": 0,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "027-relaunch-after-audit-crash",
+   "name": "relaunch after audit crash",
+   "elements": 52,
+   "tappable": 31,
+   "rows": 5,
+   "findings": 8,
+   "major": 1
+  },
+  {
+   "slug": "028-about",
+   "name": "about",
+   "elements": 22,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "029-audit-screen",
+   "name": "audit screen",
+   "elements": 25,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "043-about-for-debug-log",
+   "name": "about for debug log",
+   "elements": 22,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "044-debug-log-screen",
+   "name": "debug log screen",
+   "elements": 28,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 3,
+   "major": 0
+  }
+ ],
+ "findings": [
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "open app",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    921
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "open app",
+   "text": "View Police Credit Union Ltd · History · Freshness · Unknown / View MoveBank · History · Freshness · Unknown",
+   "at": [
+    104,
+    1249
+   ],
+   "detail": "7 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "open app",
+   "text": "View MoveBank · History · Freshness · Unknown / Everyday Home Loan, MoveBank, Comparison rate 6.19%, Advertised rate 6.49% · Fix",
+   "at": [
+    104,
+    1360
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "open app",
+   "text": "Everyday Home Loan, MoveBank, Comparison rate 6.19%, Advertised rate 6.49% · Fix / Save, Everyday Home Loan, MoveBank, Comparison rate 6.19%",
+   "at": [
+    384,
+    1361
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "open app",
+   "text": "Save, Everyday Home Loan, MoveBank, Comparison rate 6.19% / Market",
+   "at": [
+    640,
+    1369
+   ],
+   "detail": "1 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "contrast",
+   "fix": "Darken the text or lighten the background",
+   "severity": "minor",
+   "screen": "open app",
+   "text": "Updating",
+   "at": [
+    360,
+    605
+   ],
+   "detail": "4.2:1, needs 4.5:1"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "open app",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    961
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "open app",
+   "text": "Everyday Home Loan, MoveBank",
+   "at": [
+    384,
+    1361
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "Cairns · PLUS HOME LOAN FIXED 2YR 60-80 LVR PI",
+   "at": [
+    384,
+    658
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "View MoveBank · History · Freshness · Unknown / Everyday Home Loan, MoveBank, Comparison rate 6.25%, Advertised rate 6.44% · Fix",
+   "at": [
+    104,
+    602
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "Everyday Home Loan, MoveBank, Comparison rate 6.25%, Advertised rate 6.44% · Fix / Save, Everyday Home Loan, MoveBank, Comparison rate 6.25%",
+   "at": [
+    384,
+    602
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "View Greater Bank · History · Freshness · Unknown / View MoveBank · History · Freshness · Unknown",
+   "at": [
+    104,
+    1274
+   ],
+   "detail": "7 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "View MoveBank · History · Freshness · Unknown / Offset Home Loan, MoveBank, Comparison rate 6.35%, Advertised rate 6.29% · Varia",
+   "at": [
+    104,
+    1372
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "PLUS HOME LOAN FIXED 3YR 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    530
+   ],
+   "detail": "comparison 6.25% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "Everyday Home Loan, MoveBank",
+   "at": [
+    384,
+    602
+   ],
+   "detail": "comparison 6.25% is below advertised 6.44%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "PLUS HOME LOAN FIXED 2YR 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    698
+   ],
+   "detail": "comparison 6.28% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "PLUS HOME LOAN FIXED 1YR 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    842
+   ],
+   "detail": "comparison 6.31% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "PLUS HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    986
+   ],
+   "detail": "comparison 6.32% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 2",
+   "text": "Everyday Home Loan, MoveBank",
+   "at": [
+    384,
+    647
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 2",
+   "text": "Offset Home Loan, MoveBank",
+   "at": [
+    384,
+    789
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates back",
+   "text": "Everyday Home Loan, MoveBank",
+   "at": [
+    384,
+    647
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates back",
+   "text": "Offset Home Loan, MoveBank",
+   "at": [
+    384,
+    789
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "back to rates",
+   "text": "Everyday Home Loan, MoveBank",
+   "at": [
+    384,
+    647
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "back to rates",
+   "text": "Offset Home Loan, MoveBank",
+   "at": [
+    384,
+    789
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "back from lenders",
+   "text": "Everyday Home Loan, MoveBank",
+   "at": [
+    384,
+    647
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "back from lenders",
+   "text": "Offset Home Loan, MoveBank",
+   "at": [
+    384,
+    789
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "switch to savings",
+   "text": "View Macquarie Bank Limited · History · Freshness · Unknown / View Macquarie Bank Limited · History · Freshness · Unknown",
+   "at": [
+    104,
+    1233
+   ],
+   "detail": "7 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "switch to savings",
+   "text": "View Macquarie Bank Limited · History · Freshness · Unknown / Macquarie Savings Account, Macquarie Bank Limited, Rate 5.50%, Ongoing · $25k–$5",
+   "at": [
+    104,
+    1352
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "switch to savings",
+   "text": "Macquarie Savings Account, Macquarie Bank Limited, Rate 5.50%, Ongoing · $25k–$5 / Save, Macquarie Savings Account, Macquarie Bank Limited, Rate 5.50%, Balance $25",
+   "at": [
+    384,
+    1353
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "switch to savings",
+   "text": "Save, Macquarie Savings Account, Macquarie Bank Limited, Rate 5.50%, Balance $25 / Market",
+   "at": [
+    640,
+    1361
+   ],
+   "detail": "1 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "switch to home loans",
+   "text": "BFirst · Basic Home Loan Variable LVR 70-80%",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "switch to home loans",
+   "text": "Next page / Saved",
+   "at": [
+    474,
+    1380
+   ],
+   "detail": "1 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "switch to home loans",
+   "text": "Last page / Market",
+   "at": [
+    638,
+    1380
+   ],
+   "detail": "1 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "switch to home loans",
+   "text": "Everyday Home Loan, MoveBank",
+   "at": [
+    384,
+    789
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "switch to home loans",
+   "text": "Offset Home Loan, MoveBank",
+   "at": [
+    384,
+    933
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "open filters",
+   "text": "LVR · Tier",
+   "at": [
+    360,
+    1265
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "close filters",
+   "text": "BFirst · Basic Home Loan Variable LVR 70-80%",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "close filters",
+   "text": "Next page / Saved",
+   "at": [
+    474,
+    1380
+   ],
+   "detail": "1 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "close filters",
+   "text": "Last page / Market",
+   "at": [
+    638,
+    1380
+   ],
+   "detail": "1 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "close filters",
+   "text": "Everyday Home Loan, MoveBank",
+   "at": [
+    384,
+    789
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "close filters",
+   "text": "Offset Home Loan, MoveBank",
+   "at": [
+    384,
+    933
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll rba",
+   "text": "Navigate up / Refresh outlook",
+   "at": [
+    56,
+    141
+   ],
+   "detail": "0 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll market",
+   "text": "Macquarie Bank Limited · Increase · Home loans · Average +20.0 bps · 2/2 product / Regional Australia Bank · Increase · Home loans · Average +25.0 bps · 2/4 produc",
+   "at": [
+    360,
+    237
+   ],
+   "detail": "1 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "return to rates",
+   "text": "Everyday Home Loan, MoveBank",
+   "at": [
+    384,
+    647
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "return to rates",
+   "text": "Offset Home Loan, MoveBank",
+   "at": [
+    384,
+    789
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "cold start",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    921
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "cold start",
+   "text": "View Police Credit Union Ltd · History · Freshness · Unknown / View MoveBank · History · Freshness · Unknown",
+   "at": [
+    104,
+    1249
+   ],
+   "detail": "7 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "cold start",
+   "text": "View MoveBank · History · Freshness · Unknown / Everyday Home Loan, MoveBank, Comparison rate 6.19%, Advertised rate 6.49% · Fix",
+   "at": [
+    104,
+    1360
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "cold start",
+   "text": "Everyday Home Loan, MoveBank, Comparison rate 6.19%, Advertised rate 6.49% · Fix / Save, Everyday Home Loan, MoveBank, Comparison rate 6.19%",
+   "at": [
+    384,
+    1361
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "cold start",
+   "text": "Save, Everyday Home Loan, MoveBank, Comparison rate 6.19% / Market",
+   "at": [
+    640,
+    1369
+   ],
+   "detail": "1 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "cold start",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    961
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "cold start",
+   "text": "Everyday Home Loan, MoveBank",
+   "at": [
+    384,
+    1361
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "audit screen",
+   "text": "Show Audit settings / Rates",
+   "at": [
+    360,
+    1369
+   ],
+   "detail": "1 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "relaunch after audit crash",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    905
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "relaunch after audit crash",
+   "text": "View Police Credit Union Ltd · History · Freshness · Unknown / View MoveBank · History · Freshness · Unknown",
+   "at": [
+    104,
+    1233
+   ],
+   "detail": "7 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "relaunch after audit crash",
+   "text": "View MoveBank · History · Freshness · Unknown / Everyday Home Loan, MoveBank, Comparison rate 6.19%, Advertised rate 6.49% · Fix",
+   "at": [
+    104,
+    1352
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "relaunch after audit crash",
+   "text": "Everyday Home Loan, MoveBank, Comparison rate 6.19%, Advertised rate 6.49% · Fix / Save, Everyday Home Loan, MoveBank, Comparison rate 6.19%",
+   "at": [
+    384,
+    1353
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "relaunch after audit crash",
+   "text": "Save, Everyday Home Loan, MoveBank, Comparison rate 6.19% / Market",
+   "at": [
+    640,
+    1361
+   ],
+   "detail": "1 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "relaunch after audit crash",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    945
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "relaunch after audit crash",
+   "text": "Everyday Home Loan, MoveBank",
+   "at": [
+    384,
+    1353
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "slow",
+   "severity": "major",
+   "screen": "relaunch after audit crash",
+   "text": "",
+   "at": [
+    0,
+    0
+   ],
+   "detail": "10.3 s to settle",
+   "fix": "Show content first and defer the slow work"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "audit screen",
+   "text": "Show Audit settings / Rates",
+   "at": [
+    360,
+    1369
+   ],
+   "detail": "1 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "debug log screen",
+   "text": "Clear / Rates",
+   "at": [
+    131,
+    1388
+   ],
+   "detail": "1 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "debug log screen",
+   "text": "Copy / Saved",
+   "at": [
+    346,
+    1387
+   ],
+   "detail": "1 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "debug log screen",
+   "text": "Share / Saved",
+   "at": [
+    567,
+    1387
+   ],
+   "detail": "1 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "slow-first-value",
+   "severity": "major",
+   "screen": "cold start",
+   "text": "",
+   "at": [
+    0,
+    0
+   ],
+   "detail": "22.8 s from launch to rates showing",
+   "fix": "Show cached rates on launch before the refresh"
+  },
+  {
+   "check": "no-return-reason",
+   "severity": "minor",
+   "screen": "all",
+   "text": "",
+   "at": [
+    0,
+    0
+   ],
+   "detail": "no change or recency signal and no alerts",
+   "fix": "Show what changed since the last visit"
+  }
+ ],
+ "sampleChecked": false,
+ "contrastMeasured": true,
+ "summaryLines": [
+  "UX review: 2 major, 65 minor across 30 screens. Weakest: Frustration and abandonment risk 1.1/5, Appropriateness 2.9/5, Comfort 4.7/5.",
+  "First value 22.8 s, 0 gate taps. Taps: find the best rate 0, compare unknown, open a lender unknown, open a product 1, save a rate unknown.",
+  "",
+  "Frustration and abandonment risk 1.1/5: 2 major, 39 minor.",
+  "- major | relaunch after audit crash: slow, 10.3 s to settle | Fix: Show content first and defer the slow work",
+  "- major | cold start: slow-first-value, 22.8 s from launch to rates showing | Fix: Show cached rates on launch before the refresh",
+  "- minor | open app: jargon \"Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI\", unexpanded LVR | Fix: Replace the abbreviation with a plain label",
+  "- minor | open app: crowded-targets \"View Police Credit Union Ltd · History · Freshness\", 7 dp apart | Fix: Add at least 8 dp between adjacent controls",
+  "- minor | scroll rates 1: jargon \"Cairns · PLUS HOME LOAN FIXED 2YR 60-80 LVR PI\", unexpanded LVR | Fix: Replace the abbreviation with a plain label",
+  "- minor | scroll rates 1: crowded-targets \"View MoveBank · History · Freshness · Unknown / Ev\", 4 dp apart | Fix: Add at least 8 dp between adjacent controls"
+ ]
+}

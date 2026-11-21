@@ -1,0 +1,136 @@
+{
+ "count": 20,
+ "flagged": 3,
+ "sheets": [
+  1,
+  2
+ ],
+ "results": [
+  {
+   "name": "browse",
+   "why": "home rates list, incl. early first page with Updating then the settled page (rows must not shift)",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "watchlist",
+   "why": "saved items",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "market",
+   "why": "market tab",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "tools",
+   "why": "tools tab",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "trends",
+   "why": "trends charts",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "search",
+   "why": "search",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "bank-rates",
+   "why": "bank rates",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "compare",
+   "why": "compare",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "calculator",
+   "why": "calculator",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "projections",
+   "why": "projections chart",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "research",
+   "why": "research",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "rba",
+   "why": "RBA outlook charts, crash site, refresh action when a chart is unavailable",
+   "flags": [
+    "text: Refresh failed"
+   ],
+   "thumb": true
+  },
+  {
+   "name": "rba-scrolled",
+   "why": "RBA lower sections and history chart",
+   "flags": [
+    "text: Bond data unavailable"
+   ],
+   "thumb": true
+  },
+  {
+   "name": "rba-response",
+   "why": "RBA response",
+   "flags": [
+    "text: 360 MMS · First move · Baseline unavailable · Afte"
+   ],
+   "thumb": true
+  },
+  {
+   "name": "settings",
+   "why": "settings",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "about",
+   "why": "about",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "profile",
+   "why": "profile",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "terms",
+   "why": "terms",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "third-party",
+   "why": "third-party notices",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "catalogue",
+   "why": "catalogue",
+   "flags": [],
+   "thumb": true
+  }
+ ]
+}
