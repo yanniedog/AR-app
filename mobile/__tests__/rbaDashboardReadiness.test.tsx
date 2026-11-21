@@ -172,6 +172,21 @@ test('unavailable chart states keep one refresh action in the Outlook section an
   expect(refreshActions().some((node) => insideChartSlot(node))).toBe(false);
 });
 
+test('an unavailable chart placeholder is itself a refresh button without adding children to its slot', async () => {
+  mockLoad.mockResolvedValue({ ...outlook, economists: null, bondForwards: null });
+  await mount();
+  const placeholders = ['Forecast unavailable', 'Bond data unavailable'].map((text) =>
+    tree!.root.findAllByType('LedgerText').find((node) => node.props.children === text)!);
+  const before = mockLoad.mock.calls.length;
+  for (const placeholder of placeholders) {
+    expect(placeholder.props.accessibilityRole).toBe('button');
+    expect(placeholder.props.accessibilityLabel).toBe('Refresh outlook');
+    expect((placeholder as unknown as { parent: { children: unknown[] } }).parent.children).toHaveLength(1);
+    await act(async () => { (placeholder.props.onPress as () => void)(); });
+  }
+  expect(mockLoad.mock.calls.length).toBeGreaterThan(before);
+});
+
 test('loading cannot certify an empty chart; an actual unavailable placeholder requires positive native layout', async () => {
   let resolve!: (value: RbaMarketOutlook) => void;
   mockLoad.mockReturnValueOnce(new Promise<RbaMarketOutlook>((accept) => { resolve = accept; }));
