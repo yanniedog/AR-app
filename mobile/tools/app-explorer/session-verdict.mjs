@@ -47,6 +47,8 @@ export function computeVerdict(report, baseline) {
   const findings = [];
   const add = (severity, kind, step, text) => findings.push({ severity, kind, step: step.n, name: step.name, text });
 
+  // A scroll step can move the screen's one refresh action out of view; the user still has it.
+  let actionOnScreen = false;
   for (const s of steps) {
     const launch = s.activityStartMs != null;
     if (s.alive === false) add('fail', 'crash', s, `Crashed on "${s.name}"`);
@@ -64,9 +66,10 @@ export function computeVerdict(report, baseline) {
     if (s.retapped) add('friction', 'repeated-tap', s, `"${s.name}" needed a second tap`);
     if (s.shifts >= t.layoutJumps) add('friction', 'layout-jump', s, `Layout moved ${s.shifts} times after content showed on "${s.name}"`);
     if (s.errorState) {
-      if (s.errorState.action) add('friction', 'error-shown', s, `"${s.errorState.text}" shown on "${s.name}"`);
+      if (s.errorState.action || (actionOnScreen && /^scroll /.test(s.name))) add('friction', 'error-shown', s, `"${s.errorState.text}" shown on "${s.name}"`);
       else add('fail', 'error-no-action', s, `"${s.errorState.text}" with no action on "${s.name}"`);
     }
+    actionOnScreen = /^scroll /.test(s.name) ? actionOnScreen : Boolean(s.errorState?.action);
     const ratio = jankRatio(s);
     const base = baseByName.get(s.name);
     const baseRatio = base ? jankRatio(base) : null;
