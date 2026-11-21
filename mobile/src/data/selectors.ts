@@ -15,7 +15,7 @@ import {
 import { productHasAllEligibilityCriteria } from './eligibility';
 import { productHasAllFeatures } from './featuresCore';
 import { cooperativeSliceMs } from '../lib/firstValue';
-import { bootCount } from '../lib/bootTrace';
+import { bootCount } from '../lib/bootCounters';
 import {
   effectiveFraction,
   sortByDisplayLabel,

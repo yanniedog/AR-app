@@ -1,4 +1,5 @@
-import { bootCount, bootMark, resetBootTraceForTests } from '../src/lib/bootTrace';
+import { bootCount } from '../src/lib/bootCounters';
+import { bootMark, resetBootTraceForTests } from '../src/lib/bootTrace';
 import { debugLog } from '../src/lib/debugLog';
 
 describe('boot trace', () => {
