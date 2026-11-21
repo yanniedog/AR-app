@@ -154,36 +154,29 @@ test('switching real multipoint charts reports readiness for each selection from
   expect(graphics().ready).toBe(true);
 });
 
-test('unavailable chart states keep one refresh action in the Outlook section and add none inside the chart slots', async () => {
+test('unavailable chart states offer a refresh action in the stable source-line slot, never in the chart slot', async () => {
   mockLoad.mockResolvedValue({ ...outlook, economists: null, bondForwards: null });
   await mount();
   const refreshActions = () => tree!.root.findAllByType('LedgerAction').filter((node) => node.props.label === 'Refresh outlook');
   expect(tree!.root.findAllByType('LedgerText').some((node) => node.props.children === 'Forecast unavailable')).toBe(true);
-  expect(refreshActions()).toHaveLength(1);
-  type Ancestor = { type: unknown; props: { collapsable?: boolean }; parent: Ancestor | null };
-  const insideChartSlot = (start: unknown) => {
-    for (let cur = (start as Ancestor).parent; cur; cur = cur.parent) {
-      if (cur.type === 'View' && cur.props.collapsable === false) return true;
-    }
-    return false;
-  };
-  const placeholder = tree!.root.findAllByType('LedgerText').find((node) => node.props.children === 'Forecast unavailable')!;
-  expect(insideChartSlot(placeholder)).toBe(true);
-  expect(refreshActions().some((node) => insideChartSlot(node))).toBe(false);
-});
-
-test('an unavailable chart placeholder is itself a 48 dp refresh button without adding children to its slot', async () => {
-  mockLoad.mockResolvedValue({ ...outlook, economists: null, bondForwards: null });
-  await mount();
-  const find = (text: string) => tree!.root.findAllByType('LedgerText').find((node) => node.props.children === text)!;
-  for (const text of ['Forecast unavailable', 'Bond data unavailable']) {
-    const placeholder = find(text);
-    expect(placeholder.props.accessibilityRole).toBe('button');
-    expect(placeholder.props.accessibilityLabel).toBe('Refresh outlook');
-    expect((placeholder.props.style as { minHeight: number }).minHeight).toBeGreaterThanOrEqual(48);
-    expect((placeholder as unknown as { parent: { children: unknown[] } }).parent.children).toHaveLength(1);
+  expect(refreshActions()).toHaveLength(3);
+  type Node = { type: unknown; props: { collapsable?: boolean }; parent: Node | null; children: unknown[] };
+  const slotOf = (node: unknown) => (node as Node).parent!;
+  const placeholders = ['Forecast unavailable', 'Bond data unavailable'].map((text) =>
+    tree!.root.findAllByType('LedgerText').find((node) => node.props.children === text)!);
+  for (const placeholder of placeholders) expect(slotOf(placeholder).children).toHaveLength(1);
+  const chartSlots = new Set(placeholders.map(slotOf));
+  const slotRetries = refreshActions().filter((action) => slotOf(action).props.collapsable === false);
+  expect(slotRetries).toHaveLength(2);
+  for (const [index, retry] of slotRetries.entries()) {
+    const sourceSlot = slotOf(retry);
+    expect(chartSlots.has(sourceSlot)).toBe(false);
+    expect(sourceSlot.children).toHaveLength(1);
+    // The source-line slot is the sibling directly after its chart slot.
+    const siblings = slotOf(sourceSlot).children;
+    expect(siblings.indexOf(sourceSlot)).toBe(siblings.indexOf(slotOf(placeholders[index])) + 1);
     const before = mockLoad.mock.calls.length;
-    await act(async () => { (placeholder.props.onPress as () => void)(); });
+    await act(async () => { (retry.props.onPress as () => void)(); });
     expect(mockLoad.mock.calls.length).toBe(before + 1);
     expect(mockLoad.mock.calls[before][0]).toBe(true);
   }
@@ -283,4 +276,14 @@ test('invalid expected source points cannot be certified by the chart’s no-obs
   measureChart('bonds');
   expect(probe('forecast')).toMatchObject({ status: 'pending', expectedCount: 1, actualCount: 0 });
   expect(graphics().ready).toBe(false);
+});
+
+test('source facts stay visible when forecast points are all in the past, in a one-child slot', async () => {
+  mockLoad.mockResolvedValue({ ...outlook, economists: { ...outlook.economists!, points: [{ date: '2020-01-01', value: 4.1 }] } });
+  await mount();
+  const slots = tree!.root.findAllByType('View').filter((node) => node.props.collapsable === false);
+  const survey = slots.find((slot) => slot.findAllByType('LedgerText').some((text) => String(text.props.children).includes('RBA J1')));
+  expect(survey).toBeDefined();
+  expect((survey as unknown as { children: unknown[] }).children).toHaveLength(1);
+  expect(survey!.findAllByType('LedgerAction')).toHaveLength(0);
 });

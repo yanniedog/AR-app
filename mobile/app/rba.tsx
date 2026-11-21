@@ -218,32 +218,26 @@ export default function RbaRates() {
         </LedgerSection>
 
         <LedgerSection title="Economists’ cash-rate forecast">
-          <View collapsable={false}>{forecasts.length ? <RateOutlookChart key={`forecast:${cashRate}`} label="Economists’ cash-rate forecast" points={forecasts} cashRate={cashRate} selectedIndex={forecastIndex} onSelect={setForecastIndex} onGraphicReady={forecastReady} /> : <LedgerText key={forecastGraphicKey} tone="mutedInk" onPress={loading ? undefined : () => { void refresh(true); }}
-            accessibilityRole={loading ? undefined : 'button'} accessibilityLabel={loading ? undefined : uiLabel('Refresh outlook')}
-            style={loading ? undefined : { minHeight: 48, textAlignVertical: 'center' }}
-          onLayout={(event) => {
+          <View collapsable={false}>{forecasts.length ? <RateOutlookChart key={`forecast:${cashRate}`} label="Economists’ cash-rate forecast" points={forecasts} cashRate={cashRate} selectedIndex={forecastIndex} onSelect={setForecastIndex} onGraphicReady={forecastReady} /> : <LedgerText key={forecastGraphicKey} tone="mutedInk" onLayout={(event) => {
             if (!loading) forecastReady({
               revision: forecastRevision, expectedCount: 0, pointCount: 0,
               accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true
             });
           }}>{loading ? uiLabel("Loading") : uiLabel("Forecast unavailable")}</LedgerText>}</View>
           <View collapsable={false}>
-            {outlook?.economists ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA J1', ' ', '·', ' ', 'Survey', ' ', uiDate(outlook.economists.surveyDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.economists.publicationDate), surveyStale ? uiJoin(' ', '·', ' ', 'Older survey') : '')}</LedgerText> : null}
+            {outlook?.economists ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA J1', ' ', '·', ' ', 'Survey', ' ', uiDate(outlook.economists.surveyDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.economists.publicationDate), surveyStale ? uiJoin(' ', '·', ' ', 'Older survey') : '')}</LedgerText> : !forecasts.length && !loading ? <LedgerAction label={uiLabel('Refresh outlook')} variant="quiet" onPress={() => { void refresh(true); }} style={{ alignSelf: 'flex-start' }} /> : null}
           </View>
         </LedgerSection>
 
         <LedgerSection title="Bond-market forward rates">
-          <View collapsable={false}>{bonds?.length ? <RateOutlookChart key={`bonds:${cashRate}`} label="Bond-market forward rates" points={bonds} cashRate={cashRate} tone="info" selectedIndex={bondIndex} onSelect={setBondIndex} onGraphicReady={bondsReady} /> : <LedgerText key={bondGraphicKey} tone="mutedInk" onPress={loading ? undefined : () => { void refresh(true); }}
-            accessibilityRole={loading ? undefined : 'button'} accessibilityLabel={loading ? undefined : uiLabel('Refresh outlook')}
-            style={loading ? undefined : { minHeight: 48, textAlignVertical: 'center' }}
-          onLayout={(event) => {
+          <View collapsable={false}>{bonds?.length ? <RateOutlookChart key={`bonds:${cashRate}`} label="Bond-market forward rates" points={bonds} cashRate={cashRate} tone="info" selectedIndex={bondIndex} onSelect={setBondIndex} onGraphicReady={bondsReady} /> : <LedgerText key={bondGraphicKey} tone="mutedInk" onLayout={(event) => {
             if (!loading) bondsReady({
               revision: bondRevision, expectedCount: 0, pointCount: 0,
               accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true
             });
           }}>{loading ? uiLabel("Loading") : uiLabel("Bond data unavailable")}</LedgerText>}</View>
           <View collapsable={false}>
-            {outlook?.bondForwards ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA F17', ' ', '·', ' ', 'Observed', ' ', uiDate(outlook.bondForwards.observationDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.bondForwards.publicationDate), bondStale ? uiJoin(' ', '·', ' ', 'Older observation') : '')}</LedgerText> : null}
+            {outlook?.bondForwards ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA F17', ' ', '·', ' ', 'Observed', ' ', uiDate(outlook.bondForwards.observationDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.bondForwards.publicationDate), bondStale ? uiJoin(' ', '·', ' ', 'Older observation') : '')}</LedgerText> : !bonds?.length && !loading ? <LedgerAction label={uiLabel('Refresh outlook')} variant="quiet" onPress={() => { void refresh(true); }} style={{ alignSelf: 'flex-start' }} /> : null}
           </View>
         </LedgerSection>
 
