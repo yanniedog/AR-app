@@ -1,0 +1,302 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "App health audit",
+  "at": [
+   304,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "https://paste.rs/WwLXo",
+  "at": [
+   360,
+   213
+  ]
+ },
+ {
+  "label": "https://paste.c-net.org/0c4759b3-60ef-a8d6-133f-6e1932572cf3",
+  "at": [
+   360,
+   284
+  ]
+ },
+ {
+  "label": "Copy paste.rs link",
+  "flags": "tap",
+  "at": [
+   360,
+   390
+  ]
+ },
+ {
+  "label": "Copy paste.rs link",
+  "at": [
+   361,
+   390
+  ]
+ },
+ {
+  "label": "Copy paste.c-net.org link",
+  "flags": "tap",
+  "at": [
+   360,
+   505
+  ]
+ },
+ {
+  "label": "Copy paste.c-net.org link",
+  "at": [
+   361,
+   505
+  ]
+ },
+ {
+  "label": "Audit history",
+  "at": [
+   360,
+   704
+  ]
+ },
+ {
+  "label": "Retained runs",
+  "at": [
+   360,
+   788
+  ]
+ },
+ {
+  "label": "1 / 120",
+  "at": [
+   360,
+   836
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   940
+  ]
+ },
+ {
+  "label": "Live checks",
+  "flags": "tap,sel",
+  "at": [
+   140,
+   940
+  ]
+ },
+ {
+  "label": "Live checks",
+  "at": [
+   140,
+   941
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1060
+  ]
+ },
+ {
+  "label": "Performance",
+  "flags": "tap,sel",
+  "at": [
+   149,
+   1060
+  ]
+ },
+ {
+  "label": "Performance",
+  "at": [
+   149,
+   1061
+  ]
+ },
+ {
+  "label": "UX & fluidity",
+  "flags": "tap",
+  "at": [
+   394,
+   1060
+  ]
+ },
+ {
+  "label": "UX & fluidity",
+  "at": [
+   394,
+   1061
+  ]
+ },
+ {
+  "label": "Coverage",
+  "flags": "tap",
+  "at": [
+   605,
+   1060
+  ]
+ },
+ {
+  "label": "Coverage",
+  "at": [
+   615,
+   1061
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1180
+  ]
+ },
+ {
+  "label": "Failures",
+  "flags": "tap",
+  "at": [
+   113,
+   1180
+  ]
+ },
+ {
+  "label": "Failures",
+  "at": [
+   113,
+   1181
+  ]
+ },
+ {
+  "label": "Check completion",
+  "flags": "tap",
+  "at": [
+   363,
+   1180
+  ]
+ },
+ {
+  "label": "Check completion",
+  "at": [
+   363,
+   1181
+  ]
+ },
+ {
+  "label": "Duration",
+  "flags": "tap",
+  "at": [
+   610,
+   1180
+  ]
+ },
+ {
+  "label": "Duration",
+  "at": [
+   616,
+   1181
+  ]
+ },
+ {
+  "label": "Slowest check",
+  "flags": "tap,sel",
+  "at": [
+   702,
+   1180
+  ]
+ },
+ {
+  "label": "Slowest check",
+  "at": [
+   360,
+   1284
+  ]
+ },
+ {
+  "label": "6,573 ms",
+  "at": [
+   360,
+   1332
+  ]
+ },
+ {
+  "label": "6,573 ms",
+  "at": [
+   360,
+   1390
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
