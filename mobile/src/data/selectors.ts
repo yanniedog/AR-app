@@ -15,6 +15,7 @@ import {
 import { productHasAllEligibilityCriteria } from './eligibility';
 import { productHasAllFeatures } from './featuresCore';
 import { cooperativeSliceMs } from '../lib/firstValue';
+import { bootCount } from '../lib/bootTrace';
 import {
   effectiveFraction,
   sortByDisplayLabel,
@@ -583,8 +584,19 @@ export async function prepareSearchRows(
   metric: RankMetric = 'base', mortgageMetric: MortgageRateMetric = 'comparison',
   control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
 ): Promise<RateRow[] | null> {
-  const filtered = await filterRowsCooperatively(rows, filters, detailsProducts, searchIndex, section, control);
-  return filtered && sortRowsCooperatively(filtered, sortKey, section, metric, mortgageMetric, control);
+  const now = control.now ?? (() => performance.now());
+  const baseYield = control.yieldControl ?? (() => yieldToUi(0));
+  const counted = { ...control, yieldControl: () => { bootCount('row-yields'); return baseYield(); } };
+  bootCount('row-runs');
+  const filterStarted = now();
+  const filtered = await filterRowsCooperatively(rows, filters, detailsProducts, searchIndex, section, counted);
+  bootCount('filter-ms', now() - filterStarted);
+  if (!filtered) { bootCount('row-cancels'); return null; }
+  const sortStarted = now();
+  const sorted = await sortRowsCooperatively(filtered, sortKey, section, metric, mortgageMetric, counted);
+  bootCount('sort-ms', now() - sortStarted);
+  if (!sorted) bootCount('row-cancels'); else bootCount('rows-in', rows.length);
+  return sorted;
 }
 
 /** Share search membership with live filter counts without a render-time catalogue scan. */

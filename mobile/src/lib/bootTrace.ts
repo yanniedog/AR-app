@@ -6,6 +6,7 @@ import { debugLog } from './debugLog';
 // The line is written once, when Rates is ready or the launch ended without data.
 const FINAL_MARKS = new Set(['rates-ready', 'load-failed']);
 const marks: Record<string, number> = {};
+const counts: Record<string, number> = {};
 let flushed = false;
 
 function now(): number {
@@ -19,9 +20,15 @@ export function bootMark(name: string): void {
   if (FINAL_MARKS.has(name)) flush();
 }
 
+/** Sum a counter (runs, yields, ms) into the launch line. Ignored once the line is written. */
+export function bootCount(name: string, delta = 1): void {
+  if (flushed) return;
+  counts[name] = Math.round((counts[name] ?? 0) + delta);
+}
+
 function flush(): void {
   flushed = true;
-  const line = Object.entries(marks).map(([key, at]) => `${key}=${at}`).join(' ');
+  const line = [...Object.entries(marks), ...Object.entries(counts)].map(([key, at]) => `${key}=${at}`).join(' ');
   try {
     debugLog.warn('boot', `launch ms ${line}`);
   } catch { /* Tracing is best-effort. */ }
@@ -31,6 +38,7 @@ function flush(): void {
 export function resetBootTraceForTests(): void {
   flushed = false;
   for (const key of Object.keys(marks)) delete marks[key];
+  for (const key of Object.keys(counts)) delete counts[key];
 }
 
 bootMark('js-start');
