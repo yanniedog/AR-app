@@ -445,7 +445,34 @@ export function lenderProductRows(
 }
 
 /** Same ranking as sortRows, with bounded preparation and merge slices. */
-export async function sortRowsCooperatively(
+type CooperativeControl = { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number };
+
+/** Launch diagnostics: runs, cancels, yields, rows and wall time for one cooperative pass. */
+async function countedPass<T>(name: 'sort' | 'filter', rowCount: number, control: CooperativeControl,
+  run: (control: CooperativeControl) => Promise<T | null>): Promise<T | null> {
+  const now = control.now ?? (() => performance.now());
+  const baseYield = control.yieldControl ?? (() => yieldToUi(0));
+  bootCount(`${name}-runs`);
+  bootCount(`${name}-rows`, rowCount);
+  const started = now();
+  try {
+    const result = await run({ ...control, yieldControl: () => { bootCount(`${name}-yields`); return baseYield(); } });
+    if (result === null) bootCount(`${name}-cancels`);
+    return result;
+  } finally {
+    bootCount(`${name}-ms`, now() - started);
+  }
+}
+
+export function sortRowsCooperatively(
+  rows: RateRow[], sortKey: SortKey, section: SectionKey,
+  metric: RankMetric = 'base', mortgageMetric: MortgageRateMetric = 'comparison',
+  control: CooperativeControl = {},
+): Promise<RateRow[] | null> {
+  return countedPass('sort', rows.length, control, counted => sortRowsCooperativelyUncounted(rows, sortKey, section, metric, mortgageMetric, counted));
+}
+
+async function sortRowsCooperativelyUncounted(
   rows: RateRow[],
   sortKey: SortKey,
   section: SectionKey,
@@ -584,23 +611,20 @@ export async function prepareSearchRows(
   metric: RankMetric = 'base', mortgageMetric: MortgageRateMetric = 'comparison',
   control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
 ): Promise<RateRow[] | null> {
-  const now = control.now ?? (() => performance.now());
-  const baseYield = control.yieldControl ?? (() => yieldToUi(0));
-  const counted = { ...control, yieldControl: () => { bootCount('row-yields'); return baseYield(); } };
-  bootCount('row-runs');
-  const filterStarted = now();
-  const filtered = await filterRowsCooperatively(rows, filters, detailsProducts, searchIndex, section, counted);
-  bootCount('filter-ms', now() - filterStarted);
-  if (!filtered) { bootCount('row-cancels'); return null; }
-  const sortStarted = now();
-  const sorted = await sortRowsCooperatively(filtered, sortKey, section, metric, mortgageMetric, counted);
-  bootCount('sort-ms', now() - sortStarted);
-  if (!sorted) bootCount('row-cancels'); else bootCount('rows-in', rows.length);
-  return sorted;
+  const filtered = await filterRowsCooperatively(rows, filters, detailsProducts, searchIndex, section, control);
+  return filtered && sortRowsCooperatively(filtered, sortKey, section, metric, mortgageMetric, control);
 }
 
 /** Share search membership with live filter counts without a render-time catalogue scan. */
-export async function filterRowsCooperatively(
+export function filterRowsCooperatively(
+  rows: RateRow[], filters: Filters, detailsProducts?: Record<string, ProductDetail> | null,
+  searchIndex?: SearchIndexPayload | null, section?: SectionKey | null,
+  control: CooperativeControl = {},
+): Promise<RateRow[] | null> {
+  return countedPass('filter', rows.length, control, counted => filterRowsCooperativelyUncounted(rows, filters, detailsProducts, searchIndex, section, counted));
+}
+
+async function filterRowsCooperativelyUncounted(
   rows: RateRow[], filters: Filters, detailsProducts?: Record<string, ProductDetail> | null,
   searchIndex?: SearchIndexPayload | null, section?: SectionKey | null,
   control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
