@@ -69,7 +69,7 @@ export function computeVerdict(report, baseline) {
       if (s.errorState.action || (actionOnScreen && /^scroll /.test(s.name))) add('friction', 'error-shown', s, `"${s.errorState.text}" shown on "${s.name}"`);
       else add('fail', 'error-no-action', s, `"${s.errorState.text}" with no action on "${s.name}"`);
     }
-    actionOnScreen = /^scroll /.test(s.name) ? actionOnScreen : Boolean(s.errorState?.action);
+    actionOnScreen = /^scroll /.test(s.name) ? actionOnScreen || Boolean(s.errorState?.action) : Boolean(s.errorState?.action);
     const ratio = jankRatio(s);
     const base = baseByName.get(s.name);
     const baseRatio = base ? jankRatio(base) : null;

@@ -78,6 +78,11 @@ describe('real-use session verdict', () => {
     expect(kinds([
       step(1, 'scroll rba', { errorState: { text: 'Forecast unavailable', action: false } }),
     ])).toEqual(['error-no-action']);
+    expect(kinds([
+      step(1, 'open rba', { errorState: { text: 'Refresh failed', action: false } }),
+      step(2, 'scroll rba', { errorState: { text: 'Refresh failed', action: true } }),
+      step(3, 'scroll rba 2', { errorState: { text: 'Forecast unavailable', action: false } }),
+    ])).toEqual(['error-no-action', 'error-shown', 'error-shown']);
   });
 
   it('flags a regression only against the previous build', () => {
