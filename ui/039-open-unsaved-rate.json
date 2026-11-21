@@ -1,0 +1,245 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Offset Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Offset Home Loan",
+  "at": [
+   414,
+   269
+  ]
+ },
+ {
+  "label": "MoveBank",
+  "at": [
+   72,
+   337
+  ]
+ },
+ {
+  "label": "MoveBank",
+  "flags": "tap",
+  "at": [
+   205,
+   341
+  ]
+ },
+ {
+  "label": "MoveBank",
+  "at": [
+   205,
+   313
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   414,
+   409
+  ]
+ },
+ {
+  "label": "Comparison rate",
+  "at": [
+   360,
+   529
+  ]
+ },
+ {
+  "label": "6.35%",
+  "at": [
+   360,
+   597
+  ]
+ },
+ {
+  "label": "6.29% Advertised rate",
+  "at": [
+   360,
+   665
+  ]
+ },
+ {
+  "label": "Advertised ↑ 10 bps · 15 Oct 2026 · 6.19% → 6.29%",
+  "at": [
+   360,
+   729
+  ]
+ },
+ {
+  "label": "Source date 12 Nov 2026",
+  "at": [
+   360,
+   789
+  ]
+ },
+ {
+  "label": "Save",
+  "flags": "tap",
+  "at": [
+   190,
+   939
+  ]
+ },
+ {
+  "label": "Save",
+  "at": [
+   217,
+   940
+  ]
+ },
+ {
+  "label": "Calculate",
+  "flags": "tap",
+  "at": [
+   530,
+   939
+  ]
+ },
+ {
+  "label": "Calculate",
+  "at": [
+   531,
+   939
+  ]
+ },
+ {
+  "label": "Hide Rate details",
+  "flags": "tap",
+  "at": [
+   360,
+   1165
+  ]
+ },
+ {
+  "label": "Rate details",
+  "at": [
+   328,
+   1165
+  ]
+ },
+ {
+  "label": "Rate type",
+  "at": [
+   297,
+   1265
+  ]
+ },
+ {
+  "label": "Variable",
+  "at": [
+   637,
+   1265
+  ]
+ },
+ {
+  "label": "Term",
+  "at": [
+   291,
+   1317
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   1317
+  ]
+ },
+ {
+  "label": "Rate structure",
+  "at": [
+   297,
+   1369
+  ]
+ },
+ {
+  "label": "Variable",
+  "at": [
+   637,
+   1369
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
