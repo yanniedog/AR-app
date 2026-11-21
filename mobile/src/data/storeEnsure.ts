@@ -1,3 +1,4 @@
+import { bootMark } from '../lib/bootTrace';
 import { COMPACT_HISTORY_NORMALIZATION_VERSION, HISTORY_DERIVATION_VERSION } from './historyDerivation';
 import { cache } from './cache';
 import {
@@ -165,13 +166,14 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             workOutcome = 'completed';
             if (!suitabilityIndexMatches(getSuitabilityIndex(), runDate, coreSha, detailsSha)) {
               work.stage('Rebuilding suitability index from loaded details');
-              await rebuildAndInstallSuitabilityIndex(
+              const builtLoaded = await rebuildAndInstallSuitabilityIndex(
                 core,
                 details,
                 detailsSha,
                 () => datasetStillCurrent(runDate, coreSha, detailsSha, details.run_date),
                 coreSha,
               );
+              if (builtLoaded) bootMark('suitability-built');
             }
             return;
           }
@@ -194,29 +196,33 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             stage: stage => work.stage(({ read: 'Details cache read', parse: 'Details JSON parse', verify: 'Details integrity check' } as const)[stage]),
             checkpoint: work.checkpoint,
           }) : null;
+          if (cached) bootMark('details-cache-read');
           if (cached && cached.run_date === core.run_date && (!wantSha || verifiedDetailsSha(cached) === wantSha)) {
             if (datasetUnchanged()) {
               workOutcome = 'completed';
               set({ details: cached });
               work.stage('Rebuilding suitability index from cached details');
-              await rebuildAndInstallSuitabilityIndex(
+              const builtCached = await rebuildAndInstallSuitabilityIndex(
                 core,
                 cached,
                 detailsSha,
                 () => datasetStillCurrent(runDate, coreSha, detailsSha, cached.run_date),
                 coreSha,
               );
+              if (builtCached) bootMark('suitability-built');
             }
             return;
           }
           if (source === 'remote' && manifest) {
             work.stage('Downloading and decoding product details');
+            bootMark('details-start');
             const { text, details: fresh } = await downloadDetails(
               manifest.files.details.url,
               manifest.files.details.sha256,
               { expectedBytes: manifest.files.details.bytes, requireExactBytes: !!manifest.payload_revision,
                 maxCompressedBytes: 64 * 1024 * 1024, maxInflatedBytes: 192 * 1024 * 1024 },
             );
+            bootMark('details-fetched');
             if (!datasetUnchanged()) return;
             work.stage('Saving verified product details');
             await cache.writeDetails(text, manifest.payload_revision ? manifest.files.details.sha256 : undefined, manifest.files.details.sha256);
@@ -232,7 +238,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             set({ details: fresh });
             workOutcome = 'completed';
             work.stage('Rebuilding suitability index from downloaded details');
-            await rebuildAndInstallSuitabilityIndex(
+            const builtFresh = await rebuildAndInstallSuitabilityIndex(
               core,
               fresh,
               manifest.files.details.sha256,
@@ -245,6 +251,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
                 ),
               coreSha,
             );
+            if (builtFresh) bootMark('suitability-built');
             return;
           }
         } catch (err) {
