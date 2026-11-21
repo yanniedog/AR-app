@@ -241,6 +241,7 @@ jobs:
             issue=$(gh api -X POST "repos/${GITHUB_REPOSITORY}/issues" -f title='app-explorer results' -f body='One comment per explorer run: audit outcome, log URL, failures, crash excerpt.' -f 'labels[]=app-explorer' -q .number)
           fi
           gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${issue}/comments" -F body=@summary.md >/dev/null
+          node tools-src/mobile/tools/app-explorer/hide-outdated.mjs "$GITHUB_REPOSITORY" "$issue" || true
           if [ -n "$NOTIFY_PR" ]; then
             gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${NOTIFY_PR}/comments" -F body=@summary.md >/dev/null
           fi
