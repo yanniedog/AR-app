@@ -828,6 +828,9 @@ export default function RatesWorkspace() {
   useEffect(() => { if (core != null && publicPricing.ready) bootMark('pricing-ready'); }, [core, publicPricing.ready]);
   useEffect(() => { if (core != null && !searchIndexLoading) bootMark('search-index-idle'); }, [core, searchIndexLoading]);
   useEffect(() => { if (core != null && !detailFiltersPending) bootMark('detail-filters-idle'); }, [core, detailFiltersPending]);
+  // Which link of the early-page chain holds on a cold start: requested, scoped, shown.
+  useEffect(() => { if (core != null && leadingScope && !indexedPricing && !task.intentError && isFocused && pricingActive) bootMark('leading-requested'); }, [core, leadingScope, indexedPricing, task.intentError, isFocused, pricingActive]);
+  useEffect(() => { if (core != null && cooperativePricing.leadingScope) bootMark('leading-scoped'); }, [core, cooperativePricing.leadingScope]);
   const ratesSettled = core != null && !searchPending;
   // Mirrors the searchPending branches above so the last-blocker mark names the real condition.
   const blockers = (intentPending ? ['intent']
@@ -852,6 +855,7 @@ export default function RatesWorkspace() {
     previous.section === section && previous.availability === availability && previous.core === core &&
     previous.catalogue === catalogue && previous.revision === suitabilityRevision;
   const showingLeadingPage = !retainingPrevious && searchPending && !intentPending && leadingPage != null;
+  useEffect(() => { if (core != null && showingLeadingPage) bootMark('leading-page'); }, [core, showingLeadingPage]);
   const displayedPageRows = retainingPrevious ? previous.rows : showingLeadingPage ? leadingPage.rows : pageRows;
   const displayedScenario = retainingPrevious ? previous.scenarioFor : rowScenario;
   const displayedUnverified = retainingPrevious ? previous.unverified : showingLeadingPage ? leadingPage.unverified : mortgageScope.unverifiedRows;
