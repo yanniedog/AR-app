@@ -6,6 +6,7 @@ import { isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../../data/
 import { useMortgageResultsIndex } from '../../hooks/useMortgageResultsIndex';
 import { profileSectionCount } from '../../data/profile';
 import { bootMark } from '../../lib/bootTrace';
+import { markFirstValue } from '../../lib/firstValue';
 import { checkDrillOutcome } from '../../lib/degradationLog';
 import { reconcilePublicCompareSelectionTokens } from '../../data/publicCompareSelectionTokens';
 import { publicScenarioForRow } from '../../data/publicRateIntegration';
@@ -615,11 +616,13 @@ export default function RatesWorkspace() {
     : indexedRows ? { ...cooperativeResults, rows: indexedRows, ready: true, error: null } : cooperativeResults;
   const rows = preparedResults.rows;
   // Ancillary facet inventories must not compete with the matching-result
-  // pipeline while the current pricing/filter request is still unresolved.
+  // pipeline while the current pricing/filter request is still unresolved, and on a first
+  // install they wait for the suitability gate so they run once, over the final details.
   const filterOptions = useSearchFilterOptions(
     mortgageSearchActive ? baseRows : EMPTY_RATE_ROWS,
     mortgageSearchActive ? filterDetails : undefined,
-    section, suitabilityRevision, publicPricing.ready && preparedResults.ready,
+    section, suitabilityRevision,
+    publicPricing.ready && preparedResults.ready && isSuitabilityFilterReady(effectiveFilters.includeNonStandard),
   );
   const unverifiedResultCount = useMemo(
     () => (section !== 'Mortgage' || mortgageScope.unverified === 0 ? 0 : rows.reduce((count, row) => count + (mortgageScope.unverifiedRows.has(row) ? 1 : 0), 0)),
@@ -826,7 +829,7 @@ export default function RatesWorkspace() {
   useEffect(() => { if (core != null && !searchIndexLoading) bootMark('search-index-idle'); }, [core, searchIndexLoading]);
   useEffect(() => { if (core != null && !detailFiltersPending) bootMark('detail-filters-idle'); }, [core, detailFiltersPending]);
   const ratesSettled = core != null && !searchPending;
-  useEffect(() => { if (ratesSettled) bootMark('rates-ready'); }, [ratesSettled]);
+  useEffect(() => { if (ratesSettled) { bootMark('rates-ready'); markFirstValue(); } }, [ratesSettled]);
   const presented = useRef<{ rows: typeof pageRows; section: SectionKey; availability: RateAvailability;
     core: typeof core; catalogue: typeof catalogue; revision: number; scenarioFor: typeof rowScenario;
     unverified: WeakSet<RateRow> } | null>(null);

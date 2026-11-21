@@ -1,4 +1,5 @@
 import { bootMark } from '../lib/bootTrace';
+import { afterFirstValue } from '../lib/firstValue';
 import { COMPACT_HISTORY_NORMALIZATION_VERSION, HISTORY_DERIVATION_VERSION } from './historyDerivation';
 import { cache } from './cache';
 import {
@@ -256,6 +257,9 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
               publishFresh();
             }
             if (builtFresh) bootMark('suitability-built');
+            if (!datasetUnchanged()) return;
+            // Hashing and writing the multi-megabyte cache starves the first Rates paint, so it follows it.
+            await afterFirstValue();
             if (!datasetUnchanged()) return;
             work.stage('Saving verified product details');
             await cache.writeDetails(text, manifest.payload_revision ? manifest.files.details.sha256 : undefined, manifest.files.details.sha256);

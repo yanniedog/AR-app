@@ -9,6 +9,7 @@ import {
   rebuildAndInstallSuitabilityIndex,
 } from '../src/data/suitabilityIndex';
 import { isSuitabilityFilterReady, subscribeSuitabilityGate } from '../src/data/suitabilityGate';
+import { expectFirstValue, markFirstValue, resetFirstValueForTests } from '../src/lib/firstValue';
 import { backgroundPayloadWork } from '../src/lib/backgroundPayloadWork';
 
 const sampleDetails = loadSampleDetails();
@@ -236,6 +237,25 @@ describe('ensureDetails suitability unblock', () => {
     expect(store.getState().details?.run_date).toBe(remoteDetails.run_date);
     expect(isSuitabilityFilterReady(false)).toBe(false);
     expect(mockUpdateMeta).not.toHaveBeenCalled();
+  });
+
+  it('saves the details cache only after the first value when launch armed the wait', async () => {
+    closeSuitabilityGateUntilRebuild();
+    mockRemoteMeta();
+    mockDownloadDetails.mockResolvedValue({ text: JSON.stringify(remoteDetails), details: remoteDetails });
+    expectFirstValue();
+    try {
+      const load = store.getState().ensureDetails({ force: true });
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      expect(isSuitabilityFilterReady(false)).toBe(true);
+      expect(mockWriteDetails).not.toHaveBeenCalled();
+      markFirstValue();
+      await load;
+      expect(mockWriteDetails).toHaveBeenCalledTimes(1);
+      expect(mockUpdateMeta).toHaveBeenCalledTimes(1);
+    } finally {
+      resetFirstValueForTests();
+    }
   });
 
   it('keeps the gate closed without trusted details instead of loading bundled data', async () => {

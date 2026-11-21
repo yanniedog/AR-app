@@ -59,6 +59,7 @@ import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider';
 import { HEADER_TYPOGRAPHY } from '../src/theme/typography';
 import { uiLabel, type UiLabel } from '../src/lib/uiCopy';
 import { bootMark } from '../src/lib/bootTrace';
+import { expectFirstValue } from '../src/lib/firstValue';
 
 const ROUTE_TITLES: readonly (readonly [string,UiLabel])[] = [
   ['calculator','Calculate'],['product/[key]','Product'],['bank/[provider]','Bank'],['compare','Compare'],
@@ -352,6 +353,8 @@ function RootNavigator() {
       </WordBubbleProvider>
   );
 }
+
+expectFirstValue();
 
 export default function RootLayout() {
   // This is the first UI-root task. It does not run merely because Android
