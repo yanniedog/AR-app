@@ -1,8 +1,9 @@
 // Archives explorer comments for APK releases older than the current published APK.
-// Usage: node hide-outdated.mjs <owner/repo> <issue number>
+// Usage: node hide-outdated.mjs <owner/repo> <issue number> [published APK tag]
 // Needs GH_TOKEN. Minimizes with GraphQL as OUTDATED; when that is refused, collapses the
 // comment body in place with REST so the thread still shrinks.
 import { execFileSync } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 
 const TITLE = /^explorer run \d+ on (app-v\d+\.\d+\.\d+)(?=\s|$)/;
@@ -62,10 +63,26 @@ function minimize(id) {
   if (out.errors?.length || out.data?.minimizeComment?.minimizedComment?.isMinimized !== true) throw new Error('minimizeComment did not minimize');
 }
 
-function main(repo, issue) {
-  const tag = gh('api', `repos/${repo}/releases?per_page=30`, '--jq',
+function currentApkTag(repo) {
+  return gh('api', `repos/${repo}/releases?per_page=30`, '--jq',
     '[.[] | select(.draft|not) | select(.tag_name|test("^app-v[0-9]+[.][0-9]+[.][0-9]+$")) | select(any(.assets[]; .name=="app-preview.apk"))][0].tag_name // empty').trim();
-  const current = releaseVersion(tag);
+}
+
+async function main(repo, issue, publishedTag = '') {
+  const published = releaseVersion(publishedTag);
+  if (publishedTag && !published) return;
+  let tag = currentApkTag(repo);
+  let current = releaseVersion(tag);
+  // GitHub can deliver release.published before the APK upload completes.
+  for (let retry = 0; published && (!current || compareVersions(current, published) < 0); retry += 1) {
+    if (retry === 9) {
+      console.log(`APK for ${publishedTag} is not visible yet; the scheduled sweep will retry`);
+      return;
+    }
+    await delay(10000);
+    tag = currentApkTag(repo);
+    current = releaseVersion(tag);
+  }
   if (!current) {
     console.log('No published APK release found');
     return;
@@ -91,6 +108,6 @@ function main(repo, issue) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const [repo, issue] = process.argv.slice(2);
-  main(repo, issue);
+  const [repo, issue, publishedTag] = process.argv.slice(2);
+  await main(repo, issue, publishedTag);
 }

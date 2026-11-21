@@ -74,11 +74,12 @@ jobs:
       - name: Archive reports older than the current APK
         env:
           GH_TOKEN: ${{ github.token }}
+          PUBLISHED_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
           issue=$(gh api "repos/$GITHUB_REPOSITORY/issues?state=open&labels=app-explorer&per_page=1" -q '.[0].number // empty')
           if [ -n "$issue" ]; then
-            node mobile/tools/app-explorer/hide-outdated.mjs "$GITHUB_REPOSITORY" "$issue"
+            node mobile/tools/app-explorer/hide-outdated.mjs "$GITHUB_REPOSITORY" "$issue" "$PUBLISHED_TAG"
           fi
 
   # Scheduled and post-release runs only proceed when the newest release has no tested marker yet.
@@ -269,4 +270,6 @@ jobs:
           if [ -n "$NOTIFY_PR" ]; then
             gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${NOTIFY_PR}/comments" -F body=@summary.md >/dev/null
           fi
-          node tools-src/mobile/tools/app-explorer/hide-outdated.mjs "$GITHUB_REPOSITORY" "$issue"
+          if ! node tools-src/mobile/tools/app-explorer/hide-outdated.mjs "$GITHUB_REPOSITORY" "$issue"; then
+            echo '::warning::Explorer report posted. Archival will retry on the scheduled sweep.'
+          fi
