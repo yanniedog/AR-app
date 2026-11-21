@@ -33,6 +33,11 @@ describe('hide outdated explorer comments', () => {
     expect(run(`m.outdatedComments([])`)).toEqual([]);
   });
 
+  it('counts the release of the comment just posted even when the listing has not caught up', () => {
+    expect(run<number[]>(`m.outdatedComments([comment(1, 'app-v1.0.5'), comment(2, 'app-v1.0.5')], 'github-actions[bot]', [1, 0, 6]).map(c => c.databaseId)`)).toEqual([1, 2]);
+    expect(run(`m.newestVersion([comment(1, 'app-v1.0.5')], 'github-actions[bot]', [1, 0, 4])`)).toEqual([1, 0, 5]);
+  });
+
   it('collapses a body into a details block that names the newer release', () => {
     const out = run<string>(`m.collapsedBody('explorer run 1 on app-v1.0.5 (audit)\\n\\nbody', [1, 0, 6])`);
     expect(out.startsWith('<!-- explorer-collapsed -->')).toBe(true);
