@@ -72,7 +72,7 @@ export function LedgerAction({
       ]}
       {...rest}
     >
-      <View style={{ opacity: loading ? 0 : 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, flexShrink: 1 }}>
+      <View collapsable={false} style={{ opacity: loading ? 0 : 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, flexShrink: 1 }}>
           {icon ? <LedgerIcon name={icon} size={19} color={foreground} /> : null}
           <LedgerText variant="body" weight="600" tone={primary ? 'onPrimary' : destructive ? 'danger' : 'ink'} style={{ flexShrink: 1, textAlign: 'center' }}>
             {label}
