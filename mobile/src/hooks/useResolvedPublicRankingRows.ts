@@ -311,7 +311,8 @@ export function useResolvedPublicRankingRows(options: {
             // the first admitted rows of the full pass.
             const prefix = leadingSortedRowsInInputOrder(resolution.rows, leading.limit, leading.sortKey, req.section,
               leading.metric, leading.mortgageMetric);
-            const early = await mortgageComparisonRowsCooperatively(prefix, req.mortgageInputs, req.mortgageContext, control);
+            const early = await timing.measure('mortgageScopeMs', () =>
+              mortgageComparisonRowsCooperatively(prefix, req.mortgageInputs!, req.mortgageContext, control));
             if (cancelled || flightRef.current !== flight) return;
             if (requestRef.current !== req) { restart(); continue; }
             if (Date.now() >= validity.until()) { restart(); setLeadingSnapshot(null); continue; }

@@ -1,3 +1,4 @@
+import { cooperativeSliceMs } from '../lib/firstValue';
 import { yieldToUi } from '../lib/yieldToUi';
 import { getMandatoryEligibilityRevision } from './eligibilityGate';
 import { getSuitabilityRevision } from './suitabilityGate';
@@ -17,7 +18,7 @@ export function rowWork(control: RowWorkControl = {}) {
   return {
     cancelled: () => Boolean(control.cancelled?.()) || mandatory !== getMandatoryEligibilityRevision()
       || suitability !== getSuitabilityRevision(),
-    expired: () => now() - checkpoint >= 6,
+    expired: () => now() - checkpoint >= cooperativeSliceMs(),
     async pause() { await yieldControl(); checkpoint = now(); },
   };
 }
