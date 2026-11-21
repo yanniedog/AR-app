@@ -1,7 +1,9 @@
+import { bootCount } from './bootCounters';
 import { yieldToUi } from './yieldToUi';
 import type { AuditWorkDiagnostic } from './performanceAuditWorkDiagnostic';
 
 type Stage = 'candidatePreparationMs' | 'pricingResolutionMs' | 'mortgageScopeMs';
+const STAGE_COUNTER: Record<Stage, string> = { candidatePreparationMs: 'pricing-cand-ms', pricingResolutionMs: 'pricing-resolve-ms', mortgageScopeMs: 'pricing-scope-ms' };
 
 /** Stage elapsed time includes host waits; slices measure the uninterrupted
  * elapsed interval between cooperative yields, excluding each host wait. These
@@ -18,6 +20,7 @@ export function createPricingWorkTiming(now: () => number = () => performance.no
     snapshot: () => ({ ...metrics }),
     async yieldControl() {
       finishSlice();
+      bootCount('pricing-yields');
       await yieldControl();
       sliceStarted = now();
     },
@@ -25,7 +28,7 @@ export function createPricingWorkTiming(now: () => number = () => performance.no
       const started = now();
       sliceStarted = started;
       try { return await work(); }
-      finally { finishSlice(); metrics[stage] = Math.max(0, now() - started); }
+      finally { finishSlice(); metrics[stage] = Math.max(0, now() - started); bootCount(STAGE_COUNTER[stage], metrics[stage]); }
     },
   };
 }

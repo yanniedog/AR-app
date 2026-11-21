@@ -1,4 +1,5 @@
 import { createPublicRateResolverIndex } from '../data/publicRateResolverIndex';
+import { bootCount } from '../lib/bootCounters';
 import type { AuditWorkDiagnostic } from '../lib/performanceAuditWorkDiagnostic';
 import { createPricingWorkTiming } from '../lib/pricingWorkTiming';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -254,11 +255,13 @@ export function useResolvedPublicRankingRows(options: {
     }
     if (synchronous || current) return;
     const stats = workerStats.current;
+    const restart = () => { stats.restarts++; bootCount('pricing-restarts'); };
     const flight = ++flightRef.current;
     let cancelled = false;
     let finished = false;
     const run = () => {
       stats.starts++;
+      bootCount('pricing-starts');
       void (async () => {
         // Keep one pass alive across scope/catalogue updates. Cancelling on
         // every request identity change starved mortgage.scope.apply so
@@ -277,7 +280,7 @@ export function useResolvedPublicRankingRows(options: {
           };
           await yieldToUi(0);
           if (cancelled || flightRef.current !== flight) return;
-          if (requestRef.current !== req) { stats.restarts++; continue; }
+          if (requestRef.current !== req) { restart(); continue; }
           const view = catalogueRef.current;
           const validity = collectValidity(view);
           const resolve = resolverIndexRef.current.resolveForPublication(view);
@@ -291,7 +294,7 @@ export function useResolvedPublicRankingRows(options: {
             : await publicRecommendationRowsCooperatively(
               req.sourceRows, view, req.section, sectionScenarioRef.current, control, false, validity.asOf, resolve));
           if (cancelled || flightRef.current !== flight) return;
-          if (requestRef.current !== req) { stats.restarts++; continue; }
+          if (requestRef.current !== req) { restart(); continue; }
           if (!candidates) return;
           setProgress({ request: req, attempt, stage: 'resolution' });
           const resolution = await timing.measure('pricingResolutionMs', async () => publishedOnly
@@ -299,7 +302,7 @@ export function useResolvedPublicRankingRows(options: {
             : await resolvedPublicRankingRowsCooperatively(
               candidates, view, validity.rowScenario, control, resolve));
           if (cancelled || flightRef.current !== flight) return;
-          if (requestRef.current !== req) { stats.restarts++; continue; }
+          if (requestRef.current !== req) { restart(); continue; }
           if (!resolution) return;
           const leading = leadingRef.current;
           if (leading && req.applyMortgageScope && req.mortgageInputs && resolution.rows.length > leading.limit) {
@@ -310,8 +313,8 @@ export function useResolvedPublicRankingRows(options: {
               leading.metric, leading.mortgageMetric);
             const early = await mortgageComparisonRowsCooperatively(prefix, req.mortgageInputs, req.mortgageContext, control);
             if (cancelled || flightRef.current !== flight) return;
-            if (requestRef.current !== req) { stats.restarts++; continue; }
-            if (Date.now() >= validity.until()) { stats.restarts++; setLeadingSnapshot(null); continue; }
+            if (requestRef.current !== req) { restart(); continue; }
+            if (Date.now() >= validity.until()) { restart(); setLeadingSnapshot(null); continue; }
             if (early && !control.cancelled() && !early.invalid) {
               // Arm the wake-up now so an expiring prefix withdraws on time, not when the full pass ends.
               clock.current.until = Math.min(clock.current.until, validity.until());
@@ -324,9 +327,9 @@ export function useResolvedPublicRankingRows(options: {
               resolution.rows, req.mortgageInputs, req.mortgageContext, control)
             : { rows: resolution.rows, unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false });
           if (cancelled || flightRef.current !== flight) return;
-          if (requestRef.current !== req) { stats.restarts++; continue; }
+          if (requestRef.current !== req) { restart(); continue; }
           if (!mortgage || control.cancelled()) return;
-          if (Date.now() >= validity.until()) { stats.restarts++; setLeadingSnapshot(null); continue; }
+          if (Date.now() >= validity.until()) { restart(); setLeadingSnapshot(null); continue; }
           clock.current.until = validity.until();
           finished = true;
           const value = { request: req, attempt, candidates, resolution, mortgage, error: null };
@@ -352,7 +355,7 @@ export function useResolvedPublicRankingRows(options: {
           return;
           } catch (error) {
             if (cancelled || flightRef.current !== flight) return;
-            if (requestRef.current !== req) { stats.restarts++; continue; }
+            if (requestRef.current !== req) { restart(); continue; }
             finished = true;
             setSnapshot({ request: req, attempt, candidates: [], resolution: EMPTY_RESOLUTION,
               mortgage: EMPTY_MORTGAGE, error: error instanceof Error ? error.message : 'Public pricing failed' });
