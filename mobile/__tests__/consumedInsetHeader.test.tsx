@@ -42,3 +42,11 @@ test('the back button keeps a 48 dp touch target', () => {
   expect(left.props.style).toMatchObject({ minWidth: 48, minHeight: 48 });
   act(() => tree.unmount());
 });
+
+test('a hidden back button stays hidden', () => {
+  let tree: any;
+  act(() => { tree = TestRenderer.create(<ConsumedInsetHeader core={makeHealthyCore()} fallbackTitle={uiLabel('Product')}
+    navigationOptions={{ title: 'Product rate unavailable', headerBackVisible: false }} back={{ title: 'Back', href: '/about' }} />); });
+  expect(tree.root.findByType('Header').props.headerLeft).toBeUndefined();
+  act(() => tree.unmount());
+});
