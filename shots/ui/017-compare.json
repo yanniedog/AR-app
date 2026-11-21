@@ -1,0 +1,47 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Compare",
+  "at": [
+   234,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "Minimum 2 rates",
+  "at": [
+   360,
+   903
+  ]
+ },
+ {
+  "label": "Choose products",
+  "flags": "tap",
+  "at": [
+   360,
+   1073
+  ]
+ },
+ {
+  "label": "Choose products",
+  "at": [
+   360,
+   1073
+  ]
+ }
+]

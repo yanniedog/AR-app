@@ -1,0 +1,128 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Open-source notices",
+  "at": [
+   345,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Third-party notices",
+  "at": [
+   418,
+   289
+  ]
+ },
+ {
+  "label": "Commissioner",
+  "at": [
+   360,
+   458
+  ]
+ },
+ {
+  "label": "SIL Open Font License 1.1",
+  "at": [
+   360,
+   530
+  ]
+ },
+ {
+  "label": "Revision 16865a9483b54bd633b5471b109792db44f7786e",
+  "at": [
+   360,
+   614
+  ]
+ },
+ {
+  "label": "Source",
+  "at": [
+   360,
+   698
+  ]
+ },
+ {
+  "label": "https://github.com/kosbarts/Commissioner/tree/16865a9483b54bd633b5471b109792db44f7786e",
+  "at": [
+   360,
+   762
+  ]
+ },
+ {
+  "label": "Licence notice",
+  "at": [
+   360,
+   862
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

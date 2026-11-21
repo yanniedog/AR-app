@@ -1,0 +1,34 @@
+{
+  "kind": "live",
+  "url": "https://paste.rs/Bep0n",
+  "outcome": null,
+  "elapsedMs": 1095638,
+  "visibleOutcome": [
+    "Navigate up",
+    "App health audit",
+    "Account",
+    "Rejected addresses",
+    "6",
+    "HTTP not attempted",
+    "6",
+    "HTTP attempt evidence missing",
+    "0",
+    "Unverified links",
+    "667",
+    "Executed",
+    "2,704 / 2,722",
+    "Verified upload",
+    "Verified upload",
+    "Uploaded",
+    "https://paste.rs/Bep0n",
+    "https://paste.c-net.org/e583c442-1f22-b9f5-88b0-af96c2d40578",
+    "Copy paste.rs link",
+    "Copy paste.rs link"
+  ],
+  "logStatus": 200,
+  "logContentUrl": "https://paste.c-net.org/e583c442-1f22-b9f5-88b0-af96c2d40578",
+  "logBytes": 848110,
+  "debugLog": {
+    "error": "Upload and copy link not found"
+  }
+}

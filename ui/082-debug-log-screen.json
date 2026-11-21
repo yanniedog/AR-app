@@ -1,0 +1,208 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Debug log",
+  "at": [
+   243,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "Private diagnostics",
+  "at": [
+   360,
+   261
+  ]
+ },
+ {
+  "label": "Device / network / rate / product / receipt / error",
+  "at": [
+   360,
+   309
+  ]
+ },
+ {
+  "label": "Privacy",
+  "at": [
+   360,
+   397
+  ]
+ },
+ {
+  "label": "Redaction unguaranteed",
+  "at": [
+   360,
+   445
+  ]
+ },
+ {
+  "label": "Local file",
+  "at": [
+   360,
+   553
+  ]
+ },
+ {
+  "label": "Android/data/com.eyex.australianrates/files/logs/ar-local.log",
+  "at": [
+   360,
+   629
+  ]
+ },
+ {
+  "label": "Copy path",
+  "flags": "tap",
+  "at": [
+   360,
+   733
+  ]
+ },
+ {
+  "label": "Copy path",
+  "at": [
+   387,
+   734
+  ]
+ },
+ {
+  "label": "Copy",
+  "at": [
+   360,
+   869
+  ]
+ },
+ {
+  "label": "Clipboard",
+  "at": [
+   360,
+   917
+  ]
+ },
+ {
+  "label": "Share",
+  "at": [
+   360,
+   1005
+  ]
+ },
+ {
+  "label": "Operating-system share sheet",
+  "at": [
+   360,
+   1053
+  ]
+ },
+ {
+  "label": "Upload",
+  "at": [
+   360,
+   1141
+  ]
+ },
+ {
+  "label": "Public hosting",
+  "at": [
+   360,
+   1189
+  ]
+ },
+ {
+  "label": "Full evidence",
+  "at": [
+   360,
+   1277
+  ]
+ },
+ {
+  "label": "This device",
+  "at": [
+   360,
+   1325
+  ]
+ },
+ {
+  "label": "Clear",
+  "flags": "tap",
+  "at": [
+   131,
+   1388
+  ]
+ },
+ {
+  "label": "Copy",
+  "flags": "tap",
+  "at": [
+   346,
+   1387
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   567,
+   1387
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

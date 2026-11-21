@@ -1,0 +1,114 @@
+[
+ {
+  "label": "",
+  "flags": "tap",
+  "at": [
+   360,
+   800
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "at": [
+   300,
+   952
+  ]
+ },
+ {
+  "label": "Close Temporary filters",
+  "flags": "tap",
+  "at": [
+   640,
+   952
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1223
+  ]
+ },
+ {
+  "label": "Filter · Loading",
+  "at": [
+   360,
+   1069
+  ]
+ },
+ {
+  "label": "Availability",
+  "at": [
+   360,
+   1157
+  ]
+ },
+ {
+  "label": "Listed rate",
+  "flags": "tap,sel",
+  "at": [
+   190,
+   1241
+  ]
+ },
+ {
+  "label": "Listed rate",
+  "at": [
+   190,
+   1239
+  ]
+ },
+ {
+  "label": "No listed rate",
+  "flags": "tap",
+  "at": [
+   530,
+   1241
+  ]
+ },
+ {
+  "label": "No listed rate",
+  "at": [
+   530,
+   1239
+  ]
+ },
+ {
+  "label": "Lenders",
+  "at": [
+   360,
+   1357
+  ]
+ },
+ {
+  "label": "Reset",
+  "flags": "tap",
+  "at": [
+   154,
+   1502
+  ]
+ },
+ {
+  "label": "Reset",
+  "at": [
+   154,
+   1503
+  ]
+ },
+ {
+  "label": "Show 6,842 rates",
+  "flags": "tap",
+  "at": [
+   494,
+   1502
+  ]
+ },
+ {
+  "label": "Show 6,842 rates",
+  "at": [
+   494,
+   1503
+  ]
+ }
+]
