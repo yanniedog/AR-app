@@ -224,19 +224,9 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             );
             bootMark('details-fetched');
             if (!datasetUnchanged()) return;
-            work.stage('Saving verified product details');
-            await cache.writeDetails(text, manifest.payload_revision ? manifest.files.details.sha256 : undefined, manifest.files.details.sha256);
-            if (!datasetUnchanged()) return;
-            await cache.updateMeta({
-              manifest,
-              source: 'remote',
-              savedAt: new Date().toISOString(),
-              coreSha: manifest.files.core.sha256,
-              detailsSha: manifest.files.details.sha256,
-            });
-            if (!datasetUnchanged()) return;
+            // Open the suitability gate first: the first Rates paint waits for it, while
+            // hashing and writing the multi-megabyte details cache does not need to.
             set({ details: fresh });
-            workOutcome = 'completed';
             work.stage('Rebuilding suitability index from downloaded details');
             const builtFresh = await rebuildAndInstallSuitabilityIndex(
               core,
@@ -252,6 +242,20 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
               coreSha,
             );
             if (builtFresh) bootMark('suitability-built');
+            if (!datasetUnchanged()) return;
+            work.stage('Saving verified product details');
+            await cache.writeDetails(text, manifest.payload_revision ? manifest.files.details.sha256 : undefined, manifest.files.details.sha256);
+            if (!datasetUnchanged()) return;
+            await cache.updateMeta({
+              manifest,
+              source: 'remote',
+              savedAt: new Date().toISOString(),
+              coreSha: manifest.files.core.sha256,
+              detailsSha: manifest.files.details.sha256,
+            });
+            if (!datasetUnchanged()) return;
+            bootMark('details-saved');
+            workOutcome = 'completed';
             return;
           }
         } catch (err) {

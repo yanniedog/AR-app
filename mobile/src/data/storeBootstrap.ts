@@ -134,7 +134,8 @@ export function createBootstrapActions(
           void prepareBankRateHistoryAfterPaint(set, get, bundle.core, bundle.meta.manifest,
             parseHistoryDatesIndex(bundle.meta.historyDatesIndex, bundle.meta.manifest), null,
             { readCachedDetails: true });
-          if (!suitabilityIndex) {
+          if (!suitabilityIndex || !bundle.meta.detailsSha) {
+            // Details missing from the cache (index written, details write interrupted) also warm.
             // Defer past first paint so cold open stays interactive. Details
             // validation previously stacked with history on the JS thread
             // immediately after status=ready (audit paste: 50s+ each).
