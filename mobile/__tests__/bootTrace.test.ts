@@ -24,10 +24,12 @@ describe('boot trace', () => {
     bootMark('js-start');
     bootCount('row-runs');
     bootCount('row-runs');
-    bootCount('filter-ms', 12.4);
+    bootCount('filter-ms', 0.4);
+    bootCount('filter-ms', 0.4);
+    bootCount('filter-ms', 0.4);
     bootMark('rates-ready');
     bootCount('row-runs');
-    expect((warn.mock.calls[0] as [string, string])[1]).toMatch(/^launch ms js-start=\d+ rates-ready=\d+ row-runs=2 filter-ms=12$/);
+    expect((warn.mock.calls[0] as [string, string])[1]).toMatch(/^launch ms js-start=\d+ rates-ready=\d+ row-runs=2 filter-ms=1$/);
     warn.mockRestore();
   });
 });
