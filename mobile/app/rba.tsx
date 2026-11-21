@@ -225,7 +225,7 @@ export default function RbaRates() {
             });
           }}>{loading ? uiLabel("Loading") : uiLabel("Forecast unavailable")}</LedgerText>}</View>
           <View collapsable={false}>
-            {outlook?.economists ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA J1', ' ', '·', ' ', 'Survey', ' ', uiDate(outlook.economists.surveyDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.economists.publicationDate), surveyStale ? uiJoin(' ', '·', ' ', 'Older survey') : '')}</LedgerText> : !forecasts.length && !loading ? <LedgerAction label={uiLabel('Refresh outlook')} variant="quiet" onPress={() => { void refresh(true); }} style={{ alignSelf: 'flex-start' }} /> : null}
+            {outlook?.economists ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA J1', ' ', '·', ' ', 'Survey', ' ', uiDate(outlook.economists.surveyDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.economists.publicationDate), surveyStale ? uiJoin(' ', '·', ' ', 'Older survey') : '')}</LedgerText> : null}
           </View>
         </LedgerSection>
 
@@ -237,7 +237,7 @@ export default function RbaRates() {
             });
           }}>{loading ? uiLabel("Loading") : uiLabel("Bond data unavailable")}</LedgerText>}</View>
           <View collapsable={false}>
-            {outlook?.bondForwards ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA F17', ' ', '·', ' ', 'Observed', ' ', uiDate(outlook.bondForwards.observationDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.bondForwards.publicationDate), bondStale ? uiJoin(' ', '·', ' ', 'Older observation') : '')}</LedgerText> : !bonds?.length && !loading ? <LedgerAction label={uiLabel('Refresh outlook')} variant="quiet" onPress={() => { void refresh(true); }} style={{ alignSelf: 'flex-start' }} /> : null}
+            {outlook?.bondForwards ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA F17', ' ', '·', ' ', 'Observed', ' ', uiDate(outlook.bondForwards.observationDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.bondForwards.publicationDate), bondStale ? uiJoin(' ', '·', ' ', 'Older observation') : '')}</LedgerText> : null}
           </View>
         </LedgerSection>
 

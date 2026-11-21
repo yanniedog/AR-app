@@ -65,6 +65,26 @@ describe('real-use session verdict', () => {
     expect(v.outcome).toBe('fail');
   });
 
+  it('treats a scrolled-away refresh action as still on the screen, but not on a fresh screen', () => {
+    const kinds = (steps: unknown[]) => verdict(report(steps), null).findings.map((f: { kind: string }) => f.kind);
+    expect(kinds([
+      step(1, 'open rba', { errorState: { text: 'Refresh failed', action: true } }),
+      step(2, 'scroll rba', { errorState: { text: 'Forecast unavailable', action: false } }),
+    ])).toEqual(['error-shown', 'error-shown']);
+    expect(kinds([
+      step(1, 'open rba', { errorState: { text: 'Refresh failed', action: true } }),
+      step(2, 'open saved', { errorState: { text: 'No saved rates', action: false } }),
+    ])).toEqual(['error-shown', 'error-no-action']);
+    expect(kinds([
+      step(1, 'scroll rba', { errorState: { text: 'Forecast unavailable', action: false } }),
+    ])).toEqual(['error-no-action']);
+    expect(kinds([
+      step(1, 'open rba', { errorState: { text: 'Refresh failed', action: false } }),
+      step(2, 'scroll rba', { errorState: { text: 'Refresh failed', action: true } }),
+      step(3, 'scroll rba 2', { errorState: { text: 'Forecast unavailable', action: false } }),
+    ])).toEqual(['error-no-action', 'error-shown', 'error-shown']);
+  });
+
   it('flags a regression only against the previous build', () => {
     const base = report([step(1, 'open app', { firstContentMs: 2000 })], '1.0.0');
     const slower = verdict(report([step(1, 'open app', { firstContentMs: 5200 })]), base);
