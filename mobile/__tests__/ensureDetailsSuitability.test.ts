@@ -6,6 +6,7 @@ import {
   clearSuitabilityIndex,
   closeSuitabilityGateUntilRebuild,
   getSuitabilityIndex,
+  rebuildAndInstallSuitabilityIndex,
 } from '../src/data/suitabilityIndex';
 import { isSuitabilityFilterReady, subscribeSuitabilityGate } from '../src/data/suitabilityGate';
 import { backgroundPayloadWork } from '../src/lib/backgroundPayloadWork';
@@ -176,29 +177,65 @@ describe('ensureDetails suitability unblock', () => {
     expect(store.getState().detailsLoading).toBe(false);
   });
 
+  const mockRemoteMeta = () => mockReadMeta.mockResolvedValue({
+    manifest: remoteManifest,
+    source: 'remote',
+    savedAt: '2026-07-27T00:00:00Z',
+    coreSha: remoteManifest.files.core.sha256,
+    detailsSha: null,
+  });
+
   it('publishes details to the store in the same tick the gate opens, not before', async () => {
     closeSuitabilityGateUntilRebuild();
-    mockReadMeta.mockResolvedValue({
-      manifest: remoteManifest,
-      source: 'remote',
-      savedAt: '2026-07-27T00:00:00Z',
-      coreSha: remoteManifest.files.core.sha256,
-      detailsSha: null,
-    });
+    mockRemoteMeta();
     mockDownloadDetails.mockResolvedValue({ text: JSON.stringify(remoteDetails), details: remoteDetails });
-    const detailsWhenGateOpened: unknown[] = [];
-    const detailsRunDateAtStart = store.getState().details?.run_date ?? null;
-    const unsubscribe = subscribeSuitabilityGate(() => {
-      if (isSuitabilityFilterReady(false)) detailsWhenGateOpened.push(store.getState().details?.run_date ?? null);
+    const events: string[] = [];
+    let afterDetails = false;
+    const unsubscribeStore = store.subscribe((state) => {
+      if (state.details && !afterDetails) {
+        afterDetails = true;
+        events.push('details');
+        // A microtask checkpoint stands for any await between the two publications.
+        queueMicrotask(() => events.push('microtask'));
+      }
+    });
+    const unsubscribeGate = subscribeSuitabilityGate(() => {
+      if (isSuitabilityFilterReady(false)) events.push('gate');
     });
     try {
       await store.getState().ensureDetails({ force: true });
     } finally {
-      unsubscribe();
+      unsubscribeStore();
+      unsubscribeGate();
     }
-    expect(detailsRunDateAtStart).not.toBe(remoteDetails.run_date);
-    expect(detailsWhenGateOpened[0]).toBe(remoteDetails.run_date);
+    expect(events.slice(0, 3)).toEqual(['details', 'gate', 'microtask']);
     expect(store.getState().details?.run_date).toBe(remoteDetails.run_date);
+  });
+
+  it('still publishes details when the index is already installed for this publication', async () => {
+    mockRemoteMeta();
+    mockDownloadDetails.mockResolvedValue({ text: JSON.stringify(remoteDetails), details: remoteDetails });
+    await rebuildAndInstallSuitabilityIndex(
+      remoteCore, remoteDetails, remoteManifest.files.details.sha256, () => true, remoteManifest.files.core.sha256,
+    );
+    expect(isSuitabilityFilterReady(false)).toBe(true);
+    expect(store.getState().details).toBeNull();
+    await store.getState().ensureDetails({ force: true });
+    expect(store.getState().details?.run_date).toBe(remoteDetails.run_date);
+    expect(isSuitabilityFilterReady(false)).toBe(true);
+  });
+
+  it('publishes details but keeps the gate closed when the index build fails', async () => {
+    closeSuitabilityGateUntilRebuild();
+    mockRemoteMeta();
+    mockDownloadDetails.mockResolvedValue({ text: JSON.stringify(remoteDetails), details: remoteDetails });
+    const poisoned = { get product_key() { throw new Error('poisoned row'); } };
+    const section = Object.keys(remoteCore.sections)[0];
+    store.setState({ core: { ...remoteCore, sections: { ...remoteCore.sections, [section]: { ...remoteCore.sections[section], rates: [poisoned] } } } });
+    await store.getState().ensureDetails({ force: true });
+    expect(store.getState().details?.run_date).toBe(remoteDetails.run_date);
+    expect(isSuitabilityFilterReady(false)).toBe(false);
+    expect(mockUpdateMeta).not.toHaveBeenCalled();
   });
 
   it('keeps the gate closed without trusted details instead of loading bundled data', async () => {

@@ -35,6 +35,7 @@ export type PersistedSuitabilityIndex = {
 let installed: SuitabilityIndex | null = null;
 let inFlight: Promise<SuitabilityIndex | null> | null = null;
 let inFlightKey = '';
+let inFlightBeforeInstall: Array<() => void> = [];
 
 export function getSuitabilityIndex(): SuitabilityIndex | null {
   return installed;
@@ -206,13 +207,19 @@ export async function rebuildAndInstallSuitabilityIndex(
   ) {
     return installed;
   }
-  if (inFlight && inFlightKey === key) return inFlight;
+  if (inFlight && inFlightKey === key) {
+    // A joining caller still gets its publish step in the install tick.
+    if (beforeInstall) inFlightBeforeInstall.push(beforeInstall);
+    return inFlight;
+  }
+  const callbacks: Array<() => void> = beforeInstall ? [beforeInstall] : [];
+  inFlightBeforeInstall = callbacks;
 
   const promise = (async () => {
     const index = await buildSuitabilityIndex(core, details, detailsSha, coreSha);
     if (!isCurrent()) return null;
     // Same tick as the install, so one render sees the open gate and the new details together.
-    beforeInstall?.();
+    for (const publish of callbacks) publish();
     installSuitabilityIndex(index);
     try {
       await cache.writeSuitabilityIndex({

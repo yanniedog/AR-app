@@ -200,15 +200,24 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           if (cached && cached.run_date === core.run_date && (!wantSha || verifiedDetailsSha(cached) === wantSha)) {
             if (datasetUnchanged()) {
               workOutcome = 'completed';
-              set({ details: cached });
+              // Publish with the gate opening, as for downloaded details: one preparation pass.
+              const publishCached = () => {
+                if (datasetUnchanged() && get().details !== cached) set({ details: cached });
+              };
               work.stage('Rebuilding suitability index from cached details');
-              const builtCached = await rebuildAndInstallSuitabilityIndex(
-                core,
-                cached,
-                detailsSha,
-                () => datasetStillCurrent(runDate, coreSha, detailsSha, cached.run_date),
-                coreSha,
-              );
+              let builtCached: Awaited<ReturnType<typeof rebuildAndInstallSuitabilityIndex>> = null;
+              try {
+                builtCached = await rebuildAndInstallSuitabilityIndex(
+                  core,
+                  cached,
+                  detailsSha,
+                  datasetUnchanged,
+                  coreSha,
+                  publishCached,
+                );
+              } finally {
+                publishCached();
+              }
               if (builtCached) bootMark('suitability-built');
             }
             return;
