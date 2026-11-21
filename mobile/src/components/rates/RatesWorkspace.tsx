@@ -6,6 +6,7 @@ import { isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../../data/
 import { useMortgageResultsIndex } from '../../hooks/useMortgageResultsIndex';
 import { profileSectionCount } from '../../data/profile';
 import { bootMark } from '../../lib/bootTrace';
+import { bootCount } from '../../lib/bootCounters';
 import { markFirstValue } from '../../lib/firstValue';
 import { checkDrillOutcome } from '../../lib/degradationLog';
 import { reconcilePublicCompareSelectionTokens } from '../../data/publicCompareSelectionTokens';
@@ -654,8 +655,9 @@ export default function RatesWorkspace() {
     const scope = cooperativePricing.leadingScope;
     if (!scope || !leadingScope || indexedPricing || section !== 'Mortgage' || availability !== 'listed' || task.intentError
       || query.trim() || debouncedQuery.trim() || resultFilters.factCriteria.length || task.page !== 1 || !(mortgageCriteriaReady || isDefaultMortgageBrowse)
-      || hasMandatoryRequirements()) return null;
+      || hasMandatoryRequirements()) { if (scope) bootCount('leading-gated'); return null; }
     const ranked = filterRows(sortRows(scope.rows, 'rate', section, depositRankMetric, mortgageRateMetric), resultFilters, filterDetails, null, section);
+    if (ranked.length < pageSize) { bootCount('leading-short'); bootCount('leading-short-rows', ranked.length); bootCount('leading-scope-rows', scope.rows.length); }
     return ranked.length >= pageSize ? { rows: ranked.slice(0, pageSize), unverified: scope.unverifiedRows } : null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cooperativePricing.leadingScope, leadingScope, indexedPricing, section, availability, task.intentError, query, debouncedQuery,
