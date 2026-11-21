@@ -2,6 +2,7 @@ import { SECTION_KEYS, type CorePayload, type DetailsPayload, type Manifest } fr
 import { backgroundPayloadWork, type BackgroundWorkOutcome } from '../lib/backgroundPayloadWork';
 import { debugLog } from '../lib/debugLog';
 import { yieldToPaintFrames, yieldToUi } from '../lib/yieldToUi';
+import { afterFirstValue } from '../lib/firstValue';
 import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import type { DatesIndex } from './datesIndex';
 import { prepareReadyBankRateHistory } from './historicalBankRateReadySync';
@@ -53,6 +54,13 @@ export async function prepareBankRateHistoryAfterPaint(
   try {
     await yieldToPaintFrames(2);
     if (!isCurrent()) return;
+    // Foreground refresh: parsing history ledgers competes with Rates row
+    // preparation on the Hermes thread, so hold it until Rates has painted.
+    if (options.warm !== false) {
+      work.stage('Waiting for first Rates value');
+      await afterFirstValue();
+      if (!isCurrent()) return;
+    }
     // Foreground warm only: optional history must not fight product-details
     // validation on the Hermes thread after cold open / GitHub payload refresh
     // (audit paste: both 50s+). Bounded OS-scheduled refresh keeps warm:false.

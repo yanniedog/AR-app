@@ -87,6 +87,9 @@ function optionalRefreshWork(
   };
 }
 
+/** Active post-refresh warming jobs per store, so overlapping refreshes cannot clear each other's flag. */
+const warmingJobs = new WeakMap<StoreGet, number>();
+
 export function createRefreshActions(set: StoreSet, get: StoreGet) {
   return {
     async refresh(
@@ -182,6 +185,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             );
           }
           if (!background) {
+            bootMark('post-refresh-wait');
             // Optional history ledgers are not needed for the first Rates paint.
             // Parsing them now competed with row preparation on a cold install.
             await afterFirstValue();
@@ -750,9 +754,10 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
       } finally {
         // Clear refreshing before post-warm so the UI is interactive even while
         // awaiters (background fetch) still wait for warm/notify to finish.
+        if (deferWarm) warmingJobs.set(get, (warmingJobs.get(get) ?? 0) + 1);
         set({
           refreshing: false,
-          postRefreshWarming: deferWarm,
+          ...(deferWarm ? { postRefreshWarming: true } : {}),
           payloadProgress: null,
         });
         if (manual) hapticRefreshComplete();
@@ -765,7 +770,12 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           work.stage('Waiting for bank rate history preparation');
           await historyWork;
           work.finish(workOutcome);
-          if (deferWarm) set({ postRefreshWarming: false });
+          if (deferWarm) {
+            // Another refresh may still be warming; only the last one clears the flag.
+            const left = (warmingJobs.get(get) ?? 1) - 1;
+            warmingJobs.set(get, left);
+            if (left <= 0) set({ postRefreshWarming: false });
+          }
         }
       }
     },
