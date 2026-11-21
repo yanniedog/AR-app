@@ -10,6 +10,7 @@ import { Decimal, decimalText, rateDecimal } from './publicRateDecimal';
 import type { UserRateScenario } from './userRateScenario';
 import { rowsForProductKey } from './rateRowIndex';
 import { parsePublicOfferSelectionToken } from './publicOfferIdentity';
+import { cooperativeSliceMs } from '../lib/firstValue';
 import { yieldToUi } from '../lib/yieldToUi';
 
 
@@ -222,7 +223,7 @@ export async function publicCatalogueOfferRowsCooperatively(
         appendCatalogueOfferRow(rows, product, programme, section, scenario, asOfForProgramme, resolve);
       // A single product can contain hundreds of programmes. Check the time
       // budget here so a large lender cannot monopolise the JS thread.
-      if (now() - sliceStarted >= 6) {
+      if (now() - sliceStarted >= cooperativeSliceMs()) {
         await yieldControl();
         sliceStarted = now();
         if (cancelled()) return null;
@@ -290,7 +291,7 @@ export async function publicRecommendationRowsCooperatively(
     if (includeExistingLegacy || catalogue.getProduct(row.product_key)?.status !== 'legacy') {
       current.push(bindCurrentPublicRow(row, catalogue));
     }
-    if (now() - sliceStarted >= 6) {
+    if (now() - sliceStarted >= cooperativeSliceMs()) {
       await yieldControl();
       sliceStarted = now();
       if (cancelled()) return null;
@@ -529,7 +530,7 @@ export async function resolvedPublicRankingRowsCooperatively(
     const payable = payableRateForRow(row, result);
     if (payable == null) unresolved += 1;
     else resolved.push(rowWithPublicResolution(bindCurrentPublicRow(row, catalogue), result));
-    if (now() - sliceStarted >= 6) {
+    if (now() - sliceStarted >= cooperativeSliceMs()) {
       await yieldControl();
       sliceStarted = now();
       if (cancelled()) return null;

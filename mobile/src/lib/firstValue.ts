@@ -37,8 +37,8 @@ export function afterFirstValue(maxWaitMs = 20_000): Promise<void> {
 /** CPU slice between yields. Until Rates first settles nothing is interactive,
  * and every yield costs a scheduler round trip (up to 48 ms on a loaded device),
  * so use longer slices then and keep the short slice for a live screen. */
-export function cooperativeSliceMs(): number {
-  return isFirstValuePending() ? 24 : 6;
+export function cooperativeSliceMs(base = 6): number {
+  return isFirstValuePending() ? Math.max(24, base) : base;
 }
 
 export function resetFirstValueForTests(): void {
