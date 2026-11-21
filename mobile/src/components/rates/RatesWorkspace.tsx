@@ -828,6 +828,10 @@ export default function RatesWorkspace() {
   useEffect(() => { if (core != null && publicPricing.ready) bootMark('pricing-ready'); }, [core, publicPricing.ready]);
   useEffect(() => { if (core != null && !searchIndexLoading) bootMark('search-index-idle'); }, [core, searchIndexLoading]);
   useEffect(() => { if (core != null && !detailFiltersPending) bootMark('detail-filters-idle'); }, [core, detailFiltersPending]);
+  // Which link of the early-page chain holds on a cold start: requested, scoped, shown.
+  useEffect(() => { if (core != null && leadingScope) bootMark('leading-requested'); }, [core, leadingScope]);
+  useEffect(() => { if (core != null && cooperativePricing.leadingScope) bootMark('leading-scoped'); }, [core, cooperativePricing.leadingScope]);
+  useEffect(() => { if (core != null && leadingPage) bootMark('leading-page'); }, [core, leadingPage]);
   const ratesSettled = core != null && !searchPending;
   // Mirrors the searchPending branches above so the last-blocker mark names the real condition.
   const blockers = (intentPending ? ['intent']
