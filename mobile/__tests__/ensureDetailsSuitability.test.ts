@@ -146,6 +146,33 @@ describe('ensureDetails suitability unblock', () => {
     expect(store.getState().details?.run_date).toBe(remoteCore.run_date);
   });
 
+  it('opens the gate before the details cache write finishes', async () => {
+    closeSuitabilityGateUntilRebuild();
+    mockReadMeta.mockResolvedValue({
+      manifest: remoteManifest,
+      source: 'remote',
+      savedAt: '2026-07-27T00:00:00Z',
+      coreSha: remoteManifest.files.core.sha256,
+      detailsSha: null,
+    });
+    mockDownloadDetails.mockResolvedValue({ text: JSON.stringify(remoteDetails), details: remoteDetails });
+    let finishWrite!: () => void;
+    let gateOpenAtWrite: boolean | null = null;
+    mockWriteDetails.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      gateOpenAtWrite = isSuitabilityFilterReady(false);
+      finishWrite = resolve;
+    }));
+
+    const load = store.getState().ensureDetails({ force: true });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(gateOpenAtWrite).toBe(true);
+    expect(mockUpdateMeta).not.toHaveBeenCalled();
+    finishWrite();
+    await load;
+    expect(mockUpdateMeta).toHaveBeenCalledTimes(1);
+    expect(store.getState().detailsLoading).toBe(false);
+  });
+
   it('keeps the gate closed without trusted details instead of loading bundled data', async () => {
     store.setState({
       source: 'sample',
