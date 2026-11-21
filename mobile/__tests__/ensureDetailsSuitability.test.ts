@@ -7,7 +7,7 @@ import {
   closeSuitabilityGateUntilRebuild,
   getSuitabilityIndex,
 } from '../src/data/suitabilityIndex';
-import { isSuitabilityFilterReady } from '../src/data/suitabilityGate';
+import { isSuitabilityFilterReady, subscribeSuitabilityGate } from '../src/data/suitabilityGate';
 import { backgroundPayloadWork } from '../src/lib/backgroundPayloadWork';
 
 const sampleDetails = loadSampleDetails();
@@ -174,6 +174,31 @@ describe('ensureDetails suitability unblock', () => {
     await load;
     expect(mockUpdateMeta).toHaveBeenCalledTimes(1);
     expect(store.getState().detailsLoading).toBe(false);
+  });
+
+  it('publishes details to the store in the same tick the gate opens, not before', async () => {
+    closeSuitabilityGateUntilRebuild();
+    mockReadMeta.mockResolvedValue({
+      manifest: remoteManifest,
+      source: 'remote',
+      savedAt: '2026-07-27T00:00:00Z',
+      coreSha: remoteManifest.files.core.sha256,
+      detailsSha: null,
+    });
+    mockDownloadDetails.mockResolvedValue({ text: JSON.stringify(remoteDetails), details: remoteDetails });
+    const detailsWhenGateOpened: unknown[] = [];
+    const detailsRunDateAtStart = store.getState().details?.run_date ?? null;
+    const unsubscribe = subscribeSuitabilityGate(() => {
+      if (isSuitabilityFilterReady(false)) detailsWhenGateOpened.push(store.getState().details?.run_date ?? null);
+    });
+    try {
+      await store.getState().ensureDetails({ force: true });
+    } finally {
+      unsubscribe();
+    }
+    expect(detailsRunDateAtStart).not.toBe(remoteDetails.run_date);
+    expect(detailsWhenGateOpened[0]).toBe(remoteDetails.run_date);
+    expect(store.getState().details?.run_date).toBe(remoteDetails.run_date);
   });
 
   it('keeps the gate closed without trusted details instead of loading bundled data', async () => {

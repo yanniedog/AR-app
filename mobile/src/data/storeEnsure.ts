@@ -226,21 +226,26 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             if (!datasetUnchanged()) return;
             // Open the suitability gate first: the first Rates paint waits for it, while
             // hashing and writing the multi-megabyte details cache does not need to.
-            set({ details: fresh });
+            // Details join the store in the same tick as the gate opening. Publishing them
+            // earlier made every details consumer prepare its rows twice, once for the new
+            // details and again when the gate opened, while the index build competed for the thread.
+            const publishFresh = () => {
+              if (datasetUnchanged() && get().details !== fresh) set({ details: fresh });
+            };
             work.stage('Rebuilding suitability index from downloaded details');
-            const builtFresh = await rebuildAndInstallSuitabilityIndex(
-              core,
-              fresh,
-              manifest.files.details.sha256,
-              () =>
-                datasetStillCurrent(
-                  runDate,
-                  coreSha,
-                  manifest.files.details.sha256,
-                  fresh.run_date,
-                ),
-              coreSha,
-            );
+            let builtFresh: Awaited<ReturnType<typeof rebuildAndInstallSuitabilityIndex>> = null;
+            try {
+              builtFresh = await rebuildAndInstallSuitabilityIndex(
+                core,
+                fresh,
+                manifest.files.details.sha256,
+                datasetUnchanged,
+                coreSha,
+                publishFresh,
+              );
+            } finally {
+              publishFresh();
+            }
             if (builtFresh) bootMark('suitability-built');
             if (!datasetUnchanged()) return;
             work.stage('Saving verified product details');

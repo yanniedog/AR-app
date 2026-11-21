@@ -195,6 +195,7 @@ export async function rebuildAndInstallSuitabilityIndex(
   detailsSha: string,
   isCurrent: () => boolean,
   coreSha = '',
+  beforeInstall?: () => void,
 ): Promise<SuitabilityIndex | null> {
   const key = `${core.run_date}|${coreSha}|${detailsSha}`;
   if (
@@ -210,6 +211,8 @@ export async function rebuildAndInstallSuitabilityIndex(
   const promise = (async () => {
     const index = await buildSuitabilityIndex(core, details, detailsSha, coreSha);
     if (!isCurrent()) return null;
+    // Same tick as the install, so one render sees the open gate and the new details together.
+    beforeInstall?.();
     installSuitabilityIndex(index);
     try {
       await cache.writeSuitabilityIndex({
