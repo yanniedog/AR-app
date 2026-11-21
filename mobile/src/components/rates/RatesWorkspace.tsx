@@ -21,7 +21,8 @@ import { publicRateScenario, resolvedPublicRankingRows } from '../../data/public
 import { useUserRateScenario } from '../../hooks/useUserRateScenario';
 import { useResolvedPublicRankingRows, type LeadingScopeRequest } from '../../hooks/useResolvedPublicRankingRows';
 import { uiCount,uiJoin,uiLabel,uiRatesQuery,uiProductName,uiProviderName,type UiCopy } from '../../lib/uiCopy';
-import { humanizeEnum } from '../../data/format';
+import { humanizeEnum, visibleAccountRows } from '../../data/format';
+import { isNonStandard } from '../../data/rateClassification';
 import { useReadyNavigationEffect } from '../../hooks/useReadyNavigationEffect';
 import { useBackOwnedSheetState } from '../../hooks/useBackOwnedSheetState';
 import { SheetSurface, type SheetAuditState } from '../SheetSurface';
@@ -652,14 +653,15 @@ export default function RatesWorkspace() {
   // Page one from the verified leading prefix. Filters keep ranked order, so it
   // equals the final first page once the prefix holds a full page of matches.
   // Diagnostic only: why the early page is absent. Counted from an effect so only committed states are recorded.
-  const leadingWhy = useRef<{ gated: boolean; ranked: number; scoped: number } | null>(null);
+  const leadingWhy = useRef<{ gated: boolean; ranked: number; scoped: number; visible?: number; nonStandard?: number } | null>(null);
   const leadingPage = useMemo(() => {
     const scope = cooperativePricing.leadingScope;
     if (!scope || !leadingScope || indexedPricing || section !== 'Mortgage' || availability !== 'listed' || task.intentError
       || query.trim() || debouncedQuery.trim() || resultFilters.factCriteria.length || task.page !== 1 || !(mortgageCriteriaReady || isDefaultMortgageBrowse)
       || hasMandatoryRequirements()) { leadingWhy.current = scope ? { gated: true, ranked: 0, scoped: scope.rows.length } : null; return null; }
     const ranked = filterRows(sortRows(scope.rows, 'rate', section, depositRankMetric, mortgageRateMetric), resultFilters, filterDetails, null, section);
-    leadingWhy.current = ranked.length < pageSize ? { gated: false, ranked: ranked.length, scoped: scope.rows.length } : null;
+    leadingWhy.current = ranked.length < pageSize ? { gated: false, ranked: ranked.length, scoped: scope.rows.length,
+      visible: visibleAccountRows(scope.rows, false, filterDetails).length, nonStandard: scope.rows.filter(isNonStandard).length } : null;
     return ranked.length >= pageSize ? { rows: ranked.slice(0, pageSize), unverified: scope.unverifiedRows } : null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cooperativePricing.leadingScope, leadingScope, indexedPricing, section, availability, task.intentError, query, debouncedQuery,
@@ -669,6 +671,7 @@ export default function RatesWorkspace() {
     if (!why || leadingPage) return;
     if (why.gated) { bootCount('leading-gated'); return; }
     bootCount('leading-short'); bootCount('leading-short-rows', why.ranked); bootCount('leading-scope-rows', why.scoped);
+    bootCount('leading-visible-rows', why.visible ?? 0); bootCount('leading-nonstd-rows', why.nonStandard ?? 0);
   }, [leadingPage, cooperativePricing.leadingScope, suitabilityRevision, filterDetails]);
   const resultRowKey = useCallback((row: ResultRow, i: number) => ratesResultRowKey(row, pagination.offset + i), [pagination.offset]);
   const catalogueOptions = useMemo(() => ({ ...EMPTY_SEARCH_FILTER_OPTIONS,
