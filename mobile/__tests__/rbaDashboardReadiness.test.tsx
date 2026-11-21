@@ -172,19 +172,21 @@ test('unavailable chart states keep one refresh action in the Outlook section an
   expect(refreshActions().some((node) => insideChartSlot(node))).toBe(false);
 });
 
-test('an unavailable chart placeholder is itself a refresh button without adding children to its slot', async () => {
+test('an unavailable chart placeholder is itself a 48 dp refresh button without adding children to its slot', async () => {
   mockLoad.mockResolvedValue({ ...outlook, economists: null, bondForwards: null });
   await mount();
-  const placeholders = ['Forecast unavailable', 'Bond data unavailable'].map((text) =>
-    tree!.root.findAllByType('LedgerText').find((node) => node.props.children === text)!);
-  const before = mockLoad.mock.calls.length;
-  for (const placeholder of placeholders) {
+  const find = (text: string) => tree!.root.findAllByType('LedgerText').find((node) => node.props.children === text)!;
+  for (const text of ['Forecast unavailable', 'Bond data unavailable']) {
+    const placeholder = find(text);
     expect(placeholder.props.accessibilityRole).toBe('button');
     expect(placeholder.props.accessibilityLabel).toBe('Refresh outlook');
+    expect((placeholder.props.style as { minHeight: number }).minHeight).toBeGreaterThanOrEqual(48);
     expect((placeholder as unknown as { parent: { children: unknown[] } }).parent.children).toHaveLength(1);
+    const before = mockLoad.mock.calls.length;
     await act(async () => { (placeholder.props.onPress as () => void)(); });
+    expect(mockLoad.mock.calls.length).toBe(before + 1);
+    expect(mockLoad.mock.calls[before][0]).toBe(true);
   }
-  expect(mockLoad.mock.calls.length).toBeGreaterThan(before);
 });
 
 test('loading cannot certify an empty chart; an actual unavailable placeholder requires positive native layout', async () => {

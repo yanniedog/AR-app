@@ -220,6 +220,7 @@ export default function RbaRates() {
         <LedgerSection title="Economists’ cash-rate forecast">
           <View collapsable={false}>{forecasts.length ? <RateOutlookChart key={`forecast:${cashRate}`} label="Economists’ cash-rate forecast" points={forecasts} cashRate={cashRate} selectedIndex={forecastIndex} onSelect={setForecastIndex} onGraphicReady={forecastReady} /> : <LedgerText key={forecastGraphicKey} tone="mutedInk" onPress={loading ? undefined : () => { void refresh(true); }}
             accessibilityRole={loading ? undefined : 'button'} accessibilityLabel={loading ? undefined : uiLabel('Refresh outlook')}
+            style={loading ? undefined : { minHeight: 48, textAlignVertical: 'center' }}
           onLayout={(event) => {
             if (!loading) forecastReady({
               revision: forecastRevision, expectedCount: 0, pointCount: 0,
@@ -234,6 +235,7 @@ export default function RbaRates() {
         <LedgerSection title="Bond-market forward rates">
           <View collapsable={false}>{bonds?.length ? <RateOutlookChart key={`bonds:${cashRate}`} label="Bond-market forward rates" points={bonds} cashRate={cashRate} tone="info" selectedIndex={bondIndex} onSelect={setBondIndex} onGraphicReady={bondsReady} /> : <LedgerText key={bondGraphicKey} tone="mutedInk" onPress={loading ? undefined : () => { void refresh(true); }}
             accessibilityRole={loading ? undefined : 'button'} accessibilityLabel={loading ? undefined : uiLabel('Refresh outlook')}
+            style={loading ? undefined : { minHeight: 48, textAlignVertical: 'center' }}
           onLayout={(event) => {
             if (!loading) bondsReady({
               revision: bondRevision, expectedCount: 0, pointCount: 0,
