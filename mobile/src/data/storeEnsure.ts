@@ -200,15 +200,24 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           if (cached && cached.run_date === core.run_date && (!wantSha || verifiedDetailsSha(cached) === wantSha)) {
             if (datasetUnchanged()) {
               workOutcome = 'completed';
-              set({ details: cached });
+              // Publish with the gate opening, as for downloaded details: one preparation pass.
+              const publishCached = () => {
+                if (datasetUnchanged() && get().details !== cached) set({ details: cached });
+              };
               work.stage('Rebuilding suitability index from cached details');
-              const builtCached = await rebuildAndInstallSuitabilityIndex(
-                core,
-                cached,
-                detailsSha,
-                () => datasetStillCurrent(runDate, coreSha, detailsSha, cached.run_date),
-                coreSha,
-              );
+              let builtCached: Awaited<ReturnType<typeof rebuildAndInstallSuitabilityIndex>> = null;
+              try {
+                builtCached = await rebuildAndInstallSuitabilityIndex(
+                  core,
+                  cached,
+                  detailsSha,
+                  datasetUnchanged,
+                  coreSha,
+                  publishCached,
+                );
+              } finally {
+                publishCached();
+              }
               if (builtCached) bootMark('suitability-built');
             }
             return;
@@ -226,21 +235,26 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             if (!datasetUnchanged()) return;
             // Open the suitability gate first: the first Rates paint waits for it, while
             // hashing and writing the multi-megabyte details cache does not need to.
-            set({ details: fresh });
+            // Details join the store in the same tick as the gate opening. Publishing them
+            // earlier made every details consumer prepare its rows twice, once for the new
+            // details and again when the gate opened, while the index build competed for the thread.
+            const publishFresh = () => {
+              if (datasetUnchanged() && get().details !== fresh) set({ details: fresh });
+            };
             work.stage('Rebuilding suitability index from downloaded details');
-            const builtFresh = await rebuildAndInstallSuitabilityIndex(
-              core,
-              fresh,
-              manifest.files.details.sha256,
-              () =>
-                datasetStillCurrent(
-                  runDate,
-                  coreSha,
-                  manifest.files.details.sha256,
-                  fresh.run_date,
-                ),
-              coreSha,
-            );
+            let builtFresh: Awaited<ReturnType<typeof rebuildAndInstallSuitabilityIndex>> = null;
+            try {
+              builtFresh = await rebuildAndInstallSuitabilityIndex(
+                core,
+                fresh,
+                manifest.files.details.sha256,
+                datasetUnchanged,
+                coreSha,
+                publishFresh,
+              );
+            } finally {
+              publishFresh();
+            }
             if (builtFresh) bootMark('suitability-built');
             if (!datasetUnchanged()) return;
             work.stage('Saving verified product details');
