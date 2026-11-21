@@ -1,16 +1,16 @@
-// Hides explorer comments that belong to an older app release than the newest one posted.
+// Archives explorer comments for APK releases older than the current published APK.
 // Usage: node hide-outdated.mjs <owner/repo> <issue number>
 // Needs GH_TOKEN. Minimizes with GraphQL as OUTDATED; when that is refused, collapses the
 // comment body in place with REST so the thread still shrinks.
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-const TITLE = /^explorer run (\d+) on app-v(\d+)\.(\d+)\.(\d+)/;
+const TITLE = /^explorer run \d+ on (app-v\d+\.\d+\.\d+)(?=\s|$)/;
 export const COLLAPSED_MARKER = '<!-- explorer-collapsed -->';
 
 export function versionOf(body) {
   const m = TITLE.exec(String(body ?? '').trimStart());
-  return m ? [Number(m[2]), Number(m[3]), Number(m[4])] : null;
+  return m ? releaseVersion(m[1]) : null;
 }
 
 export function compareVersions(a, b) {
@@ -20,21 +20,18 @@ export function compareVersions(a, b) {
 
 const BOT = 'github-actions[bot]';
 
-function botResults(comments, botLogin) {
-  return comments.filter(c => c.author === botLogin).map(c => ({ ...c, version: versionOf(c.body) })).filter(c => c.version);
+function releaseVersion(tag) {
+  const match = /^app-v(\d+)\.(\d+)\.(\d+)$/.exec(tag);
+  return match ? match.slice(1).map(Number) : null;
 }
 
-/** Newest app version among this bot's explorer comments, or null. Other authors never count. */
-export function newestVersion(comments, botLogin = BOT, floor = null) {
-  return botResults(comments, botLogin).reduce((best, c) => (!best || compareVersions(c.version, best) > 0 ? c.version : best), floor);
-}
-
-/** Bot comments for releases older than the newest release posted, not already hidden.
- * A collapsed comment starts with the marker, so it has no title and is never selected again. */
-export function outdatedComments(comments, botLogin = BOT, floor = null) {
-  const newest = newestVersion(comments, botLogin, floor);
-  if (!newest) return [];
-  return botResults(comments, botLogin).filter(c => compareVersions(c.version, newest) < 0 && !c.isMinimized);
+export function outdatedComments(comments, current, botLogin = BOT) {
+  if (!current) return [];
+  return comments.filter(c => {
+    if (c.author !== botLogin || c.isMinimized) return false;
+    const version = versionOf(c.body);
+    return version !== null && compareVersions(version, current) < 0;
+  });
 }
 
 export function collapsedBody(body, newest) {
@@ -65,12 +62,15 @@ function minimize(id) {
   if (out.errors?.length || out.data?.minimizeComment?.minimizedComment?.isMinimized !== true) throw new Error('minimizeComment did not minimize');
 }
 
-function main(repo, issue, currentTitle = '') {
-  const nodes = listComments(repo, issue);
-  // The comment just posted may not be in the listing yet; its release still counts as the newest.
-  const current = versionOf(currentTitle);
-  const stale = outdatedComments(nodes, BOT, current);
-  const newest = newestVersion(nodes, BOT, current) ?? [0, 0, 0];
+function main(repo, issue) {
+  const tag = gh('api', `repos/${repo}/releases?per_page=30`, '--jq',
+    '[.[] | select(.draft|not) | select(.tag_name|test("^app-v[0-9]+[.][0-9]+[.][0-9]+$")) | select(any(.assets[]; .name=="app-preview.apk"))][0].tag_name // empty').trim();
+  const current = releaseVersion(tag);
+  if (!current) {
+    console.log('No published APK release found');
+    return;
+  }
+  const stale = outdatedComments(listComments(repo, issue), current);
   let hidden = 0;
   let collapsed = 0;
   for (const c of stale) {
@@ -79,17 +79,18 @@ function main(repo, issue, currentTitle = '') {
       hidden++;
     } catch {
       try {
-        gh('api', '-X', 'PATCH', `repos/${repo}/issues/comments/${c.databaseId}`, '-f', `body=${collapsedBody(c.body, newest)}`);
+        gh('api', '-X', 'PATCH', `repos/${repo}/issues/comments/${c.databaseId}`, '-f', `body=${collapsedBody(c.body, current)}`);
         collapsed++;
       } catch (err) {
         console.error(`Could not hide comment ${c.databaseId}: ${String(err.message).split('\n')[0]}`);
       }
     }
   }
-  console.log(`Outdated explorer comments: ${stale.length} found, ${hidden} hidden, ${collapsed} collapsed`);
+  console.log(`Outdated explorer comments for ${tag}: ${stale.length} found, ${hidden} hidden, ${collapsed} collapsed`);
+  if (hidden + collapsed !== stale.length) process.exitCode = 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const [repo, issue, currentTitle] = process.argv.slice(2);
-  try { main(repo, issue, currentTitle); } catch (err) { console.error(`hide-outdated skipped: ${String(err.message).split('\n')[0]}`); }
+  const [repo, issue] = process.argv.slice(2);
+  main(repo, issue);
 }

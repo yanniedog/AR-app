@@ -20,7 +20,7 @@ describe('hide outdated explorer comments', () => {
   });
 
   it('selects only comments for releases older than the newest', () => {
-    const ids = run<number[]>(`m.outdatedComments([comment(1, 'app-v1.0.9'), comment(2, 'app-v1.0.10'), comment(3, 'app-v1.0.10'), comment(4, 'app-v1.0.11')]).map(c => c.databaseId)`);
+    const ids = run<number[]>(`m.outdatedComments([comment(1, 'app-v1.0.9'), comment(2, 'app-v1.0.10'), comment(3, 'app-v1.0.10'), comment(4, 'app-v1.0.11')], [1, 0, 11]).map(c => c.databaseId)`);
     expect(ids).toEqual([1, 2, 3]);
   });
 
@@ -28,17 +28,15 @@ describe('hide outdated explorer comments', () => {
     expect(run<number[]>(`m.outdatedComments([
       comment(1, 'app-v1.0.5'), comment(2, 'app-v1.0.5', { isMinimized: true }),
       comment(3, 'app-v1.0.5', { author: 'someone' }), comment(4, 'app-v1.0.5', { body: m.collapsedBody('explorer run 4 on app-v1.0.5 (audit)\\n\\nold', [1, 0, 6]) }),
-      comment(5, 'app-v1.0.6'), comment(6, 'app-v1.0.6')]).map(c => c.databaseId)`)).toEqual([1]);
-    expect(run(`m.outdatedComments([comment(7, 'app-v1.0.6')])`)).toEqual([]);
-    expect(run(`m.outdatedComments([])`)).toEqual([]);
+      comment(5, 'app-v1.0.6'), comment(6, 'app-v1.0.6')], [1, 0, 6]).map(c => c.databaseId)`)).toEqual([1]);
+    expect(run(`m.outdatedComments([comment(7, 'app-v1.0.6')], [1, 0, 6])`)).toEqual([]);
+    expect(run(`m.outdatedComments([], [1, 0, 6])`)).toEqual([]);
   });
 
-  it('counts the release of the comment just posted even when the listing has not caught up', () => {
-    expect(run<number[]>(`m.outdatedComments([comment(1, 'app-v1.0.5'), comment(2, 'app-v1.0.5')], 'github-actions[bot]', [1, 0, 6]).map(c => c.databaseId)`)).toEqual([1, 2]);
-    expect(run(`m.newestVersion([comment(1, 'app-v1.0.5')], 'github-actions[bot]', [1, 0, 4])`)).toEqual([1, 0, 5]);
-    expect(run(`m.newestVersion([comment(1, 'app-v1.0.5')], 'github-actions[bot]', [1, 0, 7])`)).toEqual([1, 0, 7]);
-    // Comments at or above the floor stay visible; only older ones are selected.
-    expect(run<number[]>(`m.outdatedComments([comment(1, 'app-v1.0.5'), comment(2, 'app-v1.0.6'), comment(3, 'app-v1.0.7')], 'github-actions[bot]', [1, 0, 6]).map(c => c.databaseId)`)).toEqual([1, 2]);
+  it('archives reports as soon as an APK is published, even before its first report', () => {
+    expect(run<number[]>(`m.outdatedComments([comment(1, 'app-v1.0.342')], [1, 0, 344]).map(c => c.databaseId)`)).toEqual([1]);
+    expect(run<number[]>(`m.outdatedComments([comment(1, 'app-v1.0.342'), comment(2, 'app-v1.0.344'), comment(3, 'app-v1.0.345'), comment(4, 'app-v1.0.343-rc.1')], [1, 0, 344]).map(c => c.databaseId)`)).toEqual([1]);
+    expect(run<number[]>(`m.outdatedComments([comment(1, 'app-v1.0.342')], null).map(c => c.databaseId)`)).toEqual([]);
   });
 
   it('collapses a body into a details block that names the newer release', () => {
@@ -50,8 +48,4 @@ describe('hide outdated explorer comments', () => {
     expect(out).toContain('body');
   });
 
-  it('ignores releases posted by other authors when finding the newest', () => {
-    expect(run(`m.newestVersion([comment(1, 'app-v1.0.5'), comment(2, 'app-v9.9.9', { author: 'someone' })])`)).toEqual([1, 0, 5]);
-    expect(run(`m.outdatedComments([comment(1, 'app-v1.0.5'), comment(2, 'app-v9.9.9', { author: 'someone' })])`)).toEqual([]);
-  });
 });
