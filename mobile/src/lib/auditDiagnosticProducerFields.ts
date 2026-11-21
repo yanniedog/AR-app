@@ -679,6 +679,7 @@ export const AUDIT_WORKER_TEXT = new Set<string>([
   "Validating embedded historical catalogue",
   "Validating historical catalogue",
   "Waiting for bank rate history preparation",
+  "Waiting for first Rates value",
   "Waiting for first paint",
   "Waiting for in-flight product details",
   "Waiting for post-refresh warming",
