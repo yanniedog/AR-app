@@ -93,7 +93,7 @@
   "name": "about",
   "open": "/about",
   "scroll": 0,
-  "why": "about"
+  "why": "About including the Android back button when the top inset is consumed"
  },
  {
   "name": "profile",

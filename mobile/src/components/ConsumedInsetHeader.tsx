@@ -1,6 +1,7 @@
-import { Header } from '@react-navigation/elements';
+import { Header, HeaderBackButton } from '@react-navigation/elements';
 import type { NativeStackHeaderProps } from '@react-navigation/native-stack';
 import React from 'react';
+import { Platform } from 'react-native';
 import type { CorePayload } from '../types';
 import { uiLabel, uiNavigationTitle, type UiCopy } from '../lib/uiCopy';
 import { NavigationMenuButton } from './AppNavigationMenu';
@@ -11,6 +12,7 @@ export function ConsumedInsetHeader({ navigationOptions: options, back, core, fa
   core: CorePayload | null | undefined;
   fallbackTitle: UiCopy;
 }) {
+  const visibleBack = options.headerBackVisible === false ? undefined : back && { title: uiLabel('Back'), href: back.href };
   return <Header
     title={uiNavigationTitle(options.title, core, fallbackTitle)}
     headerStyle={options.headerStyle}
@@ -18,9 +20,11 @@ export function ConsumedInsetHeader({ navigationOptions: options, back, core, fa
     headerTitleAlign={options.headerTitleAlign}
     headerTintColor={options.headerTintColor}
     headerShadowVisible={options.headerShadowVisible}
-    headerLeft={options.headerLeft}
+    headerLeft={options.headerLeft ?? (Platform.OS === 'android' && visibleBack ? props => (
+      <HeaderBackButton {...props} style={{ minWidth: 48, minHeight: 48, justifyContent: 'center', marginHorizontal: 2 }} />
+    ) : undefined)}
     headerRight={options.headerRight ?? (() => <NavigationMenuButton />)}
-    back={options.headerBackVisible === false ? undefined : back && { title: uiLabel('Back'), href: back.href }}
+    back={visibleBack}
     headerStatusBarHeight={0}
   />;
 }
