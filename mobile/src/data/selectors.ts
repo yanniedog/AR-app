@@ -14,7 +14,7 @@ import {
 } from './detailSearch';
 import { productHasAllEligibilityCriteria } from './eligibility';
 import { productHasAllFeatures } from './featuresCore';
-import { isFirstValuePending } from '../lib/firstValue';
+import { cooperativeSliceMs } from '../lib/firstValue';
 import {
   effectiveFraction,
   sortByDisplayLabel,
@@ -441,13 +441,6 @@ export function lenderProductRows(
   if (cached.size >= 8) cached.delete(cached.keys().next().value!);
   cached.set(key, result);
   return result;
-}
-
-/** CPU slice between yields. Until Rates first settles nothing is interactive,
- * and every yield costs a scheduler round trip (up to 48 ms on a loaded device),
- * so use longer slices then and keep the short slice for a live screen. */
-function cooperativeSliceMs(): number {
-  return isFirstValuePending() ? 24 : 6;
 }
 
 /** Same ranking as sortRows, with bounded preparation and merge slices. */

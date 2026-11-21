@@ -8,6 +8,7 @@ import {
 import { EMPTY_FILTERS, filterRows, filterRowsCooperatively } from '../src/data/selectors';
 import type { RateRow } from '../src/types';
 import * as suitabilityGate from '../src/data/suitabilityGate';
+import { expectFirstValue, markFirstValue, resetFirstValueForTests } from '../src/lib/firstValue';
 
 const rows: RateRow[] = Array.from({ length: 1000 }, (_, i) => ({
   provider: i % 2 ? 'Bank A' : 'Bank B',
@@ -109,4 +110,29 @@ test('empty row batches do not prepare an unused index', () => {
   const lazyIndex = Object.defineProperty({ ...index }, 'products', { get: products });
   expect(filterRows([], { ...filters, query: 'solar' }, null, lazyIndex)).toEqual([]);
   expect(products).not.toHaveBeenCalled();
+});
+
+test('filtering and the index scan yield less often until Rates first settles, with the same rows', async () => {
+  const run = async () => {
+    resetDetailSearchIndexCache();
+    let ticks = 0;
+    const yieldControl = jest.fn(async () => undefined);
+    // Every clock read costs 1 ms, so the slice length decides how often it yields.
+    const result = await filterRowsCooperatively(rows, { ...filters, query: 'solar' }, null, index, 'Mortgage', {
+      yieldControl, now: () => ticks++,
+    });
+    return { result, yields: yieldControl.mock.calls.length };
+  };
+  resetFirstValueForTests();
+  const settled = await run();
+  expectFirstValue();
+  try {
+    const launching = await run();
+    expect(launching.result).toEqual(settled.result);
+    expect(launching.yields).toBeLessThan(settled.yields);
+    markFirstValue();
+    expect((await run()).yields).toBe(settled.yields);
+  } finally {
+    resetFirstValueForTests();
+  }
 });

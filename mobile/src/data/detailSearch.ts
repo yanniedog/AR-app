@@ -2,6 +2,7 @@ import { descriptiveValue } from './descriptiveValue';
 import type { ProductDetail } from '../types';
 import { productFactsSearchText } from './productFacts';
 import { yieldToUi } from '../lib/yieldToUi';
+import { cooperativeSliceMs } from '../lib/firstValue';
 import { brandKeyForProvider, brandKeyForSearchTerm } from './bankBrand';
 
 /** True when `token` starts a word in `text` (both lower-case): "ing" matches
@@ -219,7 +220,7 @@ export async function prepareRowSearchQueryCooperatively(
     const blob = index.products[key];
     if (blob && blobMatches(blob, tokens)) hits.add(key);
     processed += 1;
-    if (processed % 32 === 0 && now() - sliceStarted >= 6) {
+    if (processed % 32 === 0 && now() - sliceStarted >= cooperativeSliceMs()) {
       await yieldControl();
       sliceStarted = now();
       if (control.cancelled?.()) return null;
