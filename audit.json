@@ -1,0 +1,34 @@
+{
+  "kind": "live",
+  "url": "https://paste.rs/fS8QD",
+  "outcome": null,
+  "elapsedMs": 1120988,
+  "visibleOutcome": [
+    "Verified · 1.0.349",
+    "Install verified update",
+    "Install",
+    "Dismiss update banner",
+    "Go back",
+    "App health audit",
+    "Account",
+    "2,859 / 2,877",
+    "Verified upload",
+    "Verified upload",
+    "Uploaded",
+    "https://paste.rs/fS8QD",
+    "https://paste.c-net.org/ce4f48df-b9fa-db64-0f0b-7388ee60635a",
+    "Copy paste.rs link",
+    "Copy paste.rs link",
+    "Copy paste.c-net.org link",
+    "Copy paste.c-net.org link",
+    "Audit history",
+    "Retained runs",
+    "1 / 120"
+  ],
+  "logStatus": 200,
+  "logContentUrl": "https://paste.c-net.org/ce4f48df-b9fa-db64-0f0b-7388ee60635a",
+  "logBytes": 865454,
+  "debugLog": {
+    "error": "Upload and copy link not found"
+  }
+}
