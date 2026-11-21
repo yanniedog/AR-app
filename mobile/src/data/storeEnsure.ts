@@ -253,6 +253,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
               coreSha: manifest.files.core.sha256,
               detailsSha: manifest.files.details.sha256,
             });
+            if (!datasetUnchanged()) return;
             bootMark('details-saved');
             workOutcome = 'completed';
             return;

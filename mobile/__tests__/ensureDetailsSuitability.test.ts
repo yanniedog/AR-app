@@ -158,13 +158,16 @@ describe('ensureDetails suitability unblock', () => {
     mockDownloadDetails.mockResolvedValue({ text: JSON.stringify(remoteDetails), details: remoteDetails });
     let finishWrite!: () => void;
     let gateOpenAtWrite: boolean | null = null;
+    let writeStarted!: () => void;
+    const started = new Promise<void>((resolve) => { writeStarted = resolve; });
     mockWriteDetails.mockImplementationOnce(() => new Promise<void>((resolve) => {
       gateOpenAtWrite = isSuitabilityFilterReady(false);
       finishWrite = resolve;
+      writeStarted();
     }));
 
     const load = store.getState().ensureDetails({ force: true });
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await started;
     expect(gateOpenAtWrite).toBe(true);
     expect(mockUpdateMeta).not.toHaveBeenCalled();
     finishWrite();
