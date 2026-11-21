@@ -25,14 +25,14 @@ function botResults(comments, botLogin) {
 }
 
 /** Newest app version among this bot's explorer comments, or null. Other authors never count. */
-export function newestVersion(comments, botLogin = BOT) {
-  return botResults(comments, botLogin).reduce((best, c) => (!best || compareVersions(c.version, best) > 0 ? c.version : best), null);
+export function newestVersion(comments, botLogin = BOT, floor = null) {
+  return botResults(comments, botLogin).reduce((best, c) => (!best || compareVersions(c.version, best) > 0 ? c.version : best), floor);
 }
 
 /** Bot comments for releases older than the newest release posted, not already hidden.
  * A collapsed comment starts with the marker, so it has no title and is never selected again. */
-export function outdatedComments(comments, botLogin = BOT) {
-  const newest = newestVersion(comments, botLogin);
+export function outdatedComments(comments, botLogin = BOT, floor = null) {
+  const newest = newestVersion(comments, botLogin, floor);
   if (!newest) return [];
   return botResults(comments, botLogin).filter(c => compareVersions(c.version, newest) < 0 && !c.isMinimized);
 }
@@ -65,10 +65,12 @@ function minimize(id) {
   if (out.errors?.length || out.data?.minimizeComment?.minimizedComment?.isMinimized !== true) throw new Error('minimizeComment did not minimize');
 }
 
-function main(repo, issue) {
+function main(repo, issue, currentTitle = '') {
   const nodes = listComments(repo, issue);
-  const stale = outdatedComments(nodes);
-  const newest = newestVersion(nodes) ?? [0, 0, 0];
+  // The comment just posted may not be in the listing yet; its release still counts as the newest.
+  const current = versionOf(currentTitle);
+  const stale = outdatedComments(nodes, BOT, current);
+  const newest = newestVersion(nodes, BOT, current) ?? [0, 0, 0];
   let hidden = 0;
   let collapsed = 0;
   for (const c of stale) {
@@ -88,6 +90,6 @@ function main(repo, issue) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const [repo, issue] = process.argv.slice(2);
-  try { main(repo, issue); } catch (err) { console.error(`hide-outdated skipped: ${String(err.message).split('\n')[0]}`); }
+  const [repo, issue, currentTitle] = process.argv.slice(2);
+  try { main(repo, issue, currentTitle); } catch (err) { console.error(`hide-outdated skipped: ${String(err.message).split('\n')[0]}`); }
 }
