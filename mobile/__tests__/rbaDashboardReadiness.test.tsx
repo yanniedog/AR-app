@@ -168,9 +168,17 @@ test('unavailable chart states offer a refresh action in the stable source-line 
   const chartSlots = new Set(placeholders.map(slotOf));
   const slotRetries = refreshActions().filter((action) => slotOf(action).props.collapsable === false);
   expect(slotRetries).toHaveLength(2);
-  for (const retry of slotRetries) {
-    expect(chartSlots.has(slotOf(retry))).toBe(false);
-    expect(slotOf(retry).children).toHaveLength(1);
+  for (const [index, retry] of slotRetries.entries()) {
+    const sourceSlot = slotOf(retry);
+    expect(chartSlots.has(sourceSlot)).toBe(false);
+    expect(sourceSlot.children).toHaveLength(1);
+    // The source-line slot is the sibling directly after its chart slot.
+    const siblings = slotOf(sourceSlot).children;
+    expect(siblings.indexOf(sourceSlot)).toBe(siblings.indexOf(slotOf(placeholders[index])) + 1);
+    const before = mockLoad.mock.calls.length;
+    await act(async () => { (retry.props.onPress as () => void)(); });
+    expect(mockLoad.mock.calls.length).toBe(before + 1);
+    expect(mockLoad.mock.calls[before][0]).toBe(true);
   }
 });
 
@@ -268,4 +276,13 @@ test('invalid expected source points cannot be certified by the chart’s no-obs
   measureChart('bonds');
   expect(probe('forecast')).toMatchObject({ status: 'pending', expectedCount: 1, actualCount: 0 });
   expect(graphics().ready).toBe(false);
+});
+
+test('a source-line slot never holds two children when forecast points are all in the past', async () => {
+  mockLoad.mockResolvedValue({ ...outlook, economists: { ...outlook.economists!, points: [{ date: '2020-01-01', value: 4.1 }] } });
+  await mount();
+  const slots = tree!.root.findAllByType('View').filter((node) => node.props.collapsable === false);
+  const holdingRefresh = slots.filter((slot) => slot.findAllByType('LedgerAction').some((action) => action.props.label === 'Refresh outlook'));
+  expect(holdingRefresh.length).toBeGreaterThan(0);
+  for (const slot of holdingRefresh) expect((slot as unknown as { children: unknown[] }).children).toHaveLength(1);
 });
