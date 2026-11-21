@@ -108,10 +108,10 @@
   "why": "terms"
  },
  {
-  "name": "third-party",
-  "open": "/third-party-notices",
+  "name": "debug-log",
+  "open": "/debug-log",
   "scroll": 0,
-  "why": "third-party notices"
+  "why": "header back button must keep a 48 dp touch target (consumed-inset header)"
  },
  {
   "name": "catalogue",
