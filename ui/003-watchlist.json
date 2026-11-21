@@ -1,0 +1,145 @@
+[
+ {
+  "label": "Saved",
+  "at": [
+   361,
+   149
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   673,
+   149
+  ]
+ },
+ {
+  "label": "No saved rates",
+  "at": [
+   360,
+   679
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   144,
+   871
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   144,
+   869
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   871
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   869
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   576,
+   871
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   576,
+   869
+  ]
+ },
+ {
+  "label": "Add my rate",
+  "flags": "tap",
+  "at": [
+   360,
+   983
+  ]
+ },
+ {
+  "label": "Add my rate",
+  "at": [
+   361,
+   984
+  ]
+ },
+ {
+  "label": "Browse rates",
+  "flags": "tap",
+  "at": [
+   360,
+   1105
+  ]
+ },
+ {
+  "label": "Browse rates",
+  "at": [
+   361,
+   1105
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap,sel",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "sel",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
