@@ -153,7 +153,7 @@ export function createBootstrapActions(
           set({ status: 'idle', error: null });
           if (!opts.skipRefresh) {
             const refreshed = await get().refresh({});
-            bootMark(get().core ? 'core-ready' : 'load-failed');
+            bootMark(get().core ? 'refresh-done' : 'load-failed');
             // false also means another refresh already owns this load; that
             // refresh settles the status itself.
             if (!refreshed && !get().refreshing && get().status !== 'ready' && get().status !== 'error') {

@@ -43,6 +43,7 @@ import {
 import { assertNoRevisionRollback, samePayloadIdentity } from './payloadRevision';
 import { bindStagedSpread, normalizeStagedOptionalAsset, type StagedOptionalAssets } from './stagedOptionalAssets';
 import { bootMark } from '../lib/bootTrace';
+import { afterFirstValue } from '../lib/firstValue';
 import { verifiedDetailsSha } from './detailsIdentity';
 import { classifyLoadFailure, failureMeansOffline } from './loadFailure';
 
@@ -181,6 +182,9 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             );
           }
           if (!background) {
+            // Optional history ledgers are not needed for the first Rates paint.
+            // Parsing them now competed with row preparation on a cold install.
+            await afterFirstValue();
             await yieldToUi();
             // Serialize optional history assets — parallel Promise.all previously
             // competed with details on the same Hermes thread after every refresh.
