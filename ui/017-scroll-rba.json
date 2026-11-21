@@ -1,0 +1,152 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "RBA",
+  "at": [
+   186,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Economists’ cash-rate forecast",
+  "at": [
+   360,
+   233
+  ]
+ },
+ {
+  "label": "Forecast unavailable",
+  "at": [
+   360,
+   309
+  ]
+ },
+ {
+  "label": "Bond-market forward rates",
+  "at": [
+   360,
+   474
+  ]
+ },
+ {
+  "label": "Bond data unavailable",
+  "at": [
+   360,
+   550
+  ]
+ },
+ {
+  "label": "Show Sources",
+  "flags": "tap",
+  "at": [
+   360,
+   751
+  ]
+ },
+ {
+  "label": "Sources",
+  "at": [
+   328,
+   751
+  ]
+ },
+ {
+  "label": "Show Cash-rate history",
+  "flags": "tap",
+  "at": [
+   360,
+   1000
+  ]
+ },
+ {
+  "label": "Cash-rate history",
+  "at": [
+   328,
+   1000
+  ]
+ },
+ {
+  "label": "See bank responses",
+  "flags": "tap",
+  "at": [
+   360,
+   1200
+  ]
+ },
+ {
+  "label": "See bank responses",
+  "at": [
+   360,
+   1200
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap,sel",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "sel",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
