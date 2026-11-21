@@ -56,7 +56,8 @@ const label = n => (n.text || n.desc || n.id || n.cls || '').replace(/\s+/g, ' '
 
 const IME = /inputmethod|latin|keyboard/i;
 const SYSTEMUI = /^com\.android\.systemui$/;
-const ERROR_TEXT = /^(no |nothing|error|failed|couldn.t|unable|something went wrong|data unavailable|offline)/i;
+// "No listed rate" is the product-availability label and screen title, not an empty state.
+const ERROR_TEXT = /^(no (?!listed rate\b)|nothing|error|failed|couldn.t|unable|something went wrong|data unavailable|offline)/i;
 const ACTION_TEXT = /\b(retry|try again|refresh|reload|clear|reset|back|add|open|browse|start|run|begin|navigate up)\b/i;
 
 export function appNodes(nodes, pkg) {
