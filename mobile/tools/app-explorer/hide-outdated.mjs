@@ -1,5 +1,5 @@
 // Archives explorer comments for APK releases older than the current published APK.
-// Usage: node hide-outdated.mjs <owner/repo> <issue number> [published APK tag]
+// Usage: node hide-outdated.mjs <owner/repo> <issue number> [published APK tag] [just-posted comment ID]
 // Needs GH_TOKEN. Minimizes with GraphQL as OUTDATED; when that is refused, collapses the
 // comment body in place with REST so the thread still shrinks.
 import { execFileSync } from 'node:child_process';
@@ -45,6 +45,10 @@ const gh = (...args) => execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 
 
 const LIST_QUERY = 'query($o:String!,$n:String!,$i:Int!,$endCursor:String){repository(owner:$o,name:$n){issue(number:$i){comments(first:100,after:$endCursor){pageInfo{hasNextPage endCursor}nodes{id databaseId isMinimized body author{login}}}}}}';
 
+function restComment(c) {
+  return { id: c.node_id, databaseId: c.id, isMinimized: false, body: c.body, author: c.user?.login };
+}
+
 function listComments(repo, issue) {
   const [owner, name] = repo.split('/');
   try {
@@ -54,7 +58,7 @@ function listComments(repo, issue) {
     console.error(`GraphQL comment list refused: ${String(err.message).split('\n')[0]}; using REST`);
     // REST does not expose the minimized state; collapsing is idempotent through the marker.
     return JSON.parse(gh('api', `repos/${repo}/issues/${issue}/comments?per_page=100`, '--paginate', '--slurp')).flat()
-      .map(c => ({ id: c.node_id, databaseId: c.id, isMinimized: false, body: c.body, author: c.user?.login }));
+      .map(restComment);
   }
 }
 
@@ -64,11 +68,11 @@ function minimize(id) {
 }
 
 function currentApkTag(repo) {
-  return gh('api', `repos/${repo}/releases?per_page=30`, '--jq',
-    '[.[] | select(.draft|not) | select(.tag_name|test("^app-v[0-9]+[.][0-9]+[.][0-9]+$")) | select(any(.assets[]; .name=="app-preview.apk"))][0].tag_name // empty').trim();
+  return gh('api', `repos/${repo}/releases?per_page=100`, '--paginate', '--jq',
+    '.[] | select(.draft|not) | select(.tag_name|test("^app-v[0-9]+[.][0-9]+[.][0-9]+$")) | select(any(.assets[]; .name=="app-preview.apk")) | .tag_name').trim().split('\n', 1)[0];
 }
 
-async function main(repo, issue, publishedTag = '') {
+async function main(repo, issue, publishedTag = '', justPostedId = '') {
   const published = releaseVersion(publishedTag);
   if (publishedTag && !published) return;
   let tag = currentApkTag(repo);
@@ -87,7 +91,12 @@ async function main(repo, issue, publishedTag = '') {
     console.log('No published APK release found');
     return;
   }
-  const stale = outdatedComments(listComments(repo, issue), current);
+  const comments = listComments(repo, issue);
+  if (justPostedId && !comments.some(c => c.databaseId === Number(justPostedId))) {
+    const posted = JSON.parse(gh('api', `repos/${repo}/issues/comments/${justPostedId}`));
+    comments.push(restComment(posted));
+  }
+  const stale = outdatedComments(comments, current);
   let hidden = 0;
   let collapsed = 0;
   for (const c of stale) {
@@ -108,6 +117,6 @@ async function main(repo, issue, publishedTag = '') {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const [repo, issue, publishedTag] = process.argv.slice(2);
-  await main(repo, issue, publishedTag);
+  const [repo, issue, publishedTag, justPostedId] = process.argv.slice(2);
+  await main(repo, issue, publishedTag, justPostedId);
 }
