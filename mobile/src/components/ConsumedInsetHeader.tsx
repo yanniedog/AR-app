@@ -21,7 +21,15 @@ export function ConsumedInsetHeader({ navigationOptions: options, back, core, fa
     headerTintColor={options.headerTintColor}
     headerShadowVisible={options.headerShadowVisible}
     headerLeft={options.headerLeft ?? (Platform.OS === 'android' && visibleBack ? props => (
-      <HeaderBackButton {...props} style={{ minWidth: 48, minHeight: 48, justifyContent: 'center', marginHorizontal: 2 }} />
+      <HeaderBackButton
+        label={uiLabel('Back')}
+        onPress={props.onPress}
+        href={props.href}
+        tintColor={props.tintColor}
+        pressColor={props.pressColor}
+        pressOpacity={props.pressOpacity}
+        style={{ minWidth: 48, minHeight: 48, justifyContent: 'center', marginHorizontal: 2 }}
+      />
     ) : undefined)}
     headerRight={options.headerRight ?? (() => <NavigationMenuButton />)}
     back={visibleBack}
