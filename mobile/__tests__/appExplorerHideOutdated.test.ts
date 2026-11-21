@@ -36,6 +36,9 @@ describe('hide outdated explorer comments', () => {
   it('counts the release of the comment just posted even when the listing has not caught up', () => {
     expect(run<number[]>(`m.outdatedComments([comment(1, 'app-v1.0.5'), comment(2, 'app-v1.0.5')], 'github-actions[bot]', [1, 0, 6]).map(c => c.databaseId)`)).toEqual([1, 2]);
     expect(run(`m.newestVersion([comment(1, 'app-v1.0.5')], 'github-actions[bot]', [1, 0, 4])`)).toEqual([1, 0, 5]);
+    expect(run(`m.newestVersion([comment(1, 'app-v1.0.5')], 'github-actions[bot]', [1, 0, 7])`)).toEqual([1, 0, 7]);
+    // Comments at or above the floor stay visible; only older ones are selected.
+    expect(run<number[]>(`m.outdatedComments([comment(1, 'app-v1.0.5'), comment(2, 'app-v1.0.6'), comment(3, 'app-v1.0.7')], 'github-actions[bot]', [1, 0, 6]).map(c => c.databaseId)`)).toEqual([1, 2]);
   });
 
   it('collapses a body into a details block that names the newer release', () => {
