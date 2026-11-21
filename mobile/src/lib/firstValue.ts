@@ -16,6 +16,11 @@ export function markFirstValue(): void {
   for (const wake of [...waiters]) wake();
 }
 
+/** True from launch until Rates first settles (or the wait is not armed: false). */
+export function isFirstValuePending(): boolean {
+  return armed && !reached;
+}
+
 export function afterFirstValue(maxWaitMs = 20_000): Promise<void> {
   if (!armed || reached) return Promise.resolve();
   return new Promise<void>((resolve) => {

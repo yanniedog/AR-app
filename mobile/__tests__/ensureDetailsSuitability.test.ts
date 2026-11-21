@@ -239,20 +239,36 @@ describe('ensureDetails suitability unblock', () => {
     expect(mockUpdateMeta).not.toHaveBeenCalled();
   });
 
-  it('saves the details cache only after the first value when launch armed the wait', async () => {
+  it('completes without waiting and saves the details cache after the first value when launch armed the wait', async () => {
     closeSuitabilityGateUntilRebuild();
     mockRemoteMeta();
     mockDownloadDetails.mockResolvedValue({ text: JSON.stringify(remoteDetails), details: remoteDetails });
     expectFirstValue();
     try {
-      const load = store.getState().ensureDetails({ force: true });
-      await new Promise((resolve) => setTimeout(resolve, 60));
+      await store.getState().ensureDetails({ force: true });
       expect(isSuitabilityFilterReady(false)).toBe(true);
+      expect(store.getState().detailsLoading).toBe(false);
       expect(mockWriteDetails).not.toHaveBeenCalled();
       markFirstValue();
-      await load;
+      await new Promise((resolve) => setTimeout(resolve, 30));
       expect(mockWriteDetails).toHaveBeenCalledTimes(1);
       expect(mockUpdateMeta).toHaveBeenCalledTimes(1);
+    } finally {
+      resetFirstValueForTests();
+    }
+  });
+
+  it('skips the deferred save when the dataset moved on before the first value', async () => {
+    closeSuitabilityGateUntilRebuild();
+    mockRemoteMeta();
+    mockDownloadDetails.mockResolvedValue({ text: JSON.stringify(remoteDetails), details: remoteDetails });
+    expectFirstValue();
+    try {
+      await store.getState().ensureDetails({ force: true });
+      store.setState({ manifest: { ...remoteManifest, files: { ...remoteManifest.files, details: { ...remoteManifest.files.details, sha256: 'newer' } } } });
+      markFirstValue();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(mockWriteDetails).not.toHaveBeenCalled();
     } finally {
       resetFirstValueForTests();
     }
