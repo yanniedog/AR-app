@@ -1,0 +1,31 @@
+{
+  "kind": "live",
+  "url": null,
+  "outcome": "app crashed",
+  "elapsedMs": 113295,
+  "visibleOutcome": [
+    "Navigate up",
+    "App health audit",
+    "Account",
+    "App health audit",
+    "Last audit",
+    "No audit history",
+    "Estimated time",
+    "09:00",
+    "Local audit",
+    "Local audit",
+    "Live audit",
+    "Live audit",
+    "Public upload",
+    "Next destination",
+    "Public hosting",
+    "Show Upload details",
+    "Upload details",
+    "Show Audit settings",
+    "Audit settings",
+    "Rates"
+  ],
+  "debugLog": {
+    "error": "Upload and copy link not found"
+  }
+}

@@ -1,0 +1,1279 @@
+
+===== 001-open-app =====
+11-21 07:09:24.341 W/australianrates(10639): Known variants: atom, sandybridge, silvermont, goldmont, goldmont-plus, tremont, kabylake, default
+11-21 07:09:24.341 W/australianrates(10639): Unexpected CPU variant for x86: x86_64.
+11-21 07:09:24.343 E/australianrates(10639): Not starting debugger since process cannot load the jdwp agent.
+11-21 07:09:25.041 W/SoLoader(10639): Initializing SoLoader: 0
+11-21 07:09:25.041 W/SoLoader(10639): Previously recorded 0 base apk paths.
+11-21 07:09:25.041 W/SoLoader(10639): Recording new base apk path: /data/app/~~klctusswpIGsXQWkCDLEtw==/com.eyex.australianrates-uiBfwrbfL59gzFx2ba7RaA==/base.apk
+11-21 07:09:25.047 W/SoLoader(10639): SoLoader initialized: 8
+11-21 07:09:25.352 W/unknown:BridgelessReact(10639): ReactHost{0}.startSurface(surfaceId = 0): Schedule
+11-21 07:09:25.353 W/unknown:BridgelessReact(10639): ReactHost{0}.attachSurface(surfaceId = 0)
+11-21 07:09:25.354 W/unknown:BridgelessReact(10639): ReactHost{0}.getJSBundleLoader()
+11-21 07:09:25.354 W/unknown:BridgelessReact(10639): ReactHost{0}.getOrCreateReactContext(): Creating BridgelessReactContext
+11-21 07:09:25.354 W/unknown:BridgelessReact(10639): ReactHost{0}.getOrCreateReactInstanceTask()
+11-21 07:09:25.354 W/unknown:BridgelessReact(10639): ReactHost{0}.getOrCreateReactInstanceTask(): Creating ReactInstance
+11-21 07:09:25.354 W/unknown:BridgelessReact(10639): ReactHost{0}.getOrCreateReactInstanceTask(): Start
+11-21 07:09:25.359 W/unknown:BridgelessReact(10639): ReactContext.onHostResume()
+11-21 07:09:25.359 W/unknown:BridgelessReact(10639): ReactHost{0}.onHostResume(activity)
+11-21 07:09:25.363 W/OpenGLRenderer(10639): Unknown dataspace 0
+11-21 07:09:25.406 W/OpenGLRenderer(10639): Failed to initialize 101010-2 format, error = EGL_SUCCESS
+11-21 07:09:25.718 W/unknown:BridgelessReact(10639): ReactHost{0}.getOrCreateReactInstanceTask(): Loading JS Bundle
+11-21 07:09:25.737 W/unknown:BridgelessReact(10639): ReactHost{0}.getOrCreateReactInstanceTask(): Calling DevSupportManagerBase.onNewReactContextCreated(reactContext)
+11-21 07:09:25.747 W/unknown:BridgelessReact(10639): ReactHost{0}.startSurface(surfaceId = 0): Execute
+11-21 07:09:25.753 W/unknown:BridgelessReact(10639): ReactContext.onHostResume()
+11-21 07:09:25.755 W/unknown:BridgelessReact(10639): ReactHost{0}.getOrCreateReactInstanceTask(): Executing ReactInstanceEventListeners
+11-21 07:09:25.814 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaProviderManager
+11-21 07:09:25.818 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.uimanager.U
+11-21 07:09:25.828 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.swmansion.rnscreens.SearchBarManager
+11-21 07:09:25.832 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.swmansion.rnscreens.ScreenFooterManager
+11-21 07:09:25.833 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.swmansion.rnscreens.ScreenContainerViewManager
+11-21 07:09:25.833 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.TabScreenViewManager
+11-21 07:09:25.843 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.TabsHostViewManager
+11-21 07:09:25.844 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.swmansion.rnscreens.ModalScreenViewManager
+11-21 07:09:25.844 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.swmansion.rnscreens.ScreenContentWrapperManager
+11-21 07:09:25.844 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderConfigViewManager
+11-21 07:09:25.845 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaViewManager
+11-21 07:09:25.845 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class expo.modules.kotlin.views.GroupViewManagerWrapper
+11-21 07:09:25.855 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.swmansion.rnscreens.ScreenViewManager
+11-21 07:09:25.855 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.th3rdwave.safeareacontext.p
+11-21 07:09:25.856 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderSubviewManager
+11-21 07:09:25.856 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.swmansion.rnscreens.ScreenStackViewManager
+11-21 07:09:25.930 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$DefsViewManager
+11-21 07:09:25.931 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.VirtualViewManager$c
+11-21 07:09:25.932 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeMergeManager
+11-21 07:09:25.948 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewManager
+11-21 07:09:25.948 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.safeareaview.c
+11-21 07:09:25.949 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LinearGradientManager
+11-21 07:09:25.975 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeGaussianBlurManager
+11-21 07:09:25.990 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.progressbar.ReactProgressBarViewManager
+11-21 07:09:25.990 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.progressbar.b
+11-21 07:09:25.991 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollViewManager
+11-21 07:09:25.993 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.text.ReactTextViewManager
+11-21 07:09:25.993 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.text.k
+11-21 07:09:26.032 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeColorMatrixManager
+11-21 07:09:26.034 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollContainerViewManager
+11-21 07:09:26.035 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ClipPathViewManager
+11-21 07:09:26.051 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$SymbolManager
+11-21 07:09:26.055 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PatternManager
+11-21 07:09:26.060 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeBlendManager
+11-21 07:09:26.061 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.view.ReactViewManager
+11-21 07:09:26.063 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.SvgViewManager
+11-21 07:09:26.074 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchManager
+11-21 07:09:26.074 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.switchview.d
+11-21 07:09:26.075 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$UseViewManager
+11-21 07:09:26.076 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$CircleViewManager
+11-21 07:09:26.083 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TSpanViewManager
+11-21 07:09:26.104 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FilterManager
+11-21 07:09:26.105 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MarkerManager
+11-21 07:09:26.106 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerButtonViewManager
+11-21 07:09:26.108 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.modal.ReactModalHostManager
+11-21 07:09:26.109 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ForeignObjectManager
+11-21 07:09:26.115 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$EllipseViewManager
+11-21 07:09:26.129 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LineViewManager
+11-21 07:09:26.130 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.text.frescosupport.FrescoBasedReactTextInlineImageViewManager
+11-21 07:09:26.130 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.text.frescosupport.a
+11-21 07:09:26.131 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeFloodManager
+11-21 07:09:26.133 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$GroupViewManager
+11-21 07:09:26.154 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextViewManager
+11-21 07:09:26.175 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ImageViewManager
+11-21 07:09:26.190 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeCompositeManager
+11-21 07:09:26.191 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.image.ReactImageManager
+11-21 07:09:26.213 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RadialGradientManager
+11-21 07:09:26.215 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MaskManager
+11-21 07:09:26.242 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.unimplementedview.ReactUnimplementedViewManager
+11-21 07:09:26.244 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RectViewManager
+11-21 07:09:26.248 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextPathViewManager
+11-21 07:09:26.266 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.scroll.ReactScrollViewManager
+11-21 07:09:26.285 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeOffsetManager
+11-21 07:09:26.287 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PathViewManager
+11-21 07:09:26.319 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.drawer.ReactDrawerLayoutManager
+11-21 07:09:26.322 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.text.ReactVirtualTextViewManager
+11-21 07:09:26.322 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.text.t
+11-21 07:09:26.323 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.swiperefresh.SwipeRefreshLayoutManager
+11-21 07:09:26.325 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.text.ReactRawTextManager
+11-21 07:09:26.325 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.text.f
+11-21 07:09:26.326 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputManager
+11-21 07:09:26.327 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.facebook.react.views.textinput.F
+11-21 07:09:26.332 W/unknown:ViewManagerPropertyUpdater(10639): Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerRootViewManager
+11-21 07:09:26.343 W/b       (10639): [WARNING] Bridgeless doesn't support CatalystInstance. Accessing an API that's not part of the new architecture is not encouraged usage.
+11-21 07:09:26.623 I/ReactNativeJS(10639): Running "main"
+11-21 07:09:26.912 W/unknown:ReactNative(10639): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:09:26.920 W/[RNScreens](10639): backTitle prop is not available on Android
+11-21 07:09:26.921 W/[RNScreens](10639): backTitleFontFamily prop is not available on Android
+11-21 07:09:26.921 W/[RNScreens](10639): backTitleVisible prop is not available on Android
+11-21 07:09:26.921 W/[RNScreens](10639): disableBackButtonMenu prop is not available on Android
+11-21 07:09:26.921 W/[RNScreens](10639): largeTitleFontFamily prop is not available on Android
+11-21 07:09:26.921 W/[RNScreens](10639): largeTitleFontWeight prop is not available on Android
+11-21 07:09:26.921 W/[RNScreens](10639): largeTitleHideShadow prop is not available on Android
+11-21 07:09:26.924 W/[RNScreens](10639): backTitle prop is not available on Android
+11-21 07:09:26.924 W/[RNScreens](10639): backTitleFontFamily prop is not available on Android
+11-21 07:09:26.924 W/[RNScreens](10639): disableBackButtonMenu prop is not available on Android
+11-21 07:09:26.925 W/[RNScreens](10639): backTitleVisible prop is not available on Android
+11-21 07:09:26.925 W/[RNScreens](10639): largeTitleFontFamily prop is not available on Android
+11-21 07:09:26.925 W/[RNScreens](10639): largeTitleFontWeight prop is not available on Android
+11-21 07:09:26.925 W/[RNScreens](10639): largeTitleHideShadow prop is not available on Android
+11-21 07:09:26.931 W/unknown:ReactNative(10639): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:09:27.010 W/ReactNativeJS(10639): `new NativeEventEmitter()` was called with a non-null argument without the required `addListener` method.
+11-21 07:09:27.010 W/ReactNativeJS(10639): `new NativeEventEmitter()` was called with a non-null argument without the required `removeListeners` method.
+11-21 07:09:27.103 W/australianrates(10639): Entry not found
+11-21 07:09:27.103 W/ziparchive(10639): Unable to open '/data/app/~~bf-1_1rolTzQAWybvLcbfg==/com.google.android.trichromelibrary_567263637-Op3ry74oAni_6gGauUAq8Q==/TrichromeLibrary.dm': No such file or directory
+11-21 07:09:27.111 W/unknown:ReactNative(10639): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:09:27.229 W/unknown:ReactNative(10639): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:09:27.230 W/unknown:ReactNative(10639): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:09:30.489 W/australianrates(10639): Cleared Reference was only reachable from finalizer (only reported once)
+11-21 07:09:30.524 W/System  (10639): A resource failed to call release. 
+11-21 07:09:35.768 W/unknown:ReactNative(10639): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:09:36.893 W/unknown:ReactNative(10639): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:09:37.035 W/System  (10639): A resource failed to call close. 
+11-21 07:09:37.036 W/System  (10639): A resource failed to call close. 
+11-21 07:09:57.878 W/System  (10639): A resource failed to call close. 
+11-21 07:09:57.882 W/System  (10639): A resource failed to call close. 
+11-21 07:09:57.883 W/System  (10639): A resource failed to call close. 
+11-21 07:09:57.884 W/System  (10639): A resource failed to call close. 
+11-21 07:09:58.372 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@68ef444
+11-21 07:09:58.421 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@9e2e92d
+11-21 07:09:58.440 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@e772e62
+11-21 07:09:58.468 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@88f1941
+11-21 07:09:58.485 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@7e5bee6
+11-21 07:09:58.585 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@8da9559
+11-21 07:09:58.721 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@a68e51e
+11-21 07:09:58.740 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@ec764eb
+11-21 07:10:01.057 W/System  (10639): A resource failed to call close. 
+11-21 07:10:01.058 W/System  (10639): A resource failed to call close. 
+11-21 07:10:01.059 W/System  (10639): A resource failed to call close. 
+===== 002-scroll-rates-1 =====
+11-21 07:10:08.064 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@68ef444
+11-21 07:10:08.066 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@68ef444
+11-21 07:10:08.135 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@e772e62
+11-21 07:10:08.138 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@e772e62
+11-21 07:10:08.354 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@88f1941
+11-21 07:10:08.430 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@30851ea
+11-21 07:10:08.438 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@7e5bee6
+11-21 07:10:08.708 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@8da9559
+11-21 07:10:08.801 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@a68e51e
+11-21 07:10:09.826 W/ReactNativeJS(10639): [AR warn] boot: launch ms js-start=434599 layout-mounted=435040 cache-read=435191 hydrated=435352 splash-hide=435352 manifest=436369 resolved=436816 core-fetched=442233 core-saved=443215 rows-prepared=443724 search-index-idle=443724 details-start=444508 pricing-ready=446265 details-fetched=454347 detail-filters-idle=463000 suitability-built=464497 core-ready=472842 rates-ready=477950
+===== 003-scroll-rates-2 =====
+11-21 07:10:18.079 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@ec764eb
+===== 004-scroll-rates-back =====
+11-21 07:10:25.895 W/System  (10639): A resource failed to call close. 
+===== 005-open-product =====
+11-21 07:10:36.101 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@7b1a5f6
+11-21 07:10:36.236 W/[RNScreens](10639): backTitle prop is not available on Android
+11-21 07:10:36.236 W/[RNScreens](10639): backTitleFontFamily prop is not available on Android
+11-21 07:10:36.236 W/[RNScreens](10639): backTitleVisible prop is not available on Android
+11-21 07:10:36.236 W/[RNScreens](10639): disableBackButtonMenu prop is not available on Android
+11-21 07:10:36.236 W/[RNScreens](10639): largeTitleFontFamily prop is not available on Android
+11-21 07:10:36.236 W/[RNScreens](10639): largeTitleFontWeight prop is not available on Android
+11-21 07:10:36.236 W/[RNScreens](10639): largeTitleHideShadow prop is not available on Android
+11-21 07:10:40.166 W/System  (10639): A resource failed to call close. 
+===== 006-scroll-product =====
+
+===== 007-back-to-rates =====
+
+===== 008-open-lenders =====
+11-21 07:11:08.581 W/System  (10639): A resource failed to call close. 
+11-21 07:11:08.582 W/System  (10639): A resource failed to call close. 
+11-21 07:11:10.439 W/WindowOnBackDispatcher(10639): OnBackInvokedCallback is not enabled for the application.
+11-21 07:11:10.439 W/WindowOnBackDispatcher(10639): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+===== 009-scroll-lenders =====
+
+===== 010-back-from-lenders =====
+11-21 07:11:28.889 W/WindowOnBackDispatcher(10639): sendCancelIfRunning: isInProgress=falsecallback=android.view.ViewRootImpl$$ExternalSyntheticLambda17@6d1a772
+===== 011-switch-to-savings =====
+11-21 07:11:39.467 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@94ad08f
+11-21 07:11:39.673 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@e008f1c
+11-21 07:11:39.754 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@d7fa725
+11-21 07:11:39.805 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@fe5a0fa
+11-21 07:11:40.120 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@72de6ab
+11-21 07:11:40.208 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@e158108
+11-21 07:11:40.256 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@145e411
+11-21 07:11:40.288 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@c2d6734
+11-21 07:11:40.322 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@afef95d
+11-21 07:11:40.537 W/System  (10639): A resource failed to call close. 
+===== 012-switch-to-home-loans =====
+11-21 07:11:49.304 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@94ad08f
+11-21 07:11:49.305 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@e008f1c
+11-21 07:11:49.306 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@d7fa725
+11-21 07:11:49.307 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@fe5a0fa
+11-21 07:11:49.308 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@72de6ab
+11-21 07:11:49.309 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@145e411
+11-21 07:11:49.309 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@c2d6734
+11-21 07:11:49.310 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@afef95d
+11-21 07:11:49.634 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@c386db9
+11-21 07:11:49.737 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@94ad08f
+11-21 07:11:49.738 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@94ad08f
+11-21 07:11:49.738 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@fe5a0fa
+11-21 07:11:49.739 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@145e411
+11-21 07:11:49.739 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@fe5a0fa
+11-21 07:11:49.740 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@145e411
+11-21 07:11:49.740 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@c2d6734
+11-21 07:11:49.741 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@afef95d
+===== 013-open-filters =====
+11-21 07:11:56.627 W/System  (10639): A resource failed to call close. 
+11-21 07:11:58.522 W/WindowOnBackDispatcher(10639): OnBackInvokedCallback is not enabled for the application.
+11-21 07:11:58.522 W/WindowOnBackDispatcher(10639): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+===== 014-close-filters =====
+11-21 07:12:08.458 W/WindowOnBackDispatcher(10639): sendCancelIfRunning: isInProgress=falsecallback=android.view.ViewRootImpl$$ExternalSyntheticLambda17@946a0cb
+===== 015-open-market =====
+11-21 07:12:17.668 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@c713aa7
+11-21 07:12:17.670 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@3f0b54
+11-21 07:12:17.672 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@7439afd
+11-21 07:12:17.688 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@4dcad94
+11-21 07:12:17.690 W/unknown:WrappingUtils(10639): Don't know how to round that drawable: com.facebook.react.views.image.g$b@8d57bc7
+===== 016-open-rba =====
+11-21 07:12:24.539 W/System  (10639): A resource failed to call close. 
+11-21 07:12:26.718 W/[RNScreens](10639): backTitle prop is not available on Android
+11-21 07:12:26.718 W/[RNScreens](10639): backTitleFontFamily prop is not available on Android
+11-21 07:12:26.718 W/[RNScreens](10639): backTitleVisible prop is not available on Android
+11-21 07:12:26.718 W/[RNScreens](10639): disableBackButtonMenu prop is not available on Android
+11-21 07:12:26.718 W/[RNScreens](10639): largeTitleFontFamily prop is not available on Android
+11-21 07:12:26.718 W/[RNScreens](10639): largeTitleHideShadow prop is not available on Android
+11-21 07:12:26.719 W/[RNScreens](10639): largeTitleFontWeight prop is not available on Android
+===== 017-scroll-rba =====
+
+===== 018-back-from-rba =====
+
+===== 019-scroll-market =====
+11-21 07:12:52.780 W/System  (10639): A resource failed to call close. 
+===== 020-open-saved =====
+
+===== 021-return-to-rates =====
+
+===== 022-cold-start =====
+11-21 07:13:20.449 W/australianrates(12870): Known variants: atom, sandybridge, silvermont, goldmont, goldmont-plus, tremont, kabylake, default
+11-21 07:13:20.449 W/australianrates(12870): Unexpected CPU variant for x86: x86_64.
+11-21 07:13:20.451 E/australianrates(12870): Not starting debugger since process cannot load the jdwp agent.
+11-21 07:13:20.883 W/SoLoader(12870): Initializing SoLoader: 0
+11-21 07:13:20.883 W/SoLoader(12870): Previously recorded 0 base apk paths.
+11-21 07:13:20.883 W/SoLoader(12870): Recording new base apk path: /data/app/~~klctusswpIGsXQWkCDLEtw==/com.eyex.australianrates-uiBfwrbfL59gzFx2ba7RaA==/base.apk
+11-21 07:13:20.894 W/SoLoader(12870): SoLoader initialized: 8
+11-21 07:13:20.987 W/unknown:BridgelessReact(12870): ReactHost{0}.attachSurface(surfaceId = 0)
+11-21 07:13:20.987 W/unknown:BridgelessReact(12870): ReactHost{0}.startSurface(surfaceId = 0): Schedule
+11-21 07:13:20.991 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:13:20.993 W/OpenGLRenderer(12870): Unknown dataspace 0
+11-21 07:13:21.007 W/unknown:BridgelessReact(12870): ReactHost{0}.getJSBundleLoader()
+11-21 07:13:21.007 W/unknown:BridgelessReact(12870): ReactHost{0}.getOrCreateReactContext(): Creating BridgelessReactContext
+11-21 07:13:21.007 W/unknown:BridgelessReact(12870): ReactHost{0}.getOrCreateReactInstanceTask()
+11-21 07:13:21.007 W/unknown:BridgelessReact(12870): ReactHost{0}.getOrCreateReactInstanceTask(): Creating ReactInstance
+11-21 07:13:21.007 W/unknown:BridgelessReact(12870): ReactHost{0}.getOrCreateReactInstanceTask(): Start
+11-21 07:13:21.022 W/OpenGLRenderer(12870): Failed to initialize 101010-2 format, error = EGL_SUCCESS
+11-21 07:13:21.108 W/unknown:BridgelessReact(12870): ReactHost{0}.getOrCreateReactInstanceTask(): Calling DevSupportManagerBase.onNewReactContextCreated(reactContext)
+11-21 07:13:21.108 W/unknown:BridgelessReact(12870): ReactHost{0}.getOrCreateReactInstanceTask(): Loading JS Bundle
+11-21 07:13:21.109 W/unknown:BridgelessReact(12870): ReactHost{0}.startSurface(surfaceId = 0): Execute
+11-21 07:13:21.117 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:13:21.117 W/unknown:BridgelessReact(12870): ReactHost{0}.getOrCreateReactInstanceTask(): Executing ReactInstanceEventListeners
+11-21 07:13:21.121 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaProviderManager
+11-21 07:13:21.122 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.uimanager.U
+11-21 07:13:21.122 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.swmansion.rnscreens.ScreenFooterManager
+11-21 07:13:21.122 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.swmansion.rnscreens.SearchBarManager
+11-21 07:13:21.123 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.swmansion.rnscreens.ModalScreenViewManager
+11-21 07:13:21.123 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.swmansion.rnscreens.ScreenContainerViewManager
+11-21 07:13:21.123 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderConfigViewManager
+11-21 07:13:21.123 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.TabScreenViewManager
+11-21 07:13:21.123 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.TabsHostViewManager
+11-21 07:13:21.124 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.swmansion.rnscreens.ScreenContentWrapperManager
+11-21 07:13:21.124 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.swmansion.rnscreens.ScreenViewManager
+11-21 07:13:21.124 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaViewManager
+11-21 07:13:21.124 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.th3rdwave.safeareacontext.p
+11-21 07:13:21.124 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class expo.modules.kotlin.views.GroupViewManagerWrapper
+11-21 07:13:21.125 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderSubviewManager
+11-21 07:13:21.125 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.swmansion.rnscreens.ScreenStackViewManager
+11-21 07:13:21.131 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$DefsViewManager
+11-21 07:13:21.131 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.VirtualViewManager$c
+11-21 07:13:21.132 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewManager
+11-21 07:13:21.132 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeMergeManager
+11-21 07:13:21.133 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.safeareaview.c
+11-21 07:13:21.133 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LinearGradientManager
+11-21 07:13:21.134 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeGaussianBlurManager
+11-21 07:13:21.135 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.progressbar.ReactProgressBarViewManager
+11-21 07:13:21.135 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.progressbar.b
+11-21 07:13:21.136 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollViewManager
+11-21 07:13:21.136 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.text.ReactTextViewManager
+11-21 07:13:21.137 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.text.k
+11-21 07:13:21.137 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeColorMatrixManager
+11-21 07:13:21.138 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollContainerViewManager
+11-21 07:13:21.139 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ClipPathViewManager
+11-21 07:13:21.140 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PatternManager
+11-21 07:13:21.140 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$SymbolManager
+11-21 07:13:21.141 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeBlendManager
+11-21 07:13:21.142 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.view.ReactViewManager
+11-21 07:13:21.143 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchManager
+11-21 07:13:21.143 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.SvgViewManager
+11-21 07:13:21.144 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.switchview.d
+11-21 07:13:21.144 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$UseViewManager
+11-21 07:13:21.145 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$CircleViewManager
+11-21 07:13:21.146 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TSpanViewManager
+11-21 07:13:21.147 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FilterManager
+11-21 07:13:21.147 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MarkerManager
+11-21 07:13:21.148 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerButtonViewManager
+11-21 07:13:21.149 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.modal.ReactModalHostManager
+11-21 07:13:21.149 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ForeignObjectManager
+11-21 07:13:21.150 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$EllipseViewManager
+11-21 07:13:21.151 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LineViewManager
+11-21 07:13:21.152 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.text.frescosupport.FrescoBasedReactTextInlineImageViewManager
+11-21 07:13:21.152 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.text.frescosupport.a
+11-21 07:13:21.153 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeFloodManager
+11-21 07:13:21.153 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$GroupViewManager
+11-21 07:13:21.154 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextViewManager
+11-21 07:13:21.155 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeCompositeManager
+11-21 07:13:21.155 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ImageViewManager
+11-21 07:13:21.156 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.image.ReactImageManager
+11-21 07:13:21.157 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MaskManager
+11-21 07:13:21.157 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RadialGradientManager
+11-21 07:13:21.158 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.unimplementedview.ReactUnimplementedViewManager
+11-21 07:13:21.159 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RectViewManager
+11-21 07:13:21.159 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextPathViewManager
+11-21 07:13:21.160 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.scroll.ReactScrollViewManager
+11-21 07:13:21.161 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeOffsetManager
+11-21 07:13:21.162 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PathViewManager
+11-21 07:13:21.163 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.drawer.ReactDrawerLayoutManager
+11-21 07:13:21.163 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.text.ReactVirtualTextViewManager
+11-21 07:13:21.163 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.text.t
+11-21 07:13:21.164 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.swiperefresh.SwipeRefreshLayoutManager
+11-21 07:13:21.165 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.text.ReactRawTextManager
+11-21 07:13:21.165 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.text.f
+11-21 07:13:21.165 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputManager
+11-21 07:13:21.166 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.facebook.react.views.textinput.F
+11-21 07:13:21.166 W/unknown:ViewManagerPropertyUpdater(12870): Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerRootViewManager
+11-21 07:13:21.169 W/b       (12870): [WARNING] Bridgeless doesn't support CatalystInstance. Accessing an API that's not part of the new architecture is not encouraged usage.
+11-21 07:13:21.260 I/ReactNativeJS(12870): Running "main"
+11-21 07:13:21.394 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:13:21.401 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:13:21.401 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:13:21.401 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:13:21.401 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:13:21.401 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:13:21.401 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:13:21.401 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:13:21.405 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:13:21.405 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:13:21.405 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:13:21.405 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:13:21.405 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:13:21.405 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:13:21.405 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:13:21.418 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:13:21.439 W/ReactNativeJS(12870): `new NativeEventEmitter()` was called with a non-null argument without the required `addListener` method.
+11-21 07:13:21.439 W/ReactNativeJS(12870): `new NativeEventEmitter()` was called with a non-null argument without the required `removeListeners` method.
+11-21 07:13:21.527 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:13:21.942 W/System  (12870): A resource failed to call close. 
+11-21 07:13:22.693 W/System  (12870): A resource failed to call close. 
+11-21 07:13:22.780 W/System  (12870): A resource failed to call close. 
+11-21 07:13:22.805 W/System  (12870): A resource failed to call close. 
+11-21 07:13:23.509 W/australianrates(12870): Entry not found
+11-21 07:13:23.509 W/ziparchive(12870): Unable to open '/data/app/~~bf-1_1rolTzQAWybvLcbfg==/com.google.android.trichromelibrary_567263637-Op3ry74oAni_6gGauUAq8Q==/TrichromeLibrary.dm': No such file or directory
+11-21 07:13:23.731 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:13:24.648 E/SurfaceSyncGroup(12870): Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#1) as ready
+11-21 07:13:24.648 E/SurfaceSyncGroup(12870): Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#0) as ready
+11-21 07:13:25.678 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:13:26.003 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@12e4b99
+11-21 07:13:26.034 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@b1f3c04
+11-21 07:13:26.068 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@96d796d
+11-21 07:13:26.089 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@c43ab08
+11-21 07:13:26.418 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@919185
+11-21 07:13:26.439 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@144c80b
+11-21 07:13:26.455 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@2beb6e8
+11-21 07:13:26.466 W/System  (12870): A resource failed to call close. 
+11-21 07:13:26.467 W/System  (12870): A resource failed to call close. 
+11-21 07:13:26.467 W/System  (12870): A resource failed to call release. 
+11-21 07:13:26.720 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:13:26.951 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@5fd1e7a
+11-21 07:13:26.969 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@86b562b
+11-21 07:13:26.987 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@a36fa88
+11-21 07:13:27.004 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@6ee4c21
+11-21 07:13:27.020 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@12ea846
+11-21 07:13:27.053 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@4472a07
+11-21 07:13:27.068 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@9853734
+11-21 07:13:27.270 W/System  (12870): A resource failed to call close. 
+11-21 07:13:27.271 W/System  (12870): A resource failed to call close. 
+11-21 07:13:27.603 W/ReactNativeJS(12870): [AR warn] boot: launch ms js-start=669333 layout-mounted=669525 hydrated=669651 cache-read=670871 core-ready=671621 rows-prepared=671756 search-index-idle=671756 detail-filters-idle=671756 splash-hide=671758 manifest=673739 resolved=674626 pricing-ready=675467 rates-ready=675728
+11-21 07:13:27.651 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@cc9e714
+11-21 07:13:30.660 W/System  (12870): A resource failed to call close. 
+11-21 07:13:31.451 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@b40cdd4
+11-21 07:13:31.467 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@f466b7d
+11-21 07:13:31.484 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@56a0a72
+11-21 07:13:31.501 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@3815ec3
+11-21 07:13:31.517 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@6c6f340
+11-21 07:13:31.537 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@4534279
+11-21 07:13:31.554 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@84a5bbe
+11-21 07:13:31.571 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@291241f
+11-21 07:13:31.918 W/ReactNativeJS(12870): [AR warn] bank-history-ready: Optional historical catalogue rejected; using fallback.
+11-21 07:13:32.154 W/ReactNativeJS(12870): [AR warn] bank-history-ready: Optional history unavailable during asset download begin; using fallback. elapsed_ms=1246
+11-21 07:13:32.292 W/System  (12870): A resource failed to call close. 
+11-21 07:13:32.293 W/System  (12870): A resource failed to call close. 
+===== 023-browse =====
+11-21 07:13:38.608 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:13:38.609 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:13:38.610 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:13:38.610 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:13:38.727 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 024-watchlist =====
+11-21 07:13:45.634 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:13:45.635 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:13:45.637 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:13:45.637 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:13:45.783 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:13:45.784 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 025-market =====
+11-21 07:13:52.636 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:13:52.636 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:13:52.638 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:13:52.638 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:13:52.772 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:13:52.883 W/System  (12870): A resource failed to call close. 
+11-21 07:13:52.884 W/System  (12870): A resource failed to call close. 
+11-21 07:13:53.781 W/System  (12870): A resource failed to call close. 
+11-21 07:13:53.784 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@c3c3d1e
+11-21 07:13:53.787 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@37959ff
+11-21 07:13:53.788 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@e5133cc
+11-21 07:13:53.804 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@3473c6b
+11-21 07:13:53.806 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@100991a
+===== 026-tools =====
+11-21 07:14:00.588 W/System  (12870): A resource failed to call close. 
+11-21 07:14:00.630 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:14:00.630 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:14:00.633 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:14:00.633 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:14:00.716 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:14:00.857 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:14:00.857 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:14:00.857 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:14:00.857 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:14:00.857 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:14:00.857 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:14:00.857 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+===== 027-trends =====
+11-21 07:14:08.078 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:14:08.078 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:14:08.080 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:14:08.080 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+===== 028-search =====
+11-21 07:14:14.948 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:14:14.948 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:14:14.949 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:14:14.949 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:14:15.201 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:14:15.202 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:14:15.202 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:14:15.202 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:14:15.202 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:14:15.202 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:14:15.202 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:14:15.390 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:14:15.390 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:14:15.390 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:14:15.390 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:14:15.390 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:14:15.391 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:14:15.391 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:14:15.420 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:14:15.421 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:14:16.186 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:14:16.186 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:14:16.186 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:14:16.186 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:14:16.186 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:14:16.186 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:14:16.186 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:14:16.253 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:14:16.718 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@ba257aa
+11-21 07:14:16.835 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@2514f9b
+11-21 07:14:17.067 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@15d6346
+11-21 07:14:17.087 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@726c907
+11-21 07:14:17.172 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@146f354
+11-21 07:14:17.318 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@79a5c98
+11-21 07:14:17.334 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@a7fecf1
+11-21 07:14:17.367 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@60f80d6
+11-21 07:14:17.469 W/australianrates(12870): Cleared Reference was only reachable from finalizer (only reported once)
+11-21 07:14:17.522 W/System  (12870): A resource failed to call close. 
+11-21 07:14:17.523 W/System  (12870): A resource failed to call close. 
+===== 029-banks =====
+11-21 07:14:24.439 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:14:24.439 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:14:24.441 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:14:24.441 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:14:24.551 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:14:24.551 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:14:24.551 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:14:24.551 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:14:24.551 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:14:24.551 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:14:24.551 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:14:24.603 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:14:25.113 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@dd8812f
+11-21 07:14:25.120 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@5e5833c
+11-21 07:14:25.171 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@8b7f85c
+11-21 07:14:25.205 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@728f765
+11-21 07:14:25.338 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@3ea6e26
+11-21 07:14:25.692 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@a4b6c09
+11-21 07:14:25.717 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@4fdee0e
+11-21 07:14:25.785 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@caedd1a
+11-21 07:14:25.862 W/System  (12870): A resource failed to call close. 
+11-21 07:14:25.863 W/System  (12870): A resource failed to call close. 
+11-21 07:14:26.153 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 030-bank-rates =====
+11-21 07:14:32.896 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:14:32.896 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:14:32.898 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:14:32.898 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:14:32.986 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:14:32.987 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:14:32.987 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:14:32.987 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:14:32.987 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:14:32.987 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:14:32.987 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:14:33.152 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:14:33.153 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 031-categories =====
+11-21 07:14:40.699 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:14:40.699 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:14:40.702 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:14:40.702 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:14:40.768 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:14:40.768 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:14:40.768 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:14:40.768 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:14:40.768 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:14:40.768 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:14:40.768 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:14:41.049 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:14:41.585 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@dc89f8c
+11-21 07:14:41.675 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@150c6d5
+11-21 07:14:42.085 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@e592415
+11-21 07:14:42.108 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@230f32a
+11-21 07:14:42.154 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@f187ab5
+11-21 07:14:42.238 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@bea262
+11-21 07:14:42.268 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@712ff3
+11-21 07:14:42.301 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@5bfa4b0
+11-21 07:14:42.397 W/System  (12870): A resource failed to call close. 
+===== 032-catalogue =====
+11-21 07:14:49.287 W/System  (12870): A resource failed to call close. 
+11-21 07:14:49.327 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:14:49.327 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:14:49.328 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:14:49.328 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:14:49.385 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:14:49.385 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:14:49.385 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:14:49.385 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:14:49.385 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:14:49.385 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:14:49.385 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:14:49.416 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:14:50.193 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@ff18068
+11-21 07:14:50.199 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@a026257
+11-21 07:14:50.207 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@ef79410
+11-21 07:14:50.212 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@27c7801
+11-21 07:14:50.220 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@ca3da3a
+11-21 07:14:50.240 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@eec204d
+11-21 07:14:50.243 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@afb2780
+11-21 07:14:53.763 W/System  (12870): A resource failed to call close. 
+===== 033-compare =====
+11-21 07:14:57.104 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:14:57.104 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:14:57.107 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:14:57.107 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:14:57.168 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:14:57.168 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:14:57.168 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:14:57.168 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:14:57.168 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:14:57.168 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:14:57.168 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:14:57.311 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:14:57.405 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@74c8af3
+===== 034-matches =====
+11-21 07:15:04.049 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:15:04.049 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:15:04.053 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:15:04.053 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:15:04.101 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:15:04.101 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:15:04.102 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:15:04.102 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:15:04.102 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:15:04.102 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:15:04.102 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:15:04.387 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 035-calculator =====
+11-21 07:15:11.512 W/System  (12870): A resource failed to call close. 
+11-21 07:15:11.545 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:15:11.545 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:15:11.548 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:15:11.548 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:15:11.652 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:15:11.652 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:15:11.652 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:15:11.652 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:15:11.652 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:15:11.652 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:15:11.652 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:15:11.748 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 036-projections =====
+11-21 07:15:18.502 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:15:18.502 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:15:18.503 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:15:18.503 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:15:18.584 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:15:18.584 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:15:18.584 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:15:18.584 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:15:18.584 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:15:18.584 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:15:18.584 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:15:18.928 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:15:18.928 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:15:18.928 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:15:18.928 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:15:18.928 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:15:18.928 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:15:18.928 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:15:18.945 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 037-profile =====
+11-21 07:15:25.795 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:15:25.795 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:15:25.799 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:15:25.799 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:15:25.867 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:15:25.867 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:15:25.867 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:15:25.867 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:15:25.867 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:15:25.867 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:15:25.867 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:15:25.881 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:15:26.529 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 038-research =====
+11-21 07:15:33.030 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:15:33.030 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:15:33.033 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:15:33.034 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:15:33.120 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:15:33.120 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:15:33.120 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:15:33.120 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:15:33.121 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:15:33.121 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:15:33.121 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:15:33.305 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 039-rba =====
+11-21 07:15:40.868 W/System  (12870): A resource failed to call close. 
+11-21 07:15:40.889 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:15:40.889 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:15:40.893 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:15:40.893 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:15:41.005 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:15:41.005 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:15:41.005 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:15:41.005 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:15:41.005 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:15:41.005 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:15:41.005 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:15:41.244 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 040-rba-response =====
+11-21 07:15:48.498 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:15:48.498 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:15:48.501 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:15:48.501 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:15:48.551 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:15:48.551 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:15:48.551 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:15:48.551 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:15:48.551 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:15:48.551 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:15:48.551 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:15:48.702 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:15:48.743 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:15:49.068 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@3d1490f
+11-21 07:15:49.086 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@4f8dd9c
+11-21 07:15:49.089 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@42413a5
+11-21 07:15:49.092 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@7f6d37a
+11-21 07:15:49.103 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@4730689
+11-21 07:15:49.104 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@7edb68e
+===== 041-settings =====
+11-21 07:15:55.785 W/System  (12870): A resource failed to call close. 
+11-21 07:15:55.809 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:15:55.809 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:15:55.812 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:15:55.812 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:15:55.921 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:15:55.921 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:15:55.921 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:15:55.921 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:15:55.921 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:15:55.921 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:15:55.921 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:15:56.387 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 042-about =====
+11-21 07:16:03.488 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:16:03.488 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:16:03.491 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:16:03.491 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:16:03.602 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:16:03.602 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:16:03.603 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:16:03.603 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:16:03.603 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:16:03.603 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:16:03.603 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:16:03.949 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 043-terms =====
+11-21 07:16:10.601 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:16:10.601 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:16:10.609 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:16:10.609 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:16:10.700 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:16:10.700 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:16:10.700 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:16:10.700 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:16:10.700 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:16:10.700 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:16:10.700 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:16:10.849 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 044-privacy =====
+11-21 07:16:17.494 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:16:17.494 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:16:17.497 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:16:17.497 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:16:17.567 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:16:17.568 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 045-third-party-notices =====
+11-21 07:16:24.196 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:16:24.196 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:16:24.201 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:16:24.201 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:16:24.268 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:16:24.268 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:16:24.268 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:16:24.268 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:16:24.268 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:16:24.268 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:16:24.268 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:16:24.303 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:16:24.304 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 046-node =====
+11-21 07:16:31.137 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:16:31.137 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:16:31.141 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:16:31.141 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:16:31.201 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:16:31.201 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:16:31.201 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:16:31.201 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:16:31.201 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:16:31.201 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:16:31.201 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:16:31.234 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:16:31.904 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@a52e5b5
+11-21 07:16:31.908 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@647244a
+11-21 07:16:31.937 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@5432f99
+11-21 07:16:31.948 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@c186f3c
+11-21 07:16:32.068 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@59f59f7
+11-21 07:16:32.070 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@e4cc064
+11-21 07:16:32.113 W/unknown:WrappingUtils(12870): Don't know how to round that drawable: com.facebook.react.views.image.g$b@decb27e
+11-21 07:16:32.759 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 047-passthrough =====
+11-21 07:16:38.841 W/System  (12870): A resource failed to call close. 
+11-21 07:16:38.858 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:16:38.859 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:16:38.862 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:16:38.862 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:16:38.934 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:16:38.934 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:16:38.934 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:16:38.935 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:16:38.935 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:16:38.935 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:16:38.935 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:16:39.249 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:16:39.255 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 048-calculation-receipt =====
+11-21 07:16:46.361 W/System  (12870): A resource failed to call close. 
+11-21 07:16:46.380 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:16:46.380 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:16:46.384 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:16:46.384 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:16:46.450 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:16:46.450 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:16:46.450 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:16:46.450 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:16:46.450 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:16:46.450 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:16:46.450 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:16:46.722 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 049-rate-receipt =====
+11-21 07:16:53.304 W/unknown:BridgelessReact(12870): ReactContext.onHostPause()
+11-21 07:16:53.304 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostPause(activity)
+11-21 07:16:53.308 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:16:53.308 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+11-21 07:16:53.368 W/[RNScreens](12870): backTitle prop is not available on Android
+11-21 07:16:53.368 W/[RNScreens](12870): backTitleFontFamily prop is not available on Android
+11-21 07:16:53.368 W/[RNScreens](12870): disableBackButtonMenu prop is not available on Android
+11-21 07:16:53.368 W/[RNScreens](12870): largeTitleFontFamily prop is not available on Android
+11-21 07:16:53.369 W/[RNScreens](12870): backTitleVisible prop is not available on Android
+11-21 07:16:53.369 W/[RNScreens](12870): largeTitleFontWeight prop is not available on Android
+11-21 07:16:53.369 W/[RNScreens](12870): largeTitleHideShadow prop is not available on Android
+11-21 07:16:53.392 W/unknown:ReactNative(12870): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 050-warm-resume =====
+11-21 07:17:00.869 W/unknown:BridgelessReact(12870): ReactContext.onHostResume()
+11-21 07:17:00.869 W/unknown:BridgelessReact(12870): ReactHost{0}.onHostResume(activity)
+===== 051-cold-relaunch =====
+11-21 07:17:08.892 W/australianrates(15908): Known variants: atom, sandybridge, silvermont, goldmont, goldmont-plus, tremont, kabylake, default
+11-21 07:17:08.892 W/australianrates(15908): Unexpected CPU variant for x86: x86_64.
+11-21 07:17:08.893 E/australianrates(15908): Not starting debugger since process cannot load the jdwp agent.
+11-21 07:17:09.022 W/SoLoader(15908): Initializing SoLoader: 0
+11-21 07:17:09.022 W/SoLoader(15908): Previously recorded 0 base apk paths.
+11-21 07:17:09.022 W/SoLoader(15908): Recording new base apk path: /data/app/~~klctusswpIGsXQWkCDLEtw==/com.eyex.australianrates-uiBfwrbfL59gzFx2ba7RaA==/base.apk
+11-21 07:17:09.025 W/SoLoader(15908): SoLoader initialized: 8
+11-21 07:17:09.063 W/unknown:BridgelessReact(15908): ReactHost{0}.attachSurface(surfaceId = 0)
+11-21 07:17:09.063 W/unknown:BridgelessReact(15908): ReactHost{0}.startSurface(surfaceId = 0): Schedule
+11-21 07:17:09.066 W/unknown:BridgelessReact(15908): ReactHost{0}.onHostResume(activity)
+11-21 07:17:09.067 W/OpenGLRenderer(15908): Unknown dataspace 0
+11-21 07:17:09.072 W/unknown:BridgelessReact(15908): ReactHost{0}.getOrCreateReactInstanceTask()
+11-21 07:17:09.073 W/unknown:BridgelessReact(15908): ReactHost{0}.getJSBundleLoader()
+11-21 07:17:09.073 W/unknown:BridgelessReact(15908): ReactHost{0}.getOrCreateReactContext(): Creating BridgelessReactContext
+11-21 07:17:09.073 W/unknown:BridgelessReact(15908): ReactHost{0}.getOrCreateReactInstanceTask(): Start
+11-21 07:17:09.075 W/unknown:BridgelessReact(15908): ReactHost{0}.getOrCreateReactInstanceTask(): Creating ReactInstance
+11-21 07:17:09.079 W/OpenGLRenderer(15908): Failed to initialize 101010-2 format, error = EGL_SUCCESS
+11-21 07:17:09.177 W/unknown:BridgelessReact(15908): ReactHost{0}.getOrCreateReactInstanceTask(): Loading JS Bundle
+11-21 07:17:09.178 W/unknown:BridgelessReact(15908): ReactHost{0}.getOrCreateReactInstanceTask(): Calling DevSupportManagerBase.onNewReactContextCreated(reactContext)
+11-21 07:17:09.178 W/unknown:BridgelessReact(15908): ReactHost{0}.startSurface(surfaceId = 0): Execute
+11-21 07:17:09.183 W/unknown:BridgelessReact(15908): ReactContext.onHostResume()
+11-21 07:17:09.184 W/unknown:BridgelessReact(15908): ReactHost{0}.getOrCreateReactInstanceTask(): Executing ReactInstanceEventListeners
+11-21 07:17:09.195 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaProviderManager
+11-21 07:17:09.196 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.uimanager.U
+11-21 07:17:09.196 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.swmansion.rnscreens.SearchBarManager
+11-21 07:17:09.198 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.swmansion.rnscreens.ScreenFooterManager
+11-21 07:17:09.198 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.TabScreenViewManager
+11-21 07:17:09.199 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.swmansion.rnscreens.ModalScreenViewManager
+11-21 07:17:09.199 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.swmansion.rnscreens.ScreenContainerViewManager
+11-21 07:17:09.199 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.TabsHostViewManager
+11-21 07:17:09.200 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.swmansion.rnscreens.ScreenContentWrapperManager
+11-21 07:17:09.200 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderConfigViewManager
+11-21 07:17:09.201 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaViewManager
+11-21 07:17:09.201 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.th3rdwave.safeareacontext.p
+11-21 07:17:09.201 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class expo.modules.kotlin.views.GroupViewManagerWrapper
+11-21 07:17:09.202 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderSubviewManager
+11-21 07:17:09.202 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.swmansion.rnscreens.ScreenStackViewManager
+11-21 07:17:09.202 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.swmansion.rnscreens.ScreenViewManager
+11-21 07:17:09.209 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$DefsViewManager
+11-21 07:17:09.209 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.VirtualViewManager$c
+11-21 07:17:09.210 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewManager
+11-21 07:17:09.210 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.safeareaview.c
+11-21 07:17:09.210 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeMergeManager
+11-21 07:17:09.211 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeGaussianBlurManager
+11-21 07:17:09.211 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LinearGradientManager
+11-21 07:17:09.212 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.progressbar.ReactProgressBarViewManager
+11-21 07:17:09.212 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.progressbar.b
+11-21 07:17:09.213 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollViewManager
+11-21 07:17:09.214 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.text.ReactTextViewManager
+11-21 07:17:09.214 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.text.k
+11-21 07:17:09.215 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollContainerViewManager
+11-21 07:17:09.215 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeColorMatrixManager
+11-21 07:17:09.216 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ClipPathViewManager
+11-21 07:17:09.217 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PatternManager
+11-21 07:17:09.217 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$SymbolManager
+11-21 07:17:09.218 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeBlendManager
+11-21 07:17:09.219 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.view.ReactViewManager
+11-21 07:17:09.219 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.SvgViewManager
+11-21 07:17:09.220 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchManager
+11-21 07:17:09.220 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.switchview.d
+11-21 07:17:09.221 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$UseViewManager
+11-21 07:17:09.222 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$CircleViewManager
+11-21 07:17:09.222 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TSpanViewManager
+11-21 07:17:09.223 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FilterManager
+11-21 07:17:09.224 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MarkerManager
+11-21 07:17:09.225 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.modal.ReactModalHostManager
+11-21 07:17:09.225 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerButtonViewManager
+11-21 07:17:09.226 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ForeignObjectManager
+11-21 07:17:09.227 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$EllipseViewManager
+11-21 07:17:09.227 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LineViewManager
+11-21 07:17:09.228 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.text.frescosupport.FrescoBasedReactTextInlineImageViewManager
+11-21 07:17:09.228 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.text.frescosupport.a
+11-21 07:17:09.229 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeFloodManager
+11-21 07:17:09.229 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$GroupViewManager
+11-21 07:17:09.230 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ImageViewManager
+11-21 07:17:09.230 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextViewManager
+11-21 07:17:09.231 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeCompositeManager
+11-21 07:17:09.232 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.image.ReactImageManager
+11-21 07:17:09.232 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RadialGradientManager
+11-21 07:17:09.233 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MaskManager
+11-21 07:17:09.234 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.unimplementedview.ReactUnimplementedViewManager
+11-21 07:17:09.235 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RectViewManager
+11-21 07:17:09.235 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextPathViewManager
+11-21 07:17:09.236 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.scroll.ReactScrollViewManager
+11-21 07:17:09.237 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeOffsetManager
+11-21 07:17:09.238 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.drawer.ReactDrawerLayoutManager
+11-21 07:17:09.238 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PathViewManager
+11-21 07:17:09.239 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.swiperefresh.SwipeRefreshLayoutManager
+11-21 07:17:09.239 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.text.ReactVirtualTextViewManager
+11-21 07:17:09.239 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.text.t
+11-21 07:17:09.240 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.text.ReactRawTextManager
+11-21 07:17:09.240 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.text.f
+11-21 07:17:09.240 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputManager
+11-21 07:17:09.241 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.facebook.react.views.textinput.F
+11-21 07:17:09.241 W/unknown:ViewManagerPropertyUpdater(15908): Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerRootViewManager
+11-21 07:17:09.244 W/b       (15908): [WARNING] Bridgeless doesn't support CatalystInstance. Accessing an API that's not part of the new architecture is not encouraged usage.
+11-21 07:17:09.322 I/ReactNativeJS(15908): Running "main"
+11-21 07:17:09.463 W/unknown:ReactNative(15908): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:17:09.468 W/[RNScreens](15908): backTitle prop is not available on Android
+11-21 07:17:09.468 W/[RNScreens](15908): backTitleFontFamily prop is not available on Android
+11-21 07:17:09.468 W/[RNScreens](15908): backTitleVisible prop is not available on Android
+11-21 07:17:09.468 W/[RNScreens](15908): disableBackButtonMenu prop is not available on Android
+11-21 07:17:09.468 W/[RNScreens](15908): largeTitleFontFamily prop is not available on Android
+11-21 07:17:09.468 W/[RNScreens](15908): largeTitleHideShadow prop is not available on Android
+11-21 07:17:09.469 W/[RNScreens](15908): largeTitleFontWeight prop is not available on Android
+11-21 07:17:09.472 W/[RNScreens](15908): backTitle prop is not available on Android
+11-21 07:17:09.472 W/[RNScreens](15908): backTitleFontFamily prop is not available on Android
+11-21 07:17:09.472 W/[RNScreens](15908): disableBackButtonMenu prop is not available on Android
+11-21 07:17:09.473 W/[RNScreens](15908): backTitleVisible prop is not available on Android
+11-21 07:17:09.473 W/[RNScreens](15908): largeTitleFontFamily prop is not available on Android
+11-21 07:17:09.473 W/[RNScreens](15908): largeTitleFontWeight prop is not available on Android
+11-21 07:17:09.473 W/[RNScreens](15908): largeTitleHideShadow prop is not available on Android
+11-21 07:17:09.486 W/unknown:ReactNative(15908): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:17:09.499 W/ReactNativeJS(15908): `new NativeEventEmitter()` was called with a non-null argument without the required `addListener` method.
+11-21 07:17:09.499 W/ReactNativeJS(15908): `new NativeEventEmitter()` was called with a non-null argument without the required `removeListeners` method.
+11-21 07:17:09.569 W/unknown:ReactNative(15908): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:17:10.061 W/System  (15908): A resource failed to call close. 
+11-21 07:17:10.815 W/System  (15908): A resource failed to call close. 
+11-21 07:17:10.913 W/System  (15908): A resource failed to call close. 
+11-21 07:17:10.914 W/System  (15908): A resource failed to call close. 
+11-21 07:17:10.935 W/System  (15908): A resource failed to call close. 
+11-21 07:17:11.607 W/australianrates(15908): Entry not found
+11-21 07:17:11.607 W/ziparchive(15908): Unable to open '/data/app/~~bf-1_1rolTzQAWybvLcbfg==/com.google.android.trichromelibrary_567263637-Op3ry74oAni_6gGauUAq8Q==/TrichromeLibrary.dm': No such file or directory
+11-21 07:17:11.807 W/unknown:ReactNative(15908): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:17:12.749 E/SurfaceSyncGroup(15908): Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(VRI[MainActivity]#1) as ready
+11-21 07:17:12.749 E/SurfaceSyncGroup(15908): Failed to receive transaction ready in 1000ms. Marking SurfaceSyncGroup(wmsSync-VRI[MainActivity]#0) as ready
+11-21 07:17:13.562 W/unknown:ReactNative(15908): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:17:14.087 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@58f0855
+11-21 07:17:14.105 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@92ea26a
+11-21 07:17:14.148 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@3742dee
+11-21 07:17:14.185 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@470d77
+11-21 07:17:14.215 W/System  (15908): A resource failed to call close. 
+11-21 07:17:14.215 W/System  (15908): A resource failed to call release. 
+11-21 07:17:14.217 W/System  (15908): A resource failed to call close. 
+11-21 07:17:14.222 W/System  (15908): A resource failed to call close. 
+11-21 07:17:14.232 W/System  (15908): A resource failed to call close. 
+11-21 07:17:14.384 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@228fa90
+11-21 07:17:14.437 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@32abf89
+11-21 07:17:14.453 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@47e70e4
+11-21 07:17:14.658 W/unknown:ReactNative(15908): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:17:14.884 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@57ed564
+11-21 07:17:14.917 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@b5d83cd
+11-21 07:17:14.924 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@287c482
+11-21 07:17:14.951 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@3a7793
+11-21 07:17:14.956 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@805e3d0
+11-21 07:17:14.975 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@8cb8fc9
+11-21 07:17:15.001 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@2f1a6ce
+11-21 07:17:15.162 W/System  (15908): A resource failed to call close. 
+11-21 07:17:15.163 W/System  (15908): A resource failed to call close. 
+11-21 07:17:15.568 W/ReactNativeJS(15908): [AR warn] boot: launch ms js-start=897404 layout-mounted=897595 hydrated=897694 cache-read=898999 core-ready=899720 rows-prepared=899846 search-index-idle=899846 detail-filters-idle=899846 splash-hide=899847 manifest=901335 resolved=902431 pricing-ready=903420 rates-ready=903692
+11-21 07:17:15.624 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@8858350
+11-21 07:17:18.587 W/System  (15908): A resource failed to call close. 
+11-21 07:17:19.234 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@9fa0c2d
+11-21 07:17:19.241 W/System  (15908): A resource failed to call close. 
+11-21 07:17:19.251 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@6fb1562
+11-21 07:17:19.267 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@53826f3
+11-21 07:17:19.284 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@7b8cfb0
+11-21 07:17:19.301 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@b183e29
+11-21 07:17:19.321 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@8f925ae
+11-21 07:17:19.336 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@e243f4f
+11-21 07:17:19.352 W/unknown:WrappingUtils(15908): Don't know how to round that drawable: com.facebook.react.views.image.g$b@6d336dc
+11-21 07:17:22.278 W/ReactNativeJS(15908): [AR warn] bank-history-ready: Optional historical catalogue rejected; using fallback.
+11-21 07:17:23.283 W/System  (15908): A resource failed to call close. 
+===== 052-about =====
+11-21 07:17:27.316 W/unknown:BridgelessReact(15908): ReactContext.onHostPause()
+11-21 07:17:27.316 W/unknown:BridgelessReact(15908): ReactHost{0}.onHostPause(activity)
+11-21 07:17:27.318 W/unknown:BridgelessReact(15908): ReactContext.onHostResume()
+11-21 07:17:27.318 W/unknown:BridgelessReact(15908): ReactHost{0}.onHostResume(activity)
+11-21 07:17:27.389 W/[RNScreens](15908): backTitle prop is not available on Android
+11-21 07:17:27.398 W/[RNScreens](15908): backTitleFontFamily prop is not available on Android
+11-21 07:17:27.398 W/[RNScreens](15908): backTitleVisible prop is not available on Android
+11-21 07:17:27.398 W/[RNScreens](15908): disableBackButtonMenu prop is not available on Android
+11-21 07:17:27.398 W/[RNScreens](15908): largeTitleFontFamily prop is not available on Android
+11-21 07:17:27.398 W/[RNScreens](15908): largeTitleFontWeight prop is not available on Android
+11-21 07:17:27.398 W/[RNScreens](15908): largeTitleHideShadow prop is not available on Android
+11-21 07:17:27.440 W/unknown:ReactNative(15908): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 053-audit-screen =====
+11-21 07:17:52.729 W/System  (15908): A resource failed to call close. 
+11-21 07:18:01.088 W/[RNScreens](15908): backTitle prop is not available on Android
+11-21 07:18:01.089 W/[RNScreens](15908): backTitleFontFamily prop is not available on Android
+11-21 07:18:01.089 W/[RNScreens](15908): backTitleVisible prop is not available on Android
+11-21 07:18:01.089 W/[RNScreens](15908): disableBackButtonMenu prop is not available on Android
+11-21 07:18:01.089 W/[RNScreens](15908): largeTitleFontFamily prop is not available on Android
+11-21 07:18:01.089 W/[RNScreens](15908): largeTitleHideShadow prop is not available on Android
+11-21 07:18:01.090 W/[RNScreens](15908): largeTitleFontWeight prop is not available on Android
+===== 054-audit-0-min =====
+11-21 07:18:08.782 W/unknown:ReactNative(15908): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:18:08.783 W/unknown:ReactNative(15908): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 055-audit-crashed =====
+11-21 07:18:23.325 E/ReactNativeJS(15908): [AR error] perf-audit: {"kind":"check","sessionId":"pa-mwq2t8g4-66caaeeca5936316","check":{"id":"manifest-network","label":"Live-source publication validation","kind":"network","status":"fail","durationMs":4924.9,"metrics":{"executionAttempted":true,"allowlistedSource":true,"validationStatus":"pass","performanceStatus":"fail","manifestValidated":true,"datesIndexValidated":true,"coreHashValidated":true,"detailsHashValidated":true,"nonTimingFailure":false,"liveStage:manifest:fetched:ms":119.5,"liveStage:dates-index:fetched:ms":221.5,"liveStage:revision:verified:ms":52.6,"liveStage:Core asset:downloaded:ms":279.8,"liveStage:Core asset:hash-verified:ms":12.3,"liveStage:Core asset:native-inflated-and-text-decoded:ms":153.9,"liveStage:Core asset:inflated:ms":0,"liveStage:Core asset:text-decoded:ms":0,"liveStage:Core asset:decoded:ms":216.5,"liveStage:core:history-sealed:ms":0.1,"liveStage:core:normalized:ms":612.6,"liveStage:Details asset:downloaded:ms":1337.8,"liveStage:Details asset:hash-verified:ms":26.6,"liveS…
+11-21 07:18:24.109 E/ReactNativeJS(15908): [AR error] perf-audit: {"kind":"check","sessionId":"pa-mwq2t8g4-66caaeeca5936316","check":{"id":"maximum-coverage-profile","label":"Maximum safe audit coverage preparation","kind":"data","status":"fail","durationMs":736.3,"metrics":{"profile":"maximum-safe-coverage-v1","maximumSafeFeaturesEnabled":true,"enabledSections":"Mortgage,Savings,TD","includeNonStandard":true,"deepSearchEnabled":true,"historyExplorerEnabled":true,"depositRankMetric":"max","mortgageRateMetric":"comparison","requiredAssets":8,"availableAssets":8,"localCacheOnly":false,"bankInsightsPreparationAttempted":true,"bankInsightsCacheOnly":false,"executionAttempted":true,"measurementAvailable":true,"nonTimingFailure":false,"eventLoopSamples":6,"eventLoopMeasurementAvailable":true,"eventLoopP95Ms":370.2,"maxEventLoopLagMs":370.2,"stallsOver100Ms":1,"frameSamples":13,"frameMeasurementAvailable":true,"frameP95Ms":385.4,"maxFrameGapMs":385.4,"framesOver50Ms":3}}}
+11-21 07:18:35.370 E/ReactNativeJS(15908): [AR error] perf-audit: {"kind":"check","sessionId":"pa-mwq2t8g4-66caaeeca5936316","check":{"id":"journey-rates-cold","label":"Rates (cold)","kind":"journey","status":"fail","durationMs":9868.5,"metrics":{"measurementMode":"route-round-trip","readinessQuietWindowMs":650,"forwardWorkMs":8995.5,"minimumJustifiedActions":2,"observedActions":2,"retries":0,"validationFailures":0,"backtracks":0,"repeatedFields":0,"scrollDetours":0,"modalInterruptions":0,"avoidableWaitMs":0,"executionAttempted":true,"actionInvoked":true,"actionCompleted":true,"searchMode":"deep","deepSearchAvailable":true,"journeyId":"rates","journeyLabel":"Rates","iteration":"cold","expectedPath":"/browse","expectedSurface":"rates.results","navigationKind":"tab","forwardMs":8995.5,"firstReadyFrameObserved":true,"firstReadyFrameMs":8748.820722999983,"backgroundSettleMs":639.8,"destinationReadinessMs":8748.8,"backgroundTasks":"Product details, Search index availability","backMs":65.4,"firstBackMs":65.4,"firstBackDestination":"/performance-audit","ori…
+11-21 07:18:38.777 E/ReactNativeJS(15908): [AR error] perf-audit: {"kind":"check","sessionId":"pa-mwq2t8g4-66caaeeca5936316","check":{"id":"journey-market-cold","label":"Market (cold)","kind":"journey","status":"fail","durationMs":2702.3,"metrics":{"measurementMode":"route-round-trip","readinessQuietWindowMs":650,"forwardWorkMs":972.5,"minimumJustifiedActions":2,"observedActions":3,"retries":0,"validationFailures":0,"backtracks":1,"repeatedFields":0,"scrollDetours":0,"modalInterruptions":0,"avoidableWaitMs":0,"executionAttempted":true,"actionInvoked":true,"actionCompleted":true,"journeyId":"market","journeyLabel":"Market","iteration":"cold","expectedPath":"/market","expectedSurface":"market.overview","navigationKind":"tab","forwardMs":972.5,"firstReadyFrameObserved":true,"firstReadyFrameMs":656.6840539999539,"backgroundSettleMs":678.8,"destinationReadinessMs":656.7,"backgroundTasks":"RBA calendar, Bank response analysis","backMs":855.3,"firstBackMs":800.2,"firstBackDestination":"/browse","originReadinessMs":0.3,"backDestination":"/performance-audit",…
+11-21 07:18:40.944 E/ReactNativeJS(15908): [AR error] perf-audit: {"kind":"check","sessionId":"pa-mwq2t8g4-66caaeeca5936316","check":{"id":"journey-bank-rates-cold","label":"Bank rates (cold)","kind":"journey","status":"fail","durationMs":1409.2,"metrics":{"measurementMode":"route-round-trip","readinessQuietWindowMs":650,"forwardWorkMs":656.3,"minimumJustifiedActions":2,"observedActions":2,"retries":0,"validationFailures":0,"backtracks":0,"repeatedFields":0,"scrollDetours":0,"modalInterruptions":0,"avoidableWaitMs":0,"executionAttempted":true,"actionInvoked":true,"actionCompleted":true,"journeyId":"bank-rates","journeyLabel":"Bank rates","iteration":"cold","expectedPath":"/bank-rates","expectedSurface":"bank-rates.dashboard","navigationKind":"stack","forwardMs":656.3,"firstReadyFrameObserved":true,"firstReadyFrameMs":546.9597899999935,"backgroundSettleMs":550.9,"destinationReadinessMs":547,"backMs":36.7,"firstBackMs":36.7,"firstBackDestination":"/performance-audit","originReadinessMs":0.3,"backDestination":"/performance-audit","backChangedPath":true,…
+11-21 07:18:43.999 E/ReactNativeJS(15908): [AR error] perf-audit: {"kind":"check","sessionId":"pa-mwq2t8g4-66caaeeca5936316","check":{"id":"journey-rates-mortgage-cold","label":"Rates: Home loans (cold)","kind":"journey","status":"fail","durationMs":2314,"metrics":{"measurementMode":"route-round-trip","readinessQuietWindowMs":650,"forwardWorkMs":1428.1,"minimumJustifiedActions":2,"observedActions":2,"retries":0,"validationFailures":0,"backtracks":0,"repeatedFields":0,"scrollDetours":0,"modalInterruptions":0,"avoidableWaitMs":0,"executionAttempted":true,"actionInvoked":true,"actionCompleted":true,"searchMode":"deep","deepSearchAvailable":true,"journeyId":"rates-mortgage","journeyLabel":"Rates: Home loans","iteration":"cold","expectedPath":"/browse","expectedSurface":"rates.results","navigationKind":"tab","forwardMs":1428.1,"firstReadyFrameObserved":true,"firstReadyFrameMs":260.85946700000204,"backgroundSettleMs":568.8,"destinationReadinessMs":260.9,"backgroundTasks":"Product details, Search index availability","backMs":92,"firstBackMs":92,"firstBackDe…
+11-21 07:18:47.397 E/ReactNativeJS(15908): [AR error] perf-audit: {"kind":"check","sessionId":"pa-mwq2t8g4-66caaeeca5936316","check":{"id":"journey-rates-savings-cold","label":"Rates: Savings accounts (cold)","kind":"journey","status":"fail","durationMs":2645.3,"metrics":{"measurementMode":"route-round-trip","readinessQuietWindowMs":650,"forwardWorkMs":1854.7,"minimumJustifiedActions":2,"observedActions":2,"retries":0,"validationFailures":0,"backtracks":0,"repeatedFields":0,"scrollDetours":0,"modalInterruptions":0,"avoidableWaitMs":0,"executionAttempted":true,"actionInvoked":true,"actionCompleted":true,"searchMode":"deep","deepSearchAvailable":true,"journeyId":"rates-savings","journeyLabel":"Rates: Savings accounts","iteration":"cold","expectedPath":"/browse","expectedSurface":"rates.results","navigationKind":"tab","forwardMs":1854.7,"firstReadyFrameObserved":true,"firstReadyFrameMs":1400.6524780000327,"backgroundSettleMs":449.8,"destinationReadinessMs":1400.7,"backgroundTasks":"Product details, Search index availability","backMs":36.8,"firstBackMs":…
+11-21 07:18:51.159 E/ReactNativeJS(15908): [AR error] perf-audit: {"kind":"check","sessionId":"pa-mwq2t8g4-66caaeeca5936316","check":{"id":"journey-rates-td-cold","label":"Rates: Term deposits (cold)","kind":"journey","status":"fail","durationMs":2990.3,"metrics":{"measurementMode":"route-round-trip","readinessQuietWindowMs":650,"forwardWorkMs":2286.8,"minimumJustifiedActions":2,"observedActions":2,"retries":0,"validationFailures":0,"backtracks":0,"repeatedFields":0,"scrollDetours":0,"modalInterruptions":0,"avoidableWaitMs":0,"executionAttempted":true,"actionInvoked":true,"actionCompleted":true,"searchMode":"deep","deepSearchAvailable":true,"journeyId":"rates-td","journeyLabel":"Rates: Term deposits","iteration":"cold","expectedPath":"/browse","expectedSurface":"rates.results","navigationKind":"tab","forwardMs":2286.8,"firstReadyFrameObserved":true,"firstReadyFrameMs":1659.152376000071,"backgroundSettleMs":433.8,"destinationReadinessMs":1659.2,"backgroundTasks":"Product details, Search index availability","backMs":34,"firstBackMs":34,"firstBackDestin…
+11-21 07:18:53.016 E/ReactNativeJS(15908): [AR error] perf-audit: {"kind":"check","sessionId":"pa-mwq2t8g4-66caaeeca5936316","check":{"id":"journey-response-cold","label":"Bank response (cold)","kind":"journey","status":"fail","durationMs":1094,"metrics":{"measurementMode":"route-round-trip","readinessQuietWindowMs":650,"forwardWorkMs":409.7,"minimumJustifiedActions":2,"observedActions":2,"retries":0,"validationFailures":0,"backtracks":0,"repeatedFields":0,"scrollDetours":0,"modalInterruptions":0,"avoidableWaitMs":0,"executionAttempted":true,"actionInvoked":true,"actionCompleted":true,"journeyId":"response","journeyLabel":"Bank response","iteration":"cold","expectedPath":"/rba-response","expectedSurface":"moves.response-chart","navigationKind":"stack","forwardMs":409.7,"firstReadyFrameObserved":true,"firstReadyFrameMs":0.3140349999302998,"backgroundSettleMs":406.4,"destinationReadinessMs":0.3,"backgroundTasks":"RBA calendar, Bank response analysis","backMs":36.6,"firstBackMs":36.6,"firstBackDestination":"/performance-audit","originReadinessMs":0.3,"b…
+11-21 07:18:55.042 W/ReactNativeJS(15908): [AR warn] perf-audit: {"kind":"check","sessionId":"pa-mwq2t8g4-66caaeeca5936316","check":{"id":"journey-outlook-cold","label":"Outlook (cold)","kind":"journey","status":"warn","durationMs":1272.6,"metrics":{"measurementMode":"route-round-trip","readinessQuietWindowMs":650,"forwardWorkMs":501.6,"minimumJustifiedActions":2,"observedActions":2,"retries":0,"validationFailures":0,"backtracks":0,"repeatedFields":0,"scrollDetours":0,"modalInterruptions":0,"avoidableWaitMs":0,"executionAttempted":true,"actionInvoked":true,"actionCompleted":true,"journeyId":"outlook","journeyLabel":"Outlook","iteration":"cold","expectedPath":"/research","expectedSurface":"outlook.dashboard","navigationKind":"stack","forwardMs":501.6,"firstReadyFrameObserved":true,"firstReadyFrameMs":235.09021000005305,"backgroundSettleMs":511.6,"destinationReadinessMs":235.1,"backgroundTasks":"RBA calendar, Bank response analysis, Bank history","backMs":35.8,"firstBackMs":35.8,"firstBackDestination":"/performance-audit","originReadinessMs":0.4,"back…
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	... 22 more
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at B3.h.doFrame(SourceFile:1)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at android.app.ActivityThread.main(ActivityThread.java:8177)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at android.os.Handler.dispatchMessage(Handler.java:99)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at android.os.Handler.handleCallback(Handler.java:958)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at android.os.Looper.loop(Looper.java:294)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at android.os.Looper.loopOnce(Looper.java:205)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:1337)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:1348)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at android.view.Choreographer$FrameDisplayEventReceiver.run(Choreographer.java:1322)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at android.view.Choreographer.doCallbacks(Choreographer.java:952)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at android.view.Choreographer.doFrame(Choreographer.java:878)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at android.view.ViewGroup.addView(ViewGroup.java:5044)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at android.view.ViewGroup.addView(ViewGroup.java:5104)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at android.view.ViewGroup.addViewInner(ViewGroup.java:5275)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:552)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:971)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at com.facebook.react.fabric.FabricUIManager$DispatchUIFrameCallback.doFrameGuarded(SourceFile:97)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at com.facebook.react.fabric.mounting.MountItemDispatcher.dispatchMountItems(SourceFile:45)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at com.facebook.react.fabric.mounting.MountItemDispatcher.executeOrEnqueue(SourceFile:56)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at com.facebook.react.fabric.mounting.MountItemDispatcher.tryDispatchMountItems(SourceFile:10)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at com.facebook.react.fabric.mounting.SurfaceMountingManager.addViewAt(SourceFile:198)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at com.facebook.react.fabric.mounting.SurfaceMountingManager.addViewAt(SourceFile:257)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at com.facebook.react.fabric.mounting.mountitems.IntBufferBatchMountItem.execute(SourceFile:468)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at com.facebook.react.modules.core.b.a(SourceFile:1)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at com.facebook.react.modules.core.b.g(SourceFile:32)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at com.facebook.react.uimanager.M.doFrame(SourceFile:1)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at com.facebook.react.views.view.ReactClippingViewManager.addView(SourceFile:1)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at com.facebook.react.views.view.ReactClippingViewManager.addView(SourceFile:6)
+11-21 07:18:56.391 E/AndroidRuntime(15908): 	at java.lang.reflect.Method.invoke(Native Method)
+11-21 07:18:56.391 E/AndroidRuntime(15908): Caused by: java.lang.IllegalStateException: The specified child already has a parent. You must call removeView() on the child's parent first.
+11-21 07:18:56.391 E/AndroidRuntime(15908): FATAL EXCEPTION: main
+11-21 07:18:56.391 E/AndroidRuntime(15908): Process: com.eyex.australianrates, PID: 15908
+11-21 07:18:56.391 E/AndroidRuntime(15908): java.lang.IllegalStateException: addViewAt: failed to insert view [14268] into parent [14276] at index 0
+===== 056-relaunch-after-audit-crash =====
+11-21 07:19:01.624 W/australianrates(16786): Known variants: atom, sandybridge, silvermont, goldmont, goldmont-plus, tremont, kabylake, default
+11-21 07:19:01.624 W/australianrates(16786): Unexpected CPU variant for x86: x86_64.
+11-21 07:19:01.627 E/australianrates(16786): Not starting debugger since process cannot load the jdwp agent.
+11-21 07:19:01.914 W/SoLoader(16786): Initializing SoLoader: 0
+11-21 07:19:01.915 W/SoLoader(16786): Previously recorded 0 base apk paths.
+11-21 07:19:01.915 W/SoLoader(16786): Recording new base apk path: /data/app/~~klctusswpIGsXQWkCDLEtw==/com.eyex.australianrates-uiBfwrbfL59gzFx2ba7RaA==/base.apk
+11-21 07:19:01.926 W/SoLoader(16786): SoLoader initialized: 8
+11-21 07:19:02.046 W/unknown:BridgelessReact(16786): ReactHost{0}.attachSurface(surfaceId = 0)
+11-21 07:19:02.046 W/unknown:BridgelessReact(16786): ReactHost{0}.startSurface(surfaceId = 0): Schedule
+11-21 07:19:02.050 W/unknown:BridgelessReact(16786): ReactHost{0}.onHostResume(activity)
+11-21 07:19:02.051 W/OpenGLRenderer(16786): Unknown dataspace 0
+11-21 07:19:02.066 W/unknown:BridgelessReact(16786): ReactHost{0}.getJSBundleLoader()
+11-21 07:19:02.066 W/unknown:BridgelessReact(16786): ReactHost{0}.getOrCreateReactInstanceTask()
+11-21 07:19:02.066 W/unknown:BridgelessReact(16786): ReactHost{0}.getOrCreateReactInstanceTask(): Start
+11-21 07:19:02.079 W/unknown:BridgelessReact(16786): ReactHost{0}.getOrCreateReactContext(): Creating BridgelessReactContext
+11-21 07:19:02.079 W/unknown:BridgelessReact(16786): ReactHost{0}.getOrCreateReactInstanceTask(): Creating ReactInstance
+11-21 07:19:02.149 W/OpenGLRenderer(16786): Failed to initialize 101010-2 format, error = EGL_SUCCESS
+11-21 07:19:02.216 W/unknown:BridgelessReact(16786): ReactHost{0}.getOrCreateReactInstanceTask(): Loading JS Bundle
+11-21 07:19:02.222 W/unknown:BridgelessReact(16786): ReactHost{0}.getOrCreateReactInstanceTask(): Calling DevSupportManagerBase.onNewReactContextCreated(reactContext)
+11-21 07:19:02.222 W/unknown:BridgelessReact(16786): ReactHost{0}.startSurface(surfaceId = 0): Execute
+11-21 07:19:02.232 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaProviderManager
+11-21 07:19:02.233 W/unknown:BridgelessReact(16786): ReactContext.onHostResume()
+11-21 07:19:02.234 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.uimanager.U
+11-21 07:19:02.235 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.swmansion.rnscreens.SearchBarManager
+11-21 07:19:02.236 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.swmansion.rnscreens.ScreenContainerViewManager
+11-21 07:19:02.236 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.swmansion.rnscreens.ScreenFooterManager
+11-21 07:19:02.236 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.TabScreenViewManager
+11-21 07:19:02.237 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.swmansion.rnscreens.ModalScreenViewManager
+11-21 07:19:02.237 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.TabsHostViewManager
+11-21 07:19:02.238 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.swmansion.rnscreens.ScreenContentWrapperManager
+11-21 07:19:02.238 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderConfigViewManager
+11-21 07:19:02.238 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class expo.modules.kotlin.views.GroupViewManagerWrapper
+11-21 07:19:02.239 W/unknown:BridgelessReact(16786): ReactHost{0}.getOrCreateReactInstanceTask(): Executing ReactInstanceEventListeners
+11-21 07:19:02.239 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaViewManager
+11-21 07:19:02.240 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderSubviewManager
+11-21 07:19:02.240 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.swmansion.rnscreens.ScreenViewManager
+11-21 07:19:02.240 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.th3rdwave.safeareacontext.p
+11-21 07:19:02.241 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.swmansion.rnscreens.ScreenStackViewManager
+11-21 07:19:02.247 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$DefsViewManager
+11-21 07:19:02.247 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.VirtualViewManager$c
+11-21 07:19:02.248 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeMergeManager
+11-21 07:19:02.249 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewManager
+11-21 07:19:02.249 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.safeareaview.c
+11-21 07:19:02.250 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LinearGradientManager
+11-21 07:19:02.251 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeGaussianBlurManager
+11-21 07:19:02.252 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.progressbar.ReactProgressBarViewManager
+11-21 07:19:02.252 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.progressbar.b
+11-21 07:19:02.253 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollViewManager
+11-21 07:19:02.253 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.text.ReactTextViewManager
+11-21 07:19:02.254 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.text.k
+11-21 07:19:02.255 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeColorMatrixManager
+11-21 07:19:02.256 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollContainerViewManager
+11-21 07:19:02.256 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ClipPathViewManager
+11-21 07:19:02.257 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$SymbolManager
+11-21 07:19:02.258 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PatternManager
+11-21 07:19:02.259 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.view.ReactViewManager
+11-21 07:19:02.259 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeBlendManager
+11-21 07:19:02.260 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.SvgViewManager
+11-21 07:19:02.261 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchManager
+11-21 07:19:02.261 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.switchview.d
+11-21 07:19:02.262 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$CircleViewManager
+11-21 07:19:02.262 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$UseViewManager
+11-21 07:19:02.263 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TSpanViewManager
+11-21 07:19:02.264 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FilterManager
+11-21 07:19:02.264 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MarkerManager
+11-21 07:19:02.265 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerButtonViewManager
+11-21 07:19:02.266 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.modal.ReactModalHostManager
+11-21 07:19:02.267 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ForeignObjectManager
+11-21 07:19:02.268 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$EllipseViewManager
+11-21 07:19:02.268 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LineViewManager
+11-21 07:19:02.269 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.text.frescosupport.FrescoBasedReactTextInlineImageViewManager
+11-21 07:19:02.269 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.text.frescosupport.a
+11-21 07:19:02.270 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeFloodManager
+11-21 07:19:02.270 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$GroupViewManager
+11-21 07:19:02.271 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextViewManager
+11-21 07:19:02.272 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeCompositeManager
+11-21 07:19:02.272 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ImageViewManager
+11-21 07:19:02.273 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.image.ReactImageManager
+11-21 07:19:02.273 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RadialGradientManager
+11-21 07:19:02.274 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MaskManager
+11-21 07:19:02.275 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.unimplementedview.ReactUnimplementedViewManager
+11-21 07:19:02.275 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RectViewManager
+11-21 07:19:02.276 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextPathViewManager
+11-21 07:19:02.277 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.scroll.ReactScrollViewManager
+11-21 07:19:02.278 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeOffsetManager
+11-21 07:19:02.278 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PathViewManager
+11-21 07:19:02.279 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.drawer.ReactDrawerLayoutManager
+11-21 07:19:02.280 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.swiperefresh.SwipeRefreshLayoutManager
+11-21 07:19:02.280 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.text.ReactVirtualTextViewManager
+11-21 07:19:02.280 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.text.t
+11-21 07:19:02.281 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.text.ReactRawTextManager
+11-21 07:19:02.281 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.text.f
+11-21 07:19:02.281 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.textinput.F
+11-21 07:19:02.281 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputManager
+11-21 07:19:02.282 W/unknown:ViewManagerPropertyUpdater(16786): Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerRootViewManager
+11-21 07:19:02.285 W/b       (16786): [WARNING] Bridgeless doesn't support CatalystInstance. Accessing an API that's not part of the new architecture is not encouraged usage.
+11-21 07:19:02.361 I/ReactNativeJS(16786): Running "main"
+11-21 07:19:02.497 W/unknown:ReactNative(16786): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:19:02.502 W/[RNScreens](16786): backTitle prop is not available on Android
+11-21 07:19:02.502 W/[RNScreens](16786): backTitleFontFamily prop is not available on Android
+11-21 07:19:02.502 W/[RNScreens](16786): disableBackButtonMenu prop is not available on Android
+11-21 07:19:02.503 W/[RNScreens](16786): backTitleVisible prop is not available on Android
+11-21 07:19:02.503 W/[RNScreens](16786): largeTitleFontFamily prop is not available on Android
+11-21 07:19:02.503 W/[RNScreens](16786): largeTitleFontWeight prop is not available on Android
+11-21 07:19:02.503 W/[RNScreens](16786): largeTitleHideShadow prop is not available on Android
+11-21 07:19:02.509 W/[RNScreens](16786): backTitle prop is not available on Android
+11-21 07:19:02.509 W/[RNScreens](16786): backTitleFontFamily prop is not available on Android
+11-21 07:19:02.509 W/[RNScreens](16786): backTitleVisible prop is not available on Android
+11-21 07:19:02.509 W/[RNScreens](16786): disableBackButtonMenu prop is not available on Android
+11-21 07:19:02.509 W/[RNScreens](16786): largeTitleFontFamily prop is not available on Android
+11-21 07:19:02.510 W/[RNScreens](16786): largeTitleFontWeight prop is not available on Android
+11-21 07:19:02.510 W/[RNScreens](16786): largeTitleHideShadow prop is not available on Android
+11-21 07:19:02.527 W/unknown:ReactNative(16786): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:19:02.539 W/ReactNativeJS(16786): `new NativeEventEmitter()` was called with a non-null argument without the required `addListener` method.
+11-21 07:19:02.539 W/ReactNativeJS(16786): `new NativeEventEmitter()` was called with a non-null argument without the required `removeListeners` method.
+11-21 07:19:03.250 W/System  (16786): A resource failed to call close. 
+11-21 07:19:03.862 W/System  (16786): A resource failed to call close. 
+11-21 07:19:03.863 W/System  (16786): A resource failed to call close. 
+11-21 07:19:03.905 W/System  (16786): A resource failed to call close. 
+11-21 07:19:04.591 W/ziparchive(16786): Unable to open '/data/app/~~bf-1_1rolTzQAWybvLcbfg==/com.google.android.trichromelibrary_567263637-Op3ry74oAni_6gGauUAq8Q==/TrichromeLibrary.dm': No such file or directory
+11-21 07:19:04.592 W/australianrates(16786): Entry not found
+11-21 07:19:04.592 W/ziparchive(16786): Unable to open '/data/app/~~bf-1_1rolTzQAWybvLcbfg==/com.google.android.trichromelibrary_567263637-Op3ry74oAni_6gGauUAq8Q==/TrichromeLibrary.dm': No such file or directory
+11-21 07:19:04.610 W/unknown:ReactNative(16786): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:19:05.523 W/System  (16786): A resource failed to call close. 
+11-21 07:19:05.796 W/unknown:ReactNative(16786): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:19:05.806 W/System  (16786): A resource failed to call close. 
+11-21 07:19:05.807 W/System  (16786): A resource failed to call close. 
+11-21 07:19:06.048 W/unknown:ReactNative(16786): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:19:06.049 W/unknown:ReactNative(16786): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:19:06.221 W/System  (16786): A resource failed to call close. 
+11-21 07:19:06.574 W/australianrates(16786): Suspending all threads took: 10.243ms
+11-21 07:19:06.628 W/System  (16786): A resource failed to call close. 
+11-21 07:19:07.538 W/unknown:WrappingUtils(16786): Don't know how to round that drawable: com.facebook.react.views.image.g$b@18253d
+11-21 07:19:07.585 W/unknown:WrappingUtils(16786): Don't know how to round that drawable: com.facebook.react.views.image.g$b@4959e73
+11-21 07:19:07.636 W/unknown:WrappingUtils(16786): Don't know how to round that drawable: com.facebook.react.views.image.g$b@a70a8e6
+11-21 07:19:07.685 W/unknown:WrappingUtils(16786): Don't know how to round that drawable: com.facebook.react.views.image.g$b@635836e
+11-21 07:19:07.854 W/System  (16786): A resource failed to call release. 
+11-21 07:19:07.885 W/unknown:WrappingUtils(16786): Don't know how to round that drawable: com.facebook.react.views.image.g$b@1b5813c
+11-21 07:19:07.900 W/unknown:WrappingUtils(16786): Don't know how to round that drawable: com.facebook.react.views.image.g$b@18c974b
+11-21 07:19:07.907 W/unknown:WrappingUtils(16786): Don't know how to round that drawable: com.facebook.react.views.image.g$b@df77528
+11-21 07:19:07.916 W/unknown:WrappingUtils(16786): Don't know how to round that drawable: com.facebook.react.views.image.g$b@58b5d27
+11-21 07:19:08.164 W/System  (16786): A resource failed to call close. 
+11-21 07:19:08.185 W/unknown:ReactNative(16786): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:19:09.575 W/ReactNativeJS(16786): [AR warn] boot: launch ms js-start=1010444 layout-mounted=1010629 cache-read=1011933 core-ready=1012706 rows-prepared=1012734 search-index-idle=1012734 detail-filters-idle=1012734 manifest=1013595 resolved=1013845 hydrated=1014173 splash-hide=1014173 pricing-ready=1017160 rates-ready=1017700
+11-21 07:19:13.066 W/System  (16786): A resource failed to call close. 
+11-21 07:19:13.968 W/unknown:WrappingUtils(16786): Don't know how to round that drawable: com.facebook.react.views.image.g$b@835e53b
+11-21 07:19:13.985 W/unknown:WrappingUtils(16786): Don't know how to round that drawable: com.facebook.react.views.image.g$b@16cc458
+11-21 07:19:14.002 W/unknown:WrappingUtils(16786): Don't know how to round that drawable: com.facebook.react.views.image.g$b@33299b1
+11-21 07:19:14.022 W/unknown:WrappingUtils(16786): Don't know how to round that drawable: com.facebook.react.views.image.g$b@7458e96
+11-21 07:19:14.040 W/unknown:WrappingUtils(16786): Don't know how to round that drawable: com.facebook.react.views.image.g$b@8139a17
+11-21 07:19:14.071 W/unknown:WrappingUtils(16786): Don't know how to round that drawable: com.facebook.react.views.image.g$b@e15ce04
+11-21 07:19:14.087 W/unknown:WrappingUtils(16786): Don't know how to round that drawable: com.facebook.react.views.image.g$b@f261fed
+11-21 07:19:14.117 W/unknown:WrappingUtils(16786): Don't know how to round that drawable: com.facebook.react.views.image.g$b@f43fe22
+11-21 07:19:14.261 W/System  (16786): A resource failed to call close. 
+===== 057-about =====
+11-21 07:19:21.024 W/unknown:BridgelessReact(16786): ReactContext.onHostPause()
+11-21 07:19:21.024 W/unknown:BridgelessReact(16786): ReactHost{0}.onHostPause(activity)
+11-21 07:19:21.025 W/unknown:BridgelessReact(16786): ReactContext.onHostResume()
+11-21 07:19:21.025 W/unknown:BridgelessReact(16786): ReactHost{0}.onHostResume(activity)
+11-21 07:19:21.123 W/[RNScreens](16786): backTitle prop is not available on Android
+11-21 07:19:21.126 W/[RNScreens](16786): backTitleFontFamily prop is not available on Android
+11-21 07:19:21.126 W/[RNScreens](16786): backTitleVisible prop is not available on Android
+11-21 07:19:21.126 W/[RNScreens](16786): disableBackButtonMenu prop is not available on Android
+11-21 07:19:21.126 W/[RNScreens](16786): largeTitleFontFamily prop is not available on Android
+11-21 07:19:21.126 W/[RNScreens](16786): largeTitleFontWeight prop is not available on Android
+11-21 07:19:21.126 W/[RNScreens](16786): largeTitleHideShadow prop is not available on Android
+11-21 07:19:21.151 W/unknown:ReactNative(16786): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 058-audit-screen =====
+11-21 07:19:54.588 W/[RNScreens](16786): backTitle prop is not available on Android
+11-21 07:19:54.588 W/[RNScreens](16786): backTitleFontFamily prop is not available on Android
+11-21 07:19:54.588 W/[RNScreens](16786): backTitleVisible prop is not available on Android
+11-21 07:19:54.588 W/[RNScreens](16786): disableBackButtonMenu prop is not available on Android
+11-21 07:19:54.588 W/[RNScreens](16786): largeTitleFontFamily prop is not available on Android
+11-21 07:19:54.588 W/[RNScreens](16786): largeTitleFontWeight prop is not available on Android
+11-21 07:19:54.588 W/[RNScreens](16786): largeTitleHideShadow prop is not available on Android
+===== 059-audit-finished =====
+
+===== 060-audit-result-1 =====
+
+===== 061-audit-result-2 =====
+
+===== 062-audit-result-3 =====
+
+===== 063-audit-result-4 =====
+
+===== 064-audit-result-5 =====
+
+===== 065-audit-result-6 =====
+
+===== 066-audit-result-7 =====
+
+===== 067-audit-result-8 =====
+
+===== 068-audit-result-9 =====
+
+===== 069-audit-result-10 =====
+
+===== 070-audit-result-11 =====
+
+===== 071-audit-result-12 =====
+
+===== 072-about-for-debug-log =====
+11-21 07:20:42.073 W/unknown:BridgelessReact(16786): ReactContext.onHostPause()
+11-21 07:20:42.073 W/unknown:BridgelessReact(16786): ReactHost{0}.onHostPause(activity)
+11-21 07:20:42.077 W/unknown:BridgelessReact(16786): ReactContext.onHostResume()
+11-21 07:20:42.077 W/unknown:BridgelessReact(16786): ReactHost{0}.onHostResume(activity)
+11-21 07:20:42.135 W/[RNScreens](16786): backTitle prop is not available on Android
+11-21 07:20:42.135 W/[RNScreens](16786): backTitleFontFamily prop is not available on Android
+11-21 07:20:42.136 W/[RNScreens](16786): backTitleVisible prop is not available on Android
+11-21 07:20:42.136 W/[RNScreens](16786): disableBackButtonMenu prop is not available on Android
+11-21 07:20:42.136 W/[RNScreens](16786): largeTitleFontFamily prop is not available on Android
+11-21 07:20:42.136 W/[RNScreens](16786): largeTitleFontWeight prop is not available on Android
+11-21 07:20:42.136 W/[RNScreens](16786): largeTitleHideShadow prop is not available on Android
+11-21 07:20:42.165 W/unknown:ReactNative(16786): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-21 07:20:42.968 W/unknown:ReactNative(16786): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 073-debug-log-screen =====
+11-21 07:21:15.252 W/[RNScreens](16786): backTitle prop is not available on Android
+11-21 07:21:15.252 W/[RNScreens](16786): backTitleFontFamily prop is not available on Android
+11-21 07:21:15.252 W/[RNScreens](16786): backTitleVisible prop is not available on Android
+11-21 07:21:15.252 W/[RNScreens](16786): disableBackButtonMenu prop is not available on Android
+11-21 07:21:15.252 W/[RNScreens](16786): largeTitleFontFamily prop is not available on Android
+11-21 07:21:15.252 W/[RNScreens](16786): largeTitleFontWeight prop is not available on Android
+11-21 07:21:15.252 W/[RNScreens](16786): largeTitleHideShadow prop is not available on Android
