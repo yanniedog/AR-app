@@ -36,12 +36,12 @@ test('route unavailable titles survive and unrelated titles fail closed', () => 
 
 test('the Android fallback back button reserves a 48 dp target and keeps navigation', () => {
   const platform = jest.replaceProperty(Platform, 'OS', 'android');
-  let tree: ReturnType<typeof TestRenderer.create> | undefined;
+  let tree: any;
   try {
     const props = { core: makeHealthyCore(), fallbackTitle: uiLabel('Product'), back: { title: 'Back', href: '/rates' } };
     act(() => { tree = TestRenderer.create(<ConsumedInsetHeader {...props} navigationOptions={{}} />); });
     const onPress = jest.fn();
-    const button = tree!.root.findByType('Header').props.headerLeft({ onPress, href: '/rates' });
+    const button = tree.root.findByType('Header').props.headerLeft({ onPress, href: '/rates' });
     expect(button.type).toBe('HeaderBackButton');
     expect(button.props.style).toMatchObject({ minWidth: 48, minHeight: 48 });
     expect(button.props.href).toBe('/rates');
