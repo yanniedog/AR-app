@@ -154,22 +154,24 @@ test('switching real multipoint charts reports readiness for each selection from
   expect(graphics().ready).toBe(true);
 });
 
-test('unavailable chart states keep one refresh action in the Outlook section and add none inside the chart slots', async () => {
+test('unavailable chart states offer a refresh action in the stable source-line slot, never in the chart slot', async () => {
   mockLoad.mockResolvedValue({ ...outlook, economists: null, bondForwards: null });
   await mount();
   const refreshActions = () => tree!.root.findAllByType('LedgerAction').filter((node) => node.props.label === 'Refresh outlook');
   expect(tree!.root.findAllByType('LedgerText').some((node) => node.props.children === 'Forecast unavailable')).toBe(true);
-  expect(refreshActions()).toHaveLength(1);
-  type Ancestor = { type: unknown; props: { collapsable?: boolean }; parent: Ancestor | null };
-  const insideChartSlot = (start: unknown) => {
-    for (let cur = (start as Ancestor).parent; cur; cur = cur.parent) {
-      if (cur.type === 'View' && cur.props.collapsable === false) return true;
-    }
-    return false;
-  };
-  const placeholder = tree!.root.findAllByType('LedgerText').find((node) => node.props.children === 'Forecast unavailable')!;
-  expect(insideChartSlot(placeholder)).toBe(true);
-  expect(refreshActions().some((node) => insideChartSlot(node))).toBe(false);
+  expect(refreshActions()).toHaveLength(3);
+  type Node = { type: unknown; props: { collapsable?: boolean }; parent: Node | null; children: unknown[] };
+  const slotOf = (node: unknown) => (node as Node).parent!;
+  const placeholders = ['Forecast unavailable', 'Bond data unavailable'].map((text) =>
+    tree!.root.findAllByType('LedgerText').find((node) => node.props.children === text)!);
+  for (const placeholder of placeholders) expect(slotOf(placeholder).children).toHaveLength(1);
+  const chartSlots = new Set(placeholders.map(slotOf));
+  const slotRetries = refreshActions().filter((action) => slotOf(action).props.collapsable === false);
+  expect(slotRetries).toHaveLength(2);
+  for (const retry of slotRetries) {
+    expect(chartSlots.has(slotOf(retry))).toBe(false);
+    expect(slotOf(retry).children).toHaveLength(1);
+  }
 });
 
 test('loading cannot certify an empty chart; an actual unavailable placeholder requires positive native layout', async () => {
