@@ -83,7 +83,9 @@ test('slices are longer until Rates first settles, with identical results', asyn
   expectFirstValue();
   try {
     const launching = await run();
-    expect(launching.result).toEqual(settled.result);
+    const expected = sortRows(rows, 'rate', 'Mortgage', 'base', 'comparison');
+    expect(settled.result).toEqual(expected);
+    expect(launching.result).toEqual(expected);
     expect(launching.yields).toBeLessThan(settled.yields);
     markFirstValue();
     expect((await run()).yields).toBe(settled.yields);

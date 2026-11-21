@@ -128,7 +128,9 @@ test('filtering and the index scan yield less often until Rates first settles, w
   expectFirstValue();
   try {
     const launching = await run();
-    expect(launching.result).toEqual(settled.result);
+    const expected = filterRows(rows, { ...filters, query: 'solar' }, null, index, 'Mortgage');
+    expect(settled.result).toEqual(expected);
+    expect(launching.result).toEqual(expected);
     expect(launching.yields).toBeLessThan(settled.yields);
     markFirstValue();
     expect((await run()).yields).toBe(settled.yields);
