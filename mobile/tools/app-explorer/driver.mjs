@@ -106,14 +106,18 @@ export function parseHierarchy(xml) {
   return nodes;
 }
 
-async function dumpUi() {
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const out = sh('uiautomator dump --compressed /sdcard/ui.xml 2>&1', { allowFail: true, timeout: 30000 }) || '';
+async function dumpUi(deadline = Infinity) {
+  for (let attempt = 0; attempt < 4 && Date.now() < deadline; attempt += 1) {
+    const timeout = Math.min(30000, Math.max(1, deadline - Date.now()));
+    const out = sh('uiautomator dump --compressed /sdcard/ui.xml 2>&1', { allowFail: true, timeout }) || '';
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
     if (/dumped to/i.test(out)) {
-      const xml = sh('cat /sdcard/ui.xml', { allowFail: true }) || '';
+      const xml = sh('cat /sdcard/ui.xml', { allowFail: true, timeout: Math.min(60000, remaining) }) || '';
       if (xml.includes('<hierarchy')) return { xml, nodes: parseHierarchy(xml) };
     }
-    await sleep(400);
+    const retryDelay = Math.min(400, deadline - Date.now());
+    if (retryDelay > 0) await sleep(retryDelay);
   }
   return { xml: '', nodes: [] };
 }
@@ -267,10 +271,9 @@ function matches(node, sel) {
   }
   if (sel.text && norm(node.text) !== norm(sel.text)) return false;
   if (sel.desc && norm(node.desc) !== norm(sel.desc)) return false;
-  if (sel.contains) {
-    const needle = norm(sel.contains);
-    if (!norm(node.text).includes(needle) && !norm(node.desc).includes(needle)) return false;
-  }
+  const contains = value => norm(node.text).includes(norm(value)) || norm(node.desc).includes(norm(value));
+  if (sel.contains && !contains(sel.contains)) return false;
+  if (sel.containsAny && !sel.containsAny.some(contains)) return false;
   if (sel.label) {
     const want = norm(sel.label);
     if (norm(node.text) !== want && norm(node.desc) !== want) return false;
@@ -815,7 +818,11 @@ class Explorer {
       this.size = screenSize();
       return this.record(label);
     }
-    if (step.shot) return this.record(step.shot);
+    if (step.shot) {
+      const rec = await this.record(step.shot);
+      await this.postconditions(step, rec);
+      return rec;
+    }
     throw new Error(`Unknown step ${JSON.stringify(step)}`);
   }
 
@@ -831,14 +838,16 @@ class Explorer {
       const missing = required.filter(sel => !findNode(appNodes, sel));
       const present = forbidden.filter(sel => findNode(appNodes, sel));
       if (!missing.length && !present.length && appNodes.length) return;
-      if (Date.now() >= deadline) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
         rec.error = appNodes.length
           ? `UI assertion failed: missing ${JSON.stringify(missing)}, still visible ${JSON.stringify(present)}`
           : 'UI assertion failed: app hierarchy unavailable';
         return;
       }
-      await sleep(300);
-      nodes = (await dumpUi()).nodes;
+      await sleep(Math.min(300, remaining));
+      if (Date.now() >= deadline) continue;
+      nodes = (await dumpUi(deadline)).nodes;
       this.current = { nodes };
     }
   }
@@ -966,6 +975,7 @@ async function main() {
   }
   const blockedJourneys = new Set();
   const journeyCoverage = {};
+  let driverErrors = 0;
   for (const step of script) {
     const coverage = step.journey
       ? (journeyCoverage[step.journey] ??= { passed: 0, failed: 0, blocked: 0 }) : null;
@@ -977,18 +987,20 @@ async function main() {
     try {
       result = await ex.run(step);
     } catch (error) {
+      driverErrors += 1;
       result = { n: ex.steps.length + 1, name: step.name || JSON.stringify(step), error: String(error.message || error), alive: Boolean(appPid()), settleMs: 0, frames: {}, log: { errors: [], warnings: 0 }, visible: [], session: step.session || undefined };
       ex.steps.push(result);
     }
     if (coverage) {
-      if (result?.error || !result?.alive || result?.anr || result?.settleTimedOut) {
+      if (result?.error || !result?.alive || result?.anr || result?.deadEnd || result?.settleTimedOut) {
         coverage.failed += 1;
         blockedJourneys.add(step.journey);
       } else coverage.passed += 1;
     }
   }
-  const report = ex.finish({ ...meta, journeyCoverage });
+  const report = ex.finish({ ...meta, journeyCoverage, driverErrors });
   const bad = report.steps.filter(s => !s.alive).length;
+  if (driverErrors) process.exitCode = 1;
   console.log(`Done: ${report.steps.length} steps, ${bad} crashes. Report at ${path.join(ex.out, 'report.md')}`);
 }
 
