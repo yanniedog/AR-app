@@ -14,6 +14,7 @@ import {
 } from './detailSearch';
 import { productHasAllEligibilityCriteria } from './eligibility';
 import { productHasAllFeatures } from './featuresCore';
+import { isFirstValuePending } from '../lib/firstValue';
 import {
   effectiveFraction,
   sortByDisplayLabel,
@@ -442,6 +443,13 @@ export function lenderProductRows(
   return result;
 }
 
+/** CPU slice between yields. Until Rates first settles nothing is interactive,
+ * and every yield costs a scheduler round trip (up to 48 ms on a loaded device),
+ * so use longer slices then and keep the short slice for a live screen. */
+function cooperativeSliceMs(): number {
+  return isFirstValuePending() ? 24 : 6;
+}
+
 /** Same ranking as sortRows, with bounded preparation and merge slices. */
 export async function sortRowsCooperatively(
   rows: RateRow[],
@@ -461,7 +469,7 @@ export async function sortRowsCooperatively(
   // section's merge performs thousands of checkpoints: stay synchronous until
   // the CPU slice actually expires, then yield to the host rather than merely
   // cycling through promise continuations.
-  const sliceExpired = () => now() - sliceStarted >= 6;
+  const sliceExpired = () => now() - sliceStarted >= cooperativeSliceMs();
   const pause = async () => {
     await yieldControl();
     sliceStarted = now();
@@ -608,7 +616,7 @@ export async function filterRowsCooperatively(
   for (let offset = 0; offset < rows.length; offset += 32) {
     const batch = visibleAccountRows(rows.slice(offset, offset + 32), filters.includeNonStandard, detailsProducts);
     for (const row of batch) if (predicate(row)) filtered.push(row);
-    if (now() - sliceStarted >= 6) {
+    if (now() - sliceStarted >= cooperativeSliceMs()) {
       await yieldControl();
       sliceStarted = now();
     }
