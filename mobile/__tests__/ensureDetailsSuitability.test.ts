@@ -9,6 +9,8 @@ import {
   rebuildAndInstallSuitabilityIndex,
 } from '../src/data/suitabilityIndex';
 import { isSuitabilityFilterReady, subscribeSuitabilityGate } from '../src/data/suitabilityGate';
+import { expectFirstValue, markFirstValue, resetFirstValueForTests } from '../src/lib/firstValue';
+import { bindVerifiedDetails } from '../src/data/detailsIdentity';
 import { backgroundPayloadWork } from '../src/lib/backgroundPayloadWork';
 
 const sampleDetails = loadSampleDetails();
@@ -236,6 +238,62 @@ describe('ensureDetails suitability unblock', () => {
     expect(store.getState().details?.run_date).toBe(remoteDetails.run_date);
     expect(isSuitabilityFilterReady(false)).toBe(false);
     expect(mockUpdateMeta).not.toHaveBeenCalled();
+  });
+
+  it('completes without waiting and saves the details cache after the first value when launch armed the wait', async () => {
+    closeSuitabilityGateUntilRebuild();
+    mockRemoteMeta();
+    mockDownloadDetails.mockResolvedValue({ text: JSON.stringify(remoteDetails), details: remoteDetails });
+    expectFirstValue();
+    try {
+      await store.getState().ensureDetails({ force: true });
+      expect(isSuitabilityFilterReady(false)).toBe(true);
+      expect(store.getState().detailsLoading).toBe(false);
+      expect(mockWriteDetails).not.toHaveBeenCalled();
+      markFirstValue();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(mockWriteDetails).toHaveBeenCalledTimes(1);
+      expect(mockUpdateMeta).toHaveBeenCalledTimes(1);
+    } finally {
+      resetFirstValueForTests();
+    }
+  });
+
+  it('reuses the verified in-memory details for a second ensure while the save is deferred', async () => {
+    closeSuitabilityGateUntilRebuild();
+    const sha = 'a'.repeat(64);
+    const manifest = { ...remoteManifest, files: { ...remoteManifest.files, details: { ...remoteManifest.files.details, sha256: sha } } };
+    store.setState({ manifest });
+    mockReadMeta.mockResolvedValue({ manifest, source: 'remote', savedAt: '2026-07-27T00:00:00Z', coreSha: manifest.files.core.sha256, detailsSha: null });
+    const verified = bindVerifiedDetails({ ...remoteDetails }, sha);
+    mockDownloadDetails.mockResolvedValue({ text: JSON.stringify(remoteDetails), details: verified });
+    expectFirstValue();
+    try {
+      await store.getState().ensureDetails({ force: true });
+      expect(mockDownloadDetails).toHaveBeenCalledTimes(1);
+      await store.getState().ensureDetails({ force: true });
+      expect(mockDownloadDetails).toHaveBeenCalledTimes(1);
+      markFirstValue();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    } finally {
+      resetFirstValueForTests();
+    }
+  });
+
+  it('skips the deferred save when the dataset moved on before the first value', async () => {
+    closeSuitabilityGateUntilRebuild();
+    mockRemoteMeta();
+    mockDownloadDetails.mockResolvedValue({ text: JSON.stringify(remoteDetails), details: remoteDetails });
+    expectFirstValue();
+    try {
+      await store.getState().ensureDetails({ force: true });
+      store.setState({ manifest: { ...remoteManifest, files: { ...remoteManifest.files, details: { ...remoteManifest.files.details, sha256: 'newer' } } } });
+      markFirstValue();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(mockWriteDetails).not.toHaveBeenCalled();
+    } finally {
+      resetFirstValueForTests();
+    }
   });
 
   it('keeps the gate closed without trusted details instead of loading bundled data', async () => {

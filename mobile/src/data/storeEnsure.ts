@@ -1,4 +1,5 @@
 import { bootMark } from '../lib/bootTrace';
+import { afterFirstValue, isFirstValuePending } from '../lib/firstValue';
 import { COMPACT_HISTORY_NORMALIZATION_VERSION, HISTORY_DERIVATION_VERSION } from './historyDerivation';
 import { cache } from './cache';
 import {
@@ -161,8 +162,11 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         try {
           const meta = await cache.readMeta();
           if (myGeneration !== detailsEnsureGeneration) return;
+          // Verified details already in memory count even while their disk receipt is still
+          // pending (a first-install save follows the first Rates paint).
+          const heldVerified = details != null && !!wantSha && verifiedDetailsSha(details) === wantSha;
           const shaOk = !wantSha || meta?.detailsSha === wantSha;
-          if (details && details.run_date === core.run_date && shaOk && (!wantSha || verifiedDetailsSha(details) === wantSha)) {
+          if (details && details.run_date === core.run_date && (shaOk || heldVerified) && (!wantSha || verifiedDetailsSha(details) === wantSha)) {
             workOutcome = 'completed';
             if (!suitabilityIndexMatches(getSuitabilityIndex(), runDate, coreSha, detailsSha)) {
               work.stage('Rebuilding suitability index from loaded details');
@@ -257,18 +261,39 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             }
             if (builtFresh) bootMark('suitability-built');
             if (!datasetUnchanged()) return;
+            const persist = async (stillCurrent: () => boolean): Promise<boolean> => {
+              await cache.writeDetails(text, manifest.payload_revision ? manifest.files.details.sha256 : undefined, manifest.files.details.sha256);
+              if (!stillCurrent()) return false;
+              await cache.updateMeta({
+                // Optional manifest entries may have been refreshed since this ensure began.
+                manifest: get().manifest ?? manifest,
+                source: 'remote',
+                savedAt: new Date().toISOString(),
+                coreSha: manifest.files.core.sha256,
+                detailsSha: manifest.files.details.sha256,
+              });
+              if (!stillCurrent()) return false;
+              bootMark('details-saved');
+              return true;
+            };
+            if (isFirstValuePending()) {
+              // Hashing and writing the multi-megabyte cache starves the first Rates paint, so it
+              // follows it. The ensure completes now: callers and loading flags must not wait on it.
+              const sameDataset = () => {
+                const cur = get();
+                return cur.core?.run_date === core.run_date &&
+                  cur.manifest?.files.core.sha256 === manifest.files.core.sha256 &&
+                  cur.manifest?.files.details.sha256 === manifest.files.details.sha256;
+              };
+              void (async () => {
+                await afterFirstValue();
+                if (sameDataset()) await persist(sameDataset);
+              })().catch((err) => debugLog.warn('store', `details cache save failed: ${String((err as Error)?.message ?? err)}`));
+              workOutcome = 'completed';
+              return;
+            }
             work.stage('Saving verified product details');
-            await cache.writeDetails(text, manifest.payload_revision ? manifest.files.details.sha256 : undefined, manifest.files.details.sha256);
-            if (!datasetUnchanged()) return;
-            await cache.updateMeta({
-              manifest,
-              source: 'remote',
-              savedAt: new Date().toISOString(),
-              coreSha: manifest.files.core.sha256,
-              detailsSha: manifest.files.details.sha256,
-            });
-            if (!datasetUnchanged()) return;
-            bootMark('details-saved');
+            if (!(await persist(datasetUnchanged))) return;
             workOutcome = 'completed';
             return;
           }
