@@ -166,13 +166,14 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             workOutcome = 'completed';
             if (!suitabilityIndexMatches(getSuitabilityIndex(), runDate, coreSha, detailsSha)) {
               work.stage('Rebuilding suitability index from loaded details');
-              await rebuildAndInstallSuitabilityIndex(
+              const builtLoaded = await rebuildAndInstallSuitabilityIndex(
                 core,
                 details,
                 detailsSha,
                 () => datasetStillCurrent(runDate, coreSha, detailsSha, details.run_date),
                 coreSha,
               );
+              if (builtLoaded) bootMark('suitability-built');
             }
             return;
           }
@@ -195,19 +196,20 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             stage: stage => work.stage(({ read: 'Details cache read', parse: 'Details JSON parse', verify: 'Details integrity check' } as const)[stage]),
             checkpoint: work.checkpoint,
           }) : null;
+          if (cached) bootMark('details-cache-read');
           if (cached && cached.run_date === core.run_date && (!wantSha || verifiedDetailsSha(cached) === wantSha)) {
             if (datasetUnchanged()) {
               workOutcome = 'completed';
               set({ details: cached });
               work.stage('Rebuilding suitability index from cached details');
-              await rebuildAndInstallSuitabilityIndex(
+              const builtCached = await rebuildAndInstallSuitabilityIndex(
                 core,
                 cached,
                 detailsSha,
                 () => datasetStillCurrent(runDate, coreSha, detailsSha, cached.run_date),
                 coreSha,
               );
-              bootMark('suitability-built');
+              if (builtCached) bootMark('suitability-built');
             }
             return;
           }
@@ -236,7 +238,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             set({ details: fresh });
             workOutcome = 'completed';
             work.stage('Rebuilding suitability index from downloaded details');
-            await rebuildAndInstallSuitabilityIndex(
+            const builtFresh = await rebuildAndInstallSuitabilityIndex(
               core,
               fresh,
               manifest.files.details.sha256,
@@ -249,7 +251,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
                 ),
               coreSha,
             );
-            bootMark('suitability-built');
+            if (builtFresh) bootMark('suitability-built');
             return;
           }
         } catch (err) {
