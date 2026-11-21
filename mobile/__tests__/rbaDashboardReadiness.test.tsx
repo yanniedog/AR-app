@@ -278,11 +278,12 @@ test('invalid expected source points cannot be certified by the chart’s no-obs
   expect(graphics().ready).toBe(false);
 });
 
-test('a source-line slot never holds two children when forecast points are all in the past', async () => {
+test('source facts stay visible when forecast points are all in the past, in a one-child slot', async () => {
   mockLoad.mockResolvedValue({ ...outlook, economists: { ...outlook.economists!, points: [{ date: '2020-01-01', value: 4.1 }] } });
   await mount();
   const slots = tree!.root.findAllByType('View').filter((node) => node.props.collapsable === false);
-  const holdingRefresh = slots.filter((slot) => slot.findAllByType('LedgerAction').some((action) => action.props.label === 'Refresh outlook'));
-  expect(holdingRefresh.length).toBeGreaterThan(0);
-  for (const slot of holdingRefresh) expect((slot as unknown as { children: unknown[] }).children).toHaveLength(1);
+  const survey = slots.find((slot) => slot.findAllByType('LedgerText').some((text) => String(text.props.children).includes('RBA J1')));
+  expect(survey).toBeDefined();
+  expect((survey as unknown as { children: unknown[] }).children).toHaveLength(1);
+  expect(survey!.findAllByType('LedgerAction')).toHaveLength(0);
 });
