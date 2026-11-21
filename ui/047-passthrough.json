@@ -1,0 +1,321 @@
+[
+ {
+  "label": "Verified · 1.0.340",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   360,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   672,
+   331
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   894
+  ]
+ },
+ {
+  "label": "Cash rate",
+  "at": [
+   182,
+   463
+  ]
+ },
+ {
+  "label": "4.85%",
+  "at": [
+   182,
+   515
+  ]
+ },
+ {
+  "label": "Next decision",
+  "at": [
+   526,
+   515
+  ]
+ },
+ {
+  "label": "4 Nov 2026",
+  "at": [
+   182,
+   567
+  ]
+ },
+ {
+  "label": "8 Dec 2026",
+  "at": [
+   526,
+   563
+  ]
+ },
+ {
+  "label": "Bank response",
+  "flags": "tap",
+  "at": [
+   192,
+   669
+  ]
+ },
+ {
+  "label": "Bank response",
+  "at": [
+   192,
+   669
+  ]
+ },
+ {
+  "label": "Bank rates",
+  "flags": "tap",
+  "at": [
+   528,
+   669
+  ]
+ },
+ {
+  "label": "Bank rates",
+  "at": [
+   529,
+   669
+  ]
+ },
+ {
+  "label": "RBA",
+  "flags": "tap",
+  "at": [
+   192,
+   784
+  ]
+ },
+ {
+  "label": "RBA",
+  "at": [
+   193,
+   784
+  ]
+ },
+ {
+  "label": "Trends",
+  "flags": "tap",
+  "at": [
+   528,
+   784
+  ]
+ },
+ {
+  "label": "Trends",
+  "at": [
+   529,
+   784
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   929
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   927
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   929
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   927
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   929
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   927
+  ]
+ },
+ {
+  "label": "Recent movements",
+  "at": [
+   260,
+   1053
+  ]
+ },
+ {
+  "label": "21 Nov 2026",
+  "at": [
+   608,
+   1045
+  ]
+ },
+ {
+  "label": "Last 7 days · 13 banks · ↑ 13 · ↓ 0",
+  "id": "market-pulse",
+  "at": [
+   360,
+   1125
+  ]
+ },
+ {
+  "label": "ME Bank - ME Go · Increase · Home loans · Average +5.0 bps · 2/2 products · 21 Nov 2026 · Median 7.32% → 7.29%",
+  "flags": "tap",
+  "at": [
+   360,
+   1273
+  ]
+ },
+ {
+  "label": "ME Bank - ME Go",
+  "at": [
+   322,
+   1209
+  ]
+ },
+ {
+  "label": "ME Bank - ME Go",
+  "at": [
+   66,
+   1273
+  ]
+ },
+ {
+  "label": "Increase · Home loans · 2/2 products · 21 Nov 2026",
+  "at": [
+   322,
+   1273
+  ]
+ },
+ {
+  "label": "+5.0 bps",
+  "at": [
+   634,
+   1251
+  ]
+ },
+ {
+  "label": "Average",
+  "at": [
+   638,
+   1295
+  ]
+ },
+ {
+  "label": "Median 7.32% → 7.29%",
+  "at": [
+   322,
+   1337
+  ]
+ },
+ {
+  "label": "Macquarie Bank Limited · Increase · Home loans · Average +20.0 bps · 2/2 products · 20 Nov 2026 · Median 6.84% → 6.84%",
+  "flags": "tap",
+  "at": [
+   360,
+   1385
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap,sel",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "sel",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
