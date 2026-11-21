@@ -1,6 +1,7 @@
 import { EMPTY_FILTERS, filterRows, prepareSearchRows, sortRows, sortRowsCooperatively, type SortKey } from '../src/data/selectors';
 import type { RateRow, SectionKey } from '../src/types';
 import sample from '../assets/sample/core.json';
+import { expectFirstValue, markFirstValue, resetFirstValueForTests } from '../src/lib/firstValue';
 
 const control = () => {
   let tick = 0;
@@ -66,4 +67,29 @@ test('indexed filtering prepares one matching set and keeps corrected index iden
   expect(result?.length).toBeGreaterThan(0);
   expect(await prepareSearchRows(rows, filters, 'bank', 'TD', null, { ...index, products: {} }, 'max', 'comparison', scheduler))
     .toEqual([]);
+});
+
+test('slices are longer until Rates first settles, with identical results', async () => {
+  const rows = sample.sections.Mortgage.rates as RateRow[];
+  const run = async () => {
+    let tick = 0;
+    const yieldControl = jest.fn(async () => undefined);
+    // Every clock read costs 1 ms, so the slice length decides how often it yields.
+    const result = await sortRowsCooperatively(rows, 'rate', 'Mortgage', 'base', 'comparison', { now: () => tick++, yieldControl });
+    return { result, yields: yieldControl.mock.calls.length };
+  };
+  resetFirstValueForTests();
+  const settled = await run();
+  expectFirstValue();
+  try {
+    const launching = await run();
+    const expected = sortRows(rows, 'rate', 'Mortgage', 'base', 'comparison');
+    expect(settled.result).toEqual(expected);
+    expect(launching.result).toEqual(expected);
+    expect(launching.yields).toBeLessThan(settled.yields);
+    markFirstValue();
+    expect((await run()).yields).toBe(settled.yields);
+  } finally {
+    resetFirstValueForTests();
+  }
 });

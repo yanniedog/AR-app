@@ -14,6 +14,7 @@ import {
 } from './detailSearch';
 import { productHasAllEligibilityCriteria } from './eligibility';
 import { productHasAllFeatures } from './featuresCore';
+import { cooperativeSliceMs } from '../lib/firstValue';
 import {
   effectiveFraction,
   sortByDisplayLabel,
@@ -461,7 +462,7 @@ export async function sortRowsCooperatively(
   // section's merge performs thousands of checkpoints: stay synchronous until
   // the CPU slice actually expires, then yield to the host rather than merely
   // cycling through promise continuations.
-  const sliceExpired = () => now() - sliceStarted >= 6;
+  const sliceExpired = () => now() - sliceStarted >= cooperativeSliceMs();
   const pause = async () => {
     await yieldControl();
     sliceStarted = now();
@@ -608,7 +609,7 @@ export async function filterRowsCooperatively(
   for (let offset = 0; offset < rows.length; offset += 32) {
     const batch = visibleAccountRows(rows.slice(offset, offset + 32), filters.includeNonStandard, detailsProducts);
     for (const row of batch) if (predicate(row)) filtered.push(row);
-    if (now() - sliceStarted >= 6) {
+    if (now() - sliceStarted >= cooperativeSliceMs()) {
       await yieldControl();
       sliceStarted = now();
     }
