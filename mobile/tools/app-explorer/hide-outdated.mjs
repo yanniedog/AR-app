@@ -18,15 +18,23 @@ export function compareVersions(a, b) {
   return 0;
 }
 
-/** Comments of this bot for releases older than the newest release seen, not already hidden. */
-export function outdatedComments(comments, botLogin = 'github-actions[bot]') {
-  const mine = comments
-    .filter(c => (c.author ?? c.user?.login) === botLogin || c.author?.login === botLogin)
-    .map(c => ({ ...c, version: versionOf(c.body) }))
-    .filter(c => c.version);
-  if (!mine.length) return [];
-  const newest = mine.reduce((best, c) => (compareVersions(c.version, best) > 0 ? c.version : best), mine[0].version);
-  return mine.filter(c => compareVersions(c.version, newest) < 0 && !c.isMinimized && !String(c.body).startsWith(COLLAPSED_MARKER));
+const BOT = 'github-actions[bot]';
+
+function botResults(comments, botLogin) {
+  return comments.filter(c => c.author === botLogin).map(c => ({ ...c, version: versionOf(c.body) })).filter(c => c.version);
+}
+
+/** Newest app version among this bot's explorer comments, or null. Other authors never count. */
+export function newestVersion(comments, botLogin = BOT) {
+  return botResults(comments, botLogin).reduce((best, c) => (!best || compareVersions(c.version, best) > 0 ? c.version : best), null);
+}
+
+/** Bot comments for releases older than the newest release posted, not already hidden.
+ * A collapsed comment starts with the marker, so it has no title and is never selected again. */
+export function outdatedComments(comments, botLogin = BOT) {
+  const newest = newestVersion(comments, botLogin);
+  if (!newest) return [];
+  return botResults(comments, botLogin).filter(c => compareVersions(c.version, newest) < 0 && !c.isMinimized);
 }
 
 export function collapsedBody(body, newest) {
@@ -37,26 +45,35 @@ export function collapsedBody(body, newest) {
 
 const gh = (...args) => execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 
-function main(repo, issue) {
+const LIST_QUERY = 'query($o:String!,$n:String!,$i:Int!,$endCursor:String){repository(owner:$o,name:$n){issue(number:$i){comments(first:100,after:$endCursor){pageInfo{hasNextPage endCursor}nodes{id databaseId isMinimized body author{login}}}}}}';
+
+function listComments(repo, issue) {
   const [owner, name] = repo.split('/');
-  let nodes;
   try {
-    const q = 'query($o:String!,$n:String!,$i:Int!){repository(owner:$o,name:$n){issue(number:$i){comments(last:100){nodes{id databaseId isMinimized body author{login}}}}}}';
-    nodes = JSON.parse(gh('api', 'graphql', '-f', `query=${q}`, '-F', `o=${owner}`, '-F', `n=${name}`, '-F', `i=${issue}`))
-      .data.repository.issue.comments.nodes.map(c => ({ ...c, author: c.author?.login }));
+    const pages = JSON.parse(gh('api', 'graphql', '--paginate', '--slurp', '-f', `query=${LIST_QUERY}`, '-F', `o=${owner}`, '-F', `n=${name}`, '-F', `i=${issue}`));
+    return pages.flatMap(p => p.data.repository.issue.comments.nodes).map(c => ({ ...c, author: c.author?.login }));
   } catch (err) {
     console.error(`GraphQL comment list refused: ${String(err.message).split('\n')[0]}; using REST`);
-    nodes = JSON.parse(gh('api', `repos/${repo}/issues/${issue}/comments?per_page=100`, '--paginate', '--slurp')).flat()
+    // REST does not expose the minimized state; collapsing is idempotent through the marker.
+    return JSON.parse(gh('api', `repos/${repo}/issues/${issue}/comments?per_page=100`, '--paginate', '--slurp')).flat()
       .map(c => ({ id: c.node_id, databaseId: c.id, isMinimized: false, body: c.body, author: c.user?.login }));
   }
+}
+
+function minimize(id) {
+  const out = JSON.parse(gh('api', 'graphql', '-f', 'query=mutation($id:ID!){minimizeComment(input:{subjectId:$id,classifier:OUTDATED}){minimizedComment{isMinimized}}}', '-F', `id=${id}`));
+  if (out.errors?.length || out.data?.minimizeComment?.minimizedComment?.isMinimized !== true) throw new Error('minimizeComment did not minimize');
+}
+
+function main(repo, issue) {
+  const nodes = listComments(repo, issue);
   const stale = outdatedComments(nodes);
-  const versions = nodes.map(c => versionOf(c.body)).filter(Boolean);
-  const newest = versions.reduce((b, v) => (compareVersions(v, b) > 0 ? v : b), versions[0] ?? [0, 0, 0]);
+  const newest = newestVersion(nodes) ?? [0, 0, 0];
   let hidden = 0;
   let collapsed = 0;
   for (const c of stale) {
     try {
-      gh('api', 'graphql', '-f', 'query=mutation($id:ID!){minimizeComment(input:{subjectId:$id,classifier:OUTDATED}){minimizedComment{isMinimized}}}', '-F', `id=${c.id}`);
+      minimize(c.id);
       hidden++;
     } catch {
       try {

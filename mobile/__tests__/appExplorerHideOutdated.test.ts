@@ -27,7 +27,7 @@ describe('hide outdated explorer comments', () => {
   it('keeps the newest release and skips other authors, hidden and collapsed comments', () => {
     expect(run<number[]>(`m.outdatedComments([
       comment(1, 'app-v1.0.5'), comment(2, 'app-v1.0.5', { isMinimized: true }),
-      comment(3, 'app-v1.0.5', { author: 'someone' }), comment(4, 'app-v1.0.5', { body: '<!-- explorer-collapsed -->\\nold' }),
+      comment(3, 'app-v1.0.5', { author: 'someone' }), comment(4, 'app-v1.0.5', { body: m.collapsedBody('explorer run 4 on app-v1.0.5 (audit)\\n\\nold', [1, 0, 6]) }),
       comment(5, 'app-v1.0.6'), comment(6, 'app-v1.0.6')]).map(c => c.databaseId)`)).toEqual([1]);
     expect(run(`m.outdatedComments([comment(7, 'app-v1.0.6')])`)).toEqual([]);
     expect(run(`m.outdatedComments([])`)).toEqual([]);
@@ -37,6 +37,13 @@ describe('hide outdated explorer comments', () => {
     const out = run<string>(`m.collapsedBody('explorer run 1 on app-v1.0.5 (audit)\\n\\nbody', [1, 0, 6])`);
     expect(out.startsWith('<!-- explorer-collapsed -->')).toBe(true);
     expect(out).toContain('<summary>explorer run 1 on app-v1.0.5 (audit) - Superseded by app-v1.0.6</summary>');
+    expect(out).toContain('<details>');
+    expect(out.trimEnd().endsWith('</details>')).toBe(true);
     expect(out).toContain('body');
+  });
+
+  it('ignores releases posted by other authors when finding the newest', () => {
+    expect(run(`m.newestVersion([comment(1, 'app-v1.0.5'), comment(2, 'app-v9.9.9', { author: 'someone' })])`)).toEqual([1, 0, 5]);
+    expect(run(`m.outdatedComments([comment(1, 'app-v1.0.5'), comment(2, 'app-v9.9.9', { author: 'someone' })])`)).toEqual([]);
   });
 });
