@@ -261,6 +261,7 @@ async function settle(timeoutMs, since = Date.now(), before = null, { scrolling 
 function matches(node, sel) {
   const norm = s => s.toLowerCase().replace(/\s+/g, ' ').trim();
   if (sel.id && node.id !== sel.id) return false;
+  if (sel.cls && node.cls !== sel.cls) return false;
   for (const property of ['clickable', 'selected', 'checked', 'enabled']) {
     if (sel[property] !== undefined && node[property] !== sel[property]) return false;
   }
