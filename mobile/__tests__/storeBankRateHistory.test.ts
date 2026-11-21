@@ -7,6 +7,7 @@ import { cache } from '../src/data/cache';
 import { prepareReadyBankRateHistory, selectedPreparedHistoryHeads } from '../src/data/historicalBankRateReadySync';
 import { warmHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueStore';
 import { yieldToPaintFrames } from '../src/lib/yieldToUi';
+import { expectFirstValue, markFirstValue, resetFirstValueForTests } from '../src/lib/firstValue';
 import { closeSuitabilityGateUntilRebuild } from '../src/data/suitabilityIndex';
 import { integrateRbaCalendarIntoCore } from '../src/data/rbaOfficialLive';
 import { cachedHistoricalBankRateCatalogue, installHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueStore';
@@ -178,6 +179,26 @@ test('detached history starts after paint and native setup, respecting the local
   await pending;
   expect(prepareReadyBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest, null, readyCatalogue, expect.any(Function));
   expect(get().bankRateHistoryRevision).toBe(1);
+});
+
+test('foreground history preparation waits for the first Rates value, bounded refresh does not', async () => {
+  resetFirstValueForTests();
+  expectFirstValue();
+  try {
+    const bounded = store();
+    await prepareBankRateHistoryAfterPaint(bounded.set, bounded.get, sampleCore, sampleManifest, null, null, { warm: false });
+    expect(prepareReadyBankRateHistory).toHaveBeenCalledTimes(1);
+    jest.mocked(prepareReadyBankRateHistory).mockClear();
+    const { get, set } = store();
+    const pending = prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest, null, null, { warm: true });
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    expect(prepareReadyBankRateHistory).not.toHaveBeenCalled();
+    markFirstValue();
+    await pending;
+    expect(prepareReadyBankRateHistory).toHaveBeenCalledTimes(1);
+  } finally {
+    resetFirstValueForTests();
+  }
 });
 
 test('missing detached archive keeps the bundled preparation path available', async () => {

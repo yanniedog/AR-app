@@ -829,6 +829,13 @@ export default function RatesWorkspace() {
   useEffect(() => { if (core != null && !searchIndexLoading) bootMark('search-index-idle'); }, [core, searchIndexLoading]);
   useEffect(() => { if (core != null && !detailFiltersPending) bootMark('detail-filters-idle'); }, [core, detailFiltersPending]);
   const ratesSettled = core != null && !searchPending;
+  // Mirrors the searchPending branches above so the last-blocker mark names the real condition.
+  const blockers = (intentPending ? ['intent']
+    : availability === 'unlisted' ? [!catalogueDetails && 'catalogue']
+    : section === 'Mortgage' && !mortgageCriteriaReady && !isDefaultMortgageBrowse ? []
+    : [detailFiltersPending && 'gate', searchIndexLoading && 'index', !publicPricing.ready && 'pricing', !preparedResults.ready && 'rows'])
+    .filter(Boolean).join(',');
+  useEffect(() => { if (core != null && blockers && !blockers.includes(',')) bootMark(`last-${blockers}`); }, [core, blockers]);
   useEffect(() => { if (ratesSettled) { bootMark('rates-ready'); markFirstValue(); } }, [ratesSettled]);
   const presented = useRef<{ rows: typeof pageRows; section: SectionKey; availability: RateAvailability;
     core: typeof core; catalogue: typeof catalogue; revision: number; scenarioFor: typeof rowScenario;
