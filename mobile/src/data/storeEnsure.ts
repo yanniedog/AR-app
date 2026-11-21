@@ -162,8 +162,11 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         try {
           const meta = await cache.readMeta();
           if (myGeneration !== detailsEnsureGeneration) return;
+          // Verified details already in memory count even while their disk receipt is still
+          // pending (a first-install save follows the first Rates paint).
+          const heldVerified = details != null && !!wantSha && verifiedDetailsSha(details) === wantSha;
           const shaOk = !wantSha || meta?.detailsSha === wantSha;
-          if (details && details.run_date === core.run_date && shaOk && (!wantSha || verifiedDetailsSha(details) === wantSha)) {
+          if (details && details.run_date === core.run_date && (shaOk || heldVerified) && (!wantSha || verifiedDetailsSha(details) === wantSha)) {
             workOutcome = 'completed';
             if (!suitabilityIndexMatches(getSuitabilityIndex(), runDate, coreSha, detailsSha)) {
               work.stage('Rebuilding suitability index from loaded details');

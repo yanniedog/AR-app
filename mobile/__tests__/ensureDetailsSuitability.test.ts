@@ -10,6 +10,7 @@ import {
 } from '../src/data/suitabilityIndex';
 import { isSuitabilityFilterReady, subscribeSuitabilityGate } from '../src/data/suitabilityGate';
 import { expectFirstValue, markFirstValue, resetFirstValueForTests } from '../src/lib/firstValue';
+import { bindVerifiedDetails } from '../src/data/detailsIdentity';
 import { backgroundPayloadWork } from '../src/lib/backgroundPayloadWork';
 
 const sampleDetails = loadSampleDetails();
@@ -253,6 +254,27 @@ describe('ensureDetails suitability unblock', () => {
       await new Promise((resolve) => setTimeout(resolve, 30));
       expect(mockWriteDetails).toHaveBeenCalledTimes(1);
       expect(mockUpdateMeta).toHaveBeenCalledTimes(1);
+    } finally {
+      resetFirstValueForTests();
+    }
+  });
+
+  it('reuses the verified in-memory details for a second ensure while the save is deferred', async () => {
+    closeSuitabilityGateUntilRebuild();
+    const sha = 'a'.repeat(64);
+    const manifest = { ...remoteManifest, files: { ...remoteManifest.files, details: { ...remoteManifest.files.details, sha256: sha } } };
+    store.setState({ manifest });
+    mockReadMeta.mockResolvedValue({ manifest, source: 'remote', savedAt: '2026-07-27T00:00:00Z', coreSha: manifest.files.core.sha256, detailsSha: null });
+    const verified = bindVerifiedDetails({ ...remoteDetails }, sha);
+    mockDownloadDetails.mockResolvedValue({ text: JSON.stringify(remoteDetails), details: verified });
+    expectFirstValue();
+    try {
+      await store.getState().ensureDetails({ force: true });
+      expect(mockDownloadDetails).toHaveBeenCalledTimes(1);
+      await store.getState().ensureDetails({ force: true });
+      expect(mockDownloadDetails).toHaveBeenCalledTimes(1);
+      markFirstValue();
+      await new Promise((resolve) => setTimeout(resolve, 30));
     } finally {
       resetFirstValueForTests();
     }
