@@ -1,0 +1,161 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "RBA",
+  "at": [
+   186,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "View ASX market expectations",
+  "flags": "tap",
+  "at": [
+   360,
+   208
+  ]
+ },
+ {
+  "label": "Outlook",
+  "at": [
+   360,
+   335
+  ]
+ },
+ {
+  "label": "Refresh outlook",
+  "flags": "tap",
+  "at": [
+   177,
+   435
+  ]
+ },
+ {
+  "label": "Refresh outlook",
+  "at": [
+   177,
+   435
+  ]
+ },
+ {
+  "label": "Refresh failed",
+  "at": [
+   360,
+   531
+  ]
+ },
+ {
+  "label": "Economists’ cash-rate forecast",
+  "at": [
+   360,
+   672
+  ]
+ },
+ {
+  "label": "Forecast unavailable",
+  "flags": "tap",
+  "at": [
+   360,
+   772
+  ]
+ },
+ {
+  "label": "Bond-market forward rates",
+  "at": [
+   360,
+   961
+  ]
+ },
+ {
+  "label": "Bond data unavailable",
+  "flags": "tap",
+  "at": [
+   360,
+   1061
+  ]
+ },
+ {
+  "label": "Show Sources",
+  "flags": "tap",
+  "at": [
+   360,
+   1286
+  ]
+ },
+ {
+  "label": "Sources",
+  "at": [
+   328,
+   1286
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap,sel",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "sel",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
