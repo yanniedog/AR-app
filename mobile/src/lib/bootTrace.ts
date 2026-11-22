@@ -1,6 +1,7 @@
 // Launch timeline: milliseconds since the JS runtime started, one line per launch.
 // The first mark is taken when this module evaluates, so it is imported first from index.ts.
 
+import { freezeBootCounts, resetBootCountsForTests } from './bootCounters';
 import { debugLog } from './debugLog';
 
 // The line is written once, when Rates is ready or the launch ended without data.
@@ -21,7 +22,7 @@ export function bootMark(name: string): void {
 
 function flush(): void {
   flushed = true;
-  const line = Object.entries(marks).map(([key, at]) => `${key}=${at}`).join(' ');
+  const line = [...Object.entries(marks), ...freezeBootCounts()].map(([key, at]) => `${key}=${Math.round(at)}`).join(' ');
   try {
     debugLog.warn('boot', `launch ms ${line}`);
   } catch { /* Tracing is best-effort. */ }
@@ -31,6 +32,7 @@ function flush(): void {
 export function resetBootTraceForTests(): void {
   flushed = false;
   for (const key of Object.keys(marks)) delete marks[key];
+  resetBootCountsForTests();
 }
 
 bootMark('js-start');

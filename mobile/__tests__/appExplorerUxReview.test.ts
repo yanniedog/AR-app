@@ -160,6 +160,13 @@ describe('app explorer UX review', () => {
     expect(r.summaryLines.join('\n')).toMatch(/Frustration and abandonment risk/);
   });
 
+  it('does not read the "No listed rate" label as an empty state', () => {
+    const r = review({ catalogue: [{ text: 'No listed rate', bounds: [100, 150, 620, 200] }] });
+    expect(checks(r)).not.toContain('dead-end-state');
+    const longer = review({ catalogue: [{ text: 'No listed rate for this product', bounds: [100, 150, 620, 200] }] });
+    expect(checks(longer)).toContain('dead-end-state');
+  });
+
   it('scores a clean screen at the top of the rubric', () => {
     const r = review({ rates: [
       row('Choice Home Loan', 'Bank A', 5.9, 5.8, 300),

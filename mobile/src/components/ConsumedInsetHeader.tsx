@@ -1,9 +1,12 @@
-import { Header } from '@react-navigation/elements';
+import { Header, HeaderBackButton } from '@react-navigation/elements';
 import type { NativeStackHeaderProps } from '@react-navigation/native-stack';
 import React from 'react';
 import type { CorePayload } from '../types';
 import { uiLabel, uiNavigationTitle, type UiCopy } from '../lib/uiCopy';
 import { NavigationMenuButton } from './AppNavigationMenu';
+
+// The default back button is about 30 dp wide; keep the touch target at 48 dp.
+const BACK_TARGET = { minWidth: 48, minHeight: 48, justifyContent: 'center' } as const;
 
 /** Keeps each route's actions/title when update chrome consumes the top inset. */
 export function ConsumedInsetHeader({ navigationOptions: options, back, core, fallbackTitle }: Pick<NativeStackHeaderProps, 'back'> & {
@@ -18,7 +21,7 @@ export function ConsumedInsetHeader({ navigationOptions: options, back, core, fa
     headerTitleAlign={options.headerTitleAlign}
     headerTintColor={options.headerTintColor}
     headerShadowVisible={options.headerShadowVisible}
-    headerLeft={options.headerLeft}
+    headerLeft={options.headerLeft ?? (back && options.headerBackVisible !== false ? (props) => <HeaderBackButton onPress={props.onPress} href={props.href} tintColor={props.tintColor} pressColor={props.pressColor} pressOpacity={props.pressOpacity} displayMode="minimal" accessibilityLabel={uiLabel('Back')} style={BACK_TARGET} /> : undefined)}
     headerRight={options.headerRight ?? (() => <NavigationMenuButton />)}
     back={options.headerBackVisible === false ? undefined : back && { title: uiLabel('Back'), href: back.href }}
     headerStatusBarHeight={0}

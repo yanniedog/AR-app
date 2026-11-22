@@ -20,8 +20,11 @@ export function compareVersions(a, b) {
 
 const BOT = 'github-actions[bot]';
 
+// GraphQL reports an app author as "github-actions"; REST reports "github-actions[bot]".
+const loginKey = (login) => String(login ?? '').replace(/\[bot\]$/i, '').toLowerCase();
+
 function botResults(comments, botLogin) {
-  return comments.filter(c => c.author === botLogin).map(c => ({ ...c, version: versionOf(c.body) })).filter(c => c.version);
+  return comments.filter(c => loginKey(c.author) === loginKey(botLogin)).map(c => ({ ...c, version: versionOf(c.body) })).filter(c => c.version);
 }
 
 /** Newest app version among this bot's explorer comments, or null. Other authors never count. */

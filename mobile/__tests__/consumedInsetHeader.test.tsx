@@ -4,7 +4,7 @@ import { ConsumedInsetHeader } from '../src/components/ConsumedInsetHeader';
 import { makeHealthyCore } from '../__fixtures__/appHealth';
 import { uiLabel } from '../src/lib/uiCopy';
 
-jest.mock('@react-navigation/elements', () => ({ Header: 'Header' }));
+jest.mock('@react-navigation/elements', () => ({ Header: 'Header', HeaderBackButton: 'HeaderBackButton' }));
 jest.mock('../src/components/AppNavigationMenu', () => ({ NavigationMenuButton: 'NavigationMenuButton' }));
 
 test('a consumed top inset retains route share action and actual provider title', () => {
@@ -30,5 +30,23 @@ test('route unavailable titles survive and unrelated titles fail closed', () => 
   expect(tree.root.findByType('Header').props.headerRight().type).toBe('NavigationMenuButton');
   act(() => tree.update(<ConsumedInsetHeader {...props} navigationOptions={{ title: 'A paragraph describing this app.' }} />));
   expect(tree.root.findByType('Header').props.title).toBe('Product');
+  act(() => tree.unmount());
+});
+
+test('the back button keeps a 48 dp touch target', () => {
+  let tree: any;
+  act(() => { tree = TestRenderer.create(<ConsumedInsetHeader core={makeHealthyCore()} fallbackTitle={uiLabel('Product')}
+    navigationOptions={{ title: 'Debug log' }} back={{ title: 'Back', href: '/about' }} />); });
+  const left = tree.root.findByType('Header').props.headerLeft({ tintColor: '#000', canGoBack: true });
+  expect(left.type).toBe('HeaderBackButton');
+  expect(left.props.style).toMatchObject({ minWidth: 48, minHeight: 48 });
+  act(() => tree.unmount());
+});
+
+test('a hidden back button stays hidden', () => {
+  let tree: any;
+  act(() => { tree = TestRenderer.create(<ConsumedInsetHeader core={makeHealthyCore()} fallbackTitle={uiLabel('Product')}
+    navigationOptions={{ title: 'Product rate unavailable', headerBackVisible: false }} back={{ title: 'Back', href: '/about' }} />); });
+  expect(tree.root.findByType('Header').props.headerLeft).toBeUndefined();
   act(() => tree.unmount());
 });

@@ -14,6 +14,8 @@ import {
 } from './detailSearch';
 import { productHasAllEligibilityCriteria } from './eligibility';
 import { productHasAllFeatures } from './featuresCore';
+import { cooperativeSliceMs } from '../lib/firstValue';
+import { bootCount } from '../lib/bootCounters';
 import {
   effectiveFraction,
   sortByDisplayLabel,
@@ -443,7 +445,34 @@ export function lenderProductRows(
 }
 
 /** Same ranking as sortRows, with bounded preparation and merge slices. */
-export async function sortRowsCooperatively(
+type CooperativeControl = { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number };
+
+/** Launch diagnostics: runs, cancels, yields, rows and wall time for one cooperative pass. */
+async function countedPass<T>(name: 'sort' | 'filter', rowCount: number, control: CooperativeControl,
+  run: (control: CooperativeControl) => Promise<T | null>): Promise<T | null> {
+  const now = control.now ?? (() => performance.now());
+  const baseYield = control.yieldControl ?? (() => yieldToUi(0));
+  bootCount(`${name}-runs`);
+  bootCount(`${name}-rows`, rowCount);
+  const started = now();
+  try {
+    const result = await run({ ...control, yieldControl: () => { bootCount(`${name}-yields`); return baseYield(); } });
+    if (result === null) bootCount(`${name}-cancels`);
+    return result;
+  } finally {
+    bootCount(`${name}-ms`, now() - started);
+  }
+}
+
+export function sortRowsCooperatively(
+  rows: RateRow[], sortKey: SortKey, section: SectionKey,
+  metric: RankMetric = 'base', mortgageMetric: MortgageRateMetric = 'comparison',
+  control: CooperativeControl = {},
+): Promise<RateRow[] | null> {
+  return countedPass('sort', rows.length, control, counted => sortRowsCooperativelyUncounted(rows, sortKey, section, metric, mortgageMetric, counted));
+}
+
+async function sortRowsCooperativelyUncounted(
   rows: RateRow[],
   sortKey: SortKey,
   section: SectionKey,
@@ -461,7 +490,7 @@ export async function sortRowsCooperatively(
   // section's merge performs thousands of checkpoints: stay synchronous until
   // the CPU slice actually expires, then yield to the host rather than merely
   // cycling through promise continuations.
-  const sliceExpired = () => now() - sliceStarted >= 6;
+  const sliceExpired = () => now() - sliceStarted >= cooperativeSliceMs();
   const pause = async () => {
     await yieldControl();
     sliceStarted = now();
@@ -587,7 +616,15 @@ export async function prepareSearchRows(
 }
 
 /** Share search membership with live filter counts without a render-time catalogue scan. */
-export async function filterRowsCooperatively(
+export function filterRowsCooperatively(
+  rows: RateRow[], filters: Filters, detailsProducts?: Record<string, ProductDetail> | null,
+  searchIndex?: SearchIndexPayload | null, section?: SectionKey | null,
+  control: CooperativeControl = {},
+): Promise<RateRow[] | null> {
+  return countedPass('filter', rows.length, control, counted => filterRowsCooperativelyUncounted(rows, filters, detailsProducts, searchIndex, section, counted));
+}
+
+async function filterRowsCooperativelyUncounted(
   rows: RateRow[], filters: Filters, detailsProducts?: Record<string, ProductDetail> | null,
   searchIndex?: SearchIndexPayload | null, section?: SectionKey | null,
   control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
@@ -608,7 +645,7 @@ export async function filterRowsCooperatively(
   for (let offset = 0; offset < rows.length; offset += 32) {
     const batch = visibleAccountRows(rows.slice(offset, offset + 32), filters.includeNonStandard, detailsProducts);
     for (const row of batch) if (predicate(row)) filtered.push(row);
-    if (now() - sliceStarted >= 6) {
+    if (now() - sliceStarted >= cooperativeSliceMs()) {
       await yieldControl();
       sliceStarted = now();
     }
