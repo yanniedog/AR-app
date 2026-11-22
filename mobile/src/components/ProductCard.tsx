@@ -326,7 +326,7 @@ function ProductCardView({
         minHeight: COMPACT_ROW.minHeight,
         height: enlargedText ? undefined : COMPACT_ROW.minHeight,
         gap: COMPACT_ROW.gap,
-        paddingVertical: COMPACT_ROW.inset,
+        paddingVertical: COMPACT_ROW.rowInset,
         paddingHorizontal: 0,
         backgroundColor: selected ? theme.colors.primaryMuted : 'transparent',
         borderBottomWidth: embedded ? 0 : StyleSheet.hairlineWidth,

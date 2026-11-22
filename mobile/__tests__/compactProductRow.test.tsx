@@ -232,7 +232,7 @@ test.each([false, true])('loading rows keep the listing baseline and noninteract
     expect(rows).toHaveLength(3);
     for (const row of rows) {
       expect(row.props.style).toMatchObject({ flexDirection: 'row', alignItems: 'center', gap: COMPACT_ROW.gap,
-        paddingVertical: COMPACT_ROW.inset, paddingHorizontal: 0, minHeight: COMPACT_ROW.minHeight });
+        paddingVertical: COMPACT_ROW.rowInset, paddingHorizontal: 0, minHeight: COMPACT_ROW.minHeight });
       expect(row.props.style.minHeight).toBe(COMPACT_ROW.minHeight);
       expect(row.props.style.borderBottomWidth).toBe(StyleSheet.hairlineWidth);
       expect(row.props).toMatchObject({ accessible: false, accessibilityElementsHidden: true,
