@@ -29,8 +29,8 @@ export function productRateChangeText(
   const arrow = summary.bps > 0 ? '↑' : '↓';
   const when = formatRateChangeDate(summary.observedOn);
   return compact
-    ? uiJoin('Advertised', ' ', arrow, ' ', bpsMagnitude(summary.bps), ' · ', when)
-    : uiJoin('Advertised', ' ', arrow, ' ', bpsMagnitude(summary.bps), ' · ', when, ' · ', formatRate(summary.fromRate), ' → ', formatRate(summary.toRate));
+    ? uiJoin('Best advertised', ' ', arrow, ' ', bpsMagnitude(summary.bps), ' · ', when)
+    : uiJoin('Best advertised', ' ', arrow, ' ', bpsMagnitude(summary.bps), ' · ', when, ' · ', formatRate(summary.fromRate), ' → ', formatRate(summary.toRate));
 }
 
 export function useProductRateChangeSummary(
