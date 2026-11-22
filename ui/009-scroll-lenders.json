@@ -1,0 +1,348 @@
+[
+ {
+  "label": "",
+  "flags": "tap",
+  "at": [
+   360,
+   800
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "at": [
+   300,
+   224
+  ]
+ },
+ {
+  "label": "Close Temporary filters",
+  "flags": "tap",
+  "at": [
+   640,
+   224
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   859
+  ]
+ },
+ {
+  "label": "AFG Home Loans Alpha",
+  "flags": "tap",
+  "at": [
+   206,
+   175
+  ]
+ },
+ {
+  "label": "AFG Home Loans Alpha",
+  "at": [
+   206,
+   161
+  ]
+ },
+ {
+  "label": "Alb'ay Ijarah Home Finance",
+  "flags": "tap",
+  "at": [
+   226,
+   231
+  ]
+ },
+ {
+  "label": "Alb'ay Ijarah Home Finance",
+  "at": [
+   226,
+   217
+  ]
+ },
+ {
+  "label": "AMP - My AMP",
+  "flags": "tap",
+  "at": [
+   555,
+   231
+  ]
+ },
+ {
+  "label": "AMP - My AMP",
+  "at": [
+   555,
+   217
+  ]
+ },
+ {
+  "label": "ANZ",
+  "flags": "tap",
+  "at": [
+   86,
+   287
+  ]
+ },
+ {
+  "label": "ANZ",
+  "at": [
+   86,
+   273
+  ]
+ },
+ {
+  "label": "Apollo",
+  "flags": "tap",
+  "at": [
+   221,
+   287
+  ]
+ },
+ {
+  "label": "Apollo",
+  "at": [
+   221,
+   273
+  ]
+ },
+ {
+  "label": "Arab Bank Australia Limited",
+  "flags": "tap",
+  "at": [
+   229,
+   349
+  ]
+ },
+ {
+  "label": "Arab Bank Australia Limited",
+  "at": [
+   229,
+   349
+  ]
+ },
+ {
+  "label": "Athena Home Loans",
+  "flags": "tap",
+  "at": [
+   184,
+   461
+  ]
+ },
+ {
+  "label": "Athena Home Loans",
+  "at": [
+   184,
+   461
+  ]
+ },
+ {
+  "label": "Aussie Activate",
+  "flags": "tap",
+  "at": [
+   474,
+   461
+  ]
+ },
+ {
+  "label": "Aussie Activate",
+  "at": [
+   474,
+   461
+  ]
+ },
+ {
+  "label": "Aussie Elevate",
+  "flags": "tap",
+  "at": [
+   149,
+   573
+  ]
+ },
+ {
+  "label": "Aussie Elevate",
+  "at": [
+   149,
+   573
+  ]
+ },
+ {
+  "label": "Aussie Select",
+  "flags": "tap",
+  "at": [
+   391,
+   573
+  ]
+ },
+ {
+  "label": "Aussie Select",
+  "at": [
+   391,
+   573
+  ]
+ },
+ {
+  "label": "Australian Military Bank",
+  "flags": "tap",
+  "at": [
+   203,
+   685
+  ]
+ },
+ {
+  "label": "Australian Military Bank",
+  "at": [
+   203,
+   685
+  ]
+ },
+ {
+  "label": "Australian Mutual Bank LTD",
+  "flags": "tap",
+  "at": [
+   227,
+   797
+  ]
+ },
+ {
+  "label": "Australian Mutual Bank LTD",
+  "at": [
+   227,
+   797
+  ]
+ },
+ {
+  "label": "Auswide Bank Ltd",
+  "flags": "tap",
+  "at": [
+   169,
+   909
+  ]
+ },
+ {
+  "label": "Auswide Bank Ltd",
+  "at": [
+   169,
+   909
+  ]
+ },
+ {
+  "label": "Bank Australia",
+  "flags": "tap",
+  "at": [
+   436,
+   909
+  ]
+ },
+ {
+  "label": "Bank Australia",
+  "at": [
+   436,
+   909
+  ]
+ },
+ {
+  "label": "Bank First",
+  "flags": "tap",
+  "at": [
+   119,
+   1021
+  ]
+ },
+ {
+  "label": "Bank First",
+  "at": [
+   119,
+   1021
+  ]
+ },
+ {
+  "label": "Bank of China",
+  "flags": "tap",
+  "at": [
+   334,
+   1021
+  ]
+ },
+ {
+  "label": "Bank of China",
+  "at": [
+   334,
+   1021
+  ]
+ },
+ {
+  "label": "Bank of Melbourne",
+  "flags": "tap",
+  "at": [
+   175,
+   1133
+  ]
+ },
+ {
+  "label": "Bank of Melbourne",
+  "at": [
+   175,
+   1133
+  ]
+ },
+ {
+  "label": "Bank of Queensland Limited",
+  "flags": "tap",
+  "at": [
+   232,
+   1245
+  ]
+ },
+ {
+  "label": "Bank of Queensland Limited",
+  "at": [
+   232,
+   1245
+  ]
+ },
+ {
+  "label": "Show All 140 Lenders",
+  "flags": "tap",
+  "at": [
+   187,
+   1349
+  ]
+ },
+ {
+  "label": "Show All 140 Lenders",
+  "at": [
+   187,
+   1350
+  ]
+ },
+ {
+  "label": "Reset",
+  "flags": "tap",
+  "at": [
+   154,
+   1502
+  ]
+ },
+ {
+  "label": "Reset",
+  "at": [
+   154,
+   1503
+  ]
+ },
+ {
+  "label": "Show 4,349 rates",
+  "flags": "tap",
+  "at": [
+   494,
+   1502
+  ]
+ },
+ {
+  "label": "Show 4,349 rates",
+  "at": [
+   494,
+   1503
+  ]
+ }
+]
