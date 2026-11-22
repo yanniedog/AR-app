@@ -6,7 +6,7 @@ import type { RateRow, SectionKey } from '../../types';
 
 export const COMPACT_ROW = {
   action: 48, bankLogo: 56, lenderSlot: 72, gap: 4, fontSize: 14,
-  icon: 16, lineHeight: 20, minHeight: 72, inset: 4,
+  icon: 16, lineHeight: 20, minHeight: 72, inset: 3, rowInset: 4,
 } as const;
 
 const peerCache = new WeakMap<readonly RateRow[], Map<string, Set<RateRow>>>();
