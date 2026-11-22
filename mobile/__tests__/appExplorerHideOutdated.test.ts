@@ -50,6 +50,10 @@ describe('hide outdated explorer comments', () => {
     expect(out).toContain('body');
   });
 
+  it('matches the GraphQL login without the [bot] suffix', () => {
+    expect(run(`m.outdatedComments([comment(1, 'app-v1.0.5', { author: 'github-actions' }), comment(2, 'app-v1.0.6', { author: 'github-actions' })]).map(c => c.databaseId)`)).toEqual([1]);
+  });
+
   it('ignores releases posted by other authors when finding the newest', () => {
     expect(run(`m.newestVersion([comment(1, 'app-v1.0.5'), comment(2, 'app-v9.9.9', { author: 'someone' })])`)).toEqual([1, 0, 5]);
     expect(run(`m.outdatedComments([comment(1, 'app-v1.0.5'), comment(2, 'app-v9.9.9', { author: 'someone' })])`)).toEqual([]);
