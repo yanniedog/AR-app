@@ -1,9 +1,10 @@
 import { humanizeEnum } from './format';
 import { parseLvrTier } from './profile';
+import { lvrRatioToPercent } from './lvrRange';
 import { uiDecimal, uiJoin, uiPercentage, uiPercentageDigits, type UiText } from '../lib/uiCopy';
 
-function roundedLvr(raw: string, unit: 'count' | 'percent'): UiText {
-  const n = Number(raw);
+function roundedLvr(raw: string, unit: 'count' | 'percent', ratio = true): UiText {
+  const n = ratio ? lvrRatioToPercent(Number(raw)) : Number(raw);
   if (!Number.isFinite(n)) return uiDecimal(raw, unit);
   return unit === 'percent' ? uiPercentage(n) : uiPercentageDigits(n);
 }
@@ -25,7 +26,7 @@ export function lvrTierLabel(value: string): UiText | null {
   if (m) return uiJoin('LVR', ' ', '≤', roundedLvr(m[1], 'percent'));
   m = /^(>=|>)?(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)$/.exec(v);
   if (m) return uiJoin('LVR', ' ', m[1] === '>=' ? '≥' : m[1] === '>' ? '>' : '',
-    roundedLvr(m[2], 'count'), '–', roundedLvr(m[3], 'percent'));
+    roundedLvr(m[2], 'count', Number(m[3]) <= 1), '–', roundedLvr(m[3], 'percent'));
   m = /^>=(\d+(?:\.\d+)?)$/.exec(v);
   if (m) return uiJoin('LVR', ' ', '≥', roundedLvr(m[1], 'percent'));
   m = /^(?:>|gt)(\d+(?:\.\d+)?)$|^(\d+(?:\.\d+)?)\+$/.exec(v);

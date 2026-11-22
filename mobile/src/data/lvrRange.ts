@@ -1,19 +1,23 @@
 /** Existing canonical facets are (lo, hi]; >= preserves inclusive CDR minima. */
 export interface LvrRange { lo: number; hi: number; inclusive: boolean; hiInclusive?: boolean }
 
+/** A few lenders publish LVR as a ratio (0.7 for 70%); no LVR band is 1% or lower. */
+export const lvrRatioToPercent = (n: number): number => (n > 0 && n <= 1 ? Math.round(n * 1e6) / 1e4 : n);
+
 export function parseLvrRange(value: string | undefined): LvrRange | null {
   const text = (value ?? '').trim().toLowerCase().replace(/^lvr_/, '').replace(/%/g, '')
     .replace(/^le/, '<=').replace(/^lt/, '<').replace(/^ge/, '>=').replace(/^gt/, '>')
     .replace(/^≤/, '<=').replace(/^≥/, '>=').replace(/(\d)p(?=\d)/g, '$1.');
   let match = /^(=|<=|<)?(\d+(?:\.\d+)?)$/.exec(text);
   if (match) {
-    const hi = Number(match[2]);
+    const hi = lvrRatioToPercent(Number(match[2]));
     return hi > 0 && hi <= 100 ? { lo: 0, hi, inclusive: false,
       ...(match[1] === '<' ? { hiInclusive: false } : {}) } : null;
   }
   match = /^(>=|>)?(\d+(?:\.\d+)?)\s*[-–_]\s*(<=|<)?(\d+(?:\.\d+)?)$/.exec(text);
   if (match) {
-    const lo = Number(match[2]), hi = Number(match[4]), inclusive = match[1] === '>=';
+    const ratio = Number(match[4]) <= 1;
+    const lo = ratio ? lvrRatioToPercent(Number(match[2])) : Number(match[2]), hi = ratio ? lvrRatioToPercent(Number(match[4])) : Number(match[4]), inclusive = match[1] === '>=';
     return lo >= 0 && hi <= 100 && (lo < hi || (inclusive && match[3] !== '<' && lo === hi))
       ? { lo, hi, inclusive, ...(match[3] === '<' ? { hiInclusive: false } : {}) } : null;
   }
