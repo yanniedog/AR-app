@@ -420,4 +420,7 @@ describe('format', () => {
     expect(isBroadlyAvailable(row, detail)).toBe(false);
     expect(visibleAccountRows([row], false, { 'rb|cs': detail })).toEqual([]);
   });
+  it('keeps full precision for millions that are not whole thousands', () => {
+    expect(String(formatBalanceRange('0', '1000500'))).toBe('$0–$1,000.5k');
+  });
 });

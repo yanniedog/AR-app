@@ -105,7 +105,7 @@ export function formatMoneyShort(value: string | number | null | undefined): UiT
   const amount = Math.abs(cents - nearestThousand * 100) <= 100
     && (nearestThousand !== 0 || Math.abs(cents) <= 1) ? nearestThousand
     : Math.abs(cents - nearestDollar * 100) <= 1 ? nearestDollar : n;
-  if (Math.abs(amount) >= 1_000_000) {
+  if (Math.abs(amount) >= 1_000_000 && Number.isInteger(amount / 1_000)) {
     const millions = Number((amount / 1_000_000).toFixed(3));
     return uiJoin('$', uiNumber(millions, (String(millions).split('.')[1] ?? '').length), 'm');
   }
