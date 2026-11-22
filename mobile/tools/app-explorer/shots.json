@@ -3,13 +3,13 @@
   "name": "browse",
   "open": "/browse",
   "scroll": 0,
-  "why": "home rates list, incl. early first page with Updating then the settled page (rows must not shift)"
+  "why": "home rates list, incl. early first page with Updating then the settled page (rows must not shift); stacked product rows sit 8 dp apart"
  },
  {
   "name": "watchlist",
   "open": "/watchlist",
   "scroll": 0,
-  "why": "saved items"
+  "why": "saved items; stacked rows sit 8 dp apart"
  },
  {
   "name": "market",

@@ -6,6 +6,7 @@ import { isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../../data/
 import { useMortgageResultsIndex } from '../../hooks/useMortgageResultsIndex';
 import { profileSectionCount } from '../../data/profile';
 import { bootMark } from '../../lib/bootTrace';
+import { bootCount } from '../../lib/bootCounters';
 import { markFirstValue } from '../../lib/firstValue';
 import { checkDrillOutcome } from '../../lib/degradationLog';
 import { reconcilePublicCompareSelectionTokens } from '../../data/publicCompareSelectionTokens';
@@ -20,7 +21,8 @@ import { publicRateScenario, resolvedPublicRankingRows } from '../../data/public
 import { useUserRateScenario } from '../../hooks/useUserRateScenario';
 import { useResolvedPublicRankingRows, type LeadingScopeRequest } from '../../hooks/useResolvedPublicRankingRows';
 import { uiCount,uiJoin,uiLabel,uiRatesQuery,uiProductName,uiProviderName,type UiCopy } from '../../lib/uiCopy';
-import { humanizeEnum } from '../../data/format';
+import { humanizeEnum, visibleAccountRows } from '../../data/format';
+import { isNonStandard } from '../../data/rateClassification';
 import { useReadyNavigationEffect } from '../../hooks/useReadyNavigationEffect';
 import { useBackOwnedSheetState } from '../../hooks/useBackOwnedSheetState';
 import { SheetSurface, type SheetAuditState } from '../SheetSurface';
@@ -650,16 +652,27 @@ export default function RatesWorkspace() {
   const pageRows = useMemo(() => resultRows.slice(pagination.offset, pagination.to), [resultRows, pagination.offset, pagination.to]);
   // Page one from the verified leading prefix. Filters keep ranked order, so it
   // equals the final first page once the prefix holds a full page of matches.
+  // Diagnostic only: why the early page is absent. Counted from an effect so only committed states are recorded.
+  const leadingWhy = useRef<{ gated: boolean; ranked: number; scoped: number; visible?: number; nonStandard?: number } | null>(null);
   const leadingPage = useMemo(() => {
     const scope = cooperativePricing.leadingScope;
     if (!scope || !leadingScope || indexedPricing || section !== 'Mortgage' || availability !== 'listed' || task.intentError
       || query.trim() || debouncedQuery.trim() || resultFilters.factCriteria.length || task.page !== 1 || !(mortgageCriteriaReady || isDefaultMortgageBrowse)
-      || hasMandatoryRequirements()) return null;
+      || hasMandatoryRequirements()) { leadingWhy.current = scope ? { gated: true, ranked: 0, scoped: scope.rows.length } : null; return null; }
     const ranked = filterRows(sortRows(scope.rows, 'rate', section, depositRankMetric, mortgageRateMetric), resultFilters, filterDetails, null, section);
+    leadingWhy.current = ranked.length < pageSize ? { gated: false, ranked: ranked.length, scoped: scope.rows.length,
+      visible: visibleAccountRows(scope.rows, false, filterDetails).length, nonStandard: scope.rows.filter(isNonStandard).length } : null;
     return ranked.length >= pageSize ? { rows: ranked.slice(0, pageSize), unverified: scope.unverifiedRows } : null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cooperativePricing.leadingScope, leadingScope, indexedPricing, section, availability, task.intentError, query, debouncedQuery,
     resultFilters, task.page, mortgageCriteriaReady, isDefaultMortgageBrowse, depositRankMetric, mortgageRateMetric, filterDetails, pageSize, suitabilityRevision]);
+  useEffect(() => {
+    const why = leadingWhy.current;
+    if (!why || leadingPage) return;
+    if (why.gated) { bootCount('leading-gated'); return; }
+    bootCount('leading-short'); bootCount('leading-short-rows', why.ranked); bootCount('leading-scope-rows', why.scoped);
+    bootCount('leading-visible-rows', why.visible ?? 0); bootCount('leading-nonstd-rows', why.nonStandard ?? 0);
+  }, [leadingPage, cooperativePricing.leadingScope, suitabilityRevision, filterDetails]);
   const resultRowKey = useCallback((row: ResultRow, i: number) => ratesResultRowKey(row, pagination.offset + i), [pagination.offset]);
   const catalogueOptions = useMemo(() => ({ ...EMPTY_SEARCH_FILTER_OPTIONS,
     providers: [...new Set(unlistedEntries.map(item => item.provider).filter((value): value is string => Boolean(value)))].sort() }), [unlistedEntries]);
@@ -828,6 +841,9 @@ export default function RatesWorkspace() {
   useEffect(() => { if (core != null && publicPricing.ready) bootMark('pricing-ready'); }, [core, publicPricing.ready]);
   useEffect(() => { if (core != null && !searchIndexLoading) bootMark('search-index-idle'); }, [core, searchIndexLoading]);
   useEffect(() => { if (core != null && !detailFiltersPending) bootMark('detail-filters-idle'); }, [core, detailFiltersPending]);
+  // Which link of the early-page chain holds on a cold start: requested, scoped, shown.
+  useEffect(() => { if (core != null && leadingScope && !indexedPricing && !task.intentError && isFocused && pricingActive) bootMark('leading-requested'); }, [core, leadingScope, indexedPricing, task.intentError, isFocused, pricingActive]);
+  useEffect(() => { if (core != null && cooperativePricing.leadingScope) bootMark('leading-scoped'); }, [core, cooperativePricing.leadingScope]);
   const ratesSettled = core != null && !searchPending;
   // Mirrors the searchPending branches above so the last-blocker mark names the real condition.
   const blockers = (intentPending ? ['intent']
@@ -852,6 +868,7 @@ export default function RatesWorkspace() {
     previous.section === section && previous.availability === availability && previous.core === core &&
     previous.catalogue === catalogue && previous.revision === suitabilityRevision;
   const showingLeadingPage = !retainingPrevious && searchPending && !intentPending && leadingPage != null;
+  useEffect(() => { if (core != null && showingLeadingPage) bootMark('leading-page'); }, [core, showingLeadingPage]);
   const displayedPageRows = retainingPrevious ? previous.rows : showingLeadingPage ? leadingPage.rows : pageRows;
   const displayedScenario = retainingPrevious ? previous.scenarioFor : rowScenario;
   const displayedUnverified = retainingPrevious ? previous.unverified : showingLeadingPage ? leadingPage.unverified : mortgageScope.unverifiedRows;
@@ -1152,7 +1169,7 @@ export default function RatesWorkspace() {
         item.provider ? uiJoin(', ', uiProviderName({ provider: item.provider })) : null,
         item.productCategory ? uiJoin(', ', humanizeEnum(item.productCategory)) : null, ', ', 'No listed rate')}
       style={{ minHeight: COMPACT_ROW.minHeight, height: fontScale > 1 ? undefined : COMPACT_ROW.minHeight,
-        paddingVertical: COMPACT_ROW.inset, borderBottomWidth: StyleSheet.hairlineWidth,
+        paddingVertical: COMPACT_ROW.rowInset, borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: theme.ledger.rule }}
       contentStyle={{ flexDirection: 'row', alignItems: 'center', gap: COMPACT_ROW.gap }}>
       <View style={{ width: COMPACT_ROW.lenderSlot }} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">

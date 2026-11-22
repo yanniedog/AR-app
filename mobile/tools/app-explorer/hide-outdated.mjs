@@ -20,6 +20,7 @@ export function compareVersions(a, b) {
 }
 
 const BOT = 'github-actions[bot]';
+const loginKey = login => String(login ?? '').replace(/\[bot\]$/i, '').toLowerCase();
 
 function releaseVersion(tag) {
   const match = /^app-v(\d+)\.(\d+)\.(\d+)$/.exec(tag);
@@ -29,7 +30,7 @@ function releaseVersion(tag) {
 export function outdatedComments(comments, current, botLogin = BOT) {
   if (!current) return [];
   return comments.filter(c => {
-    if (c.author !== botLogin || c.isMinimized) return false;
+    if (loginKey(c.author) !== loginKey(botLogin) || c.isMinimized) return false;
     const version = versionOf(c.body);
     return version !== null && compareVersions(version, current) < 0;
   });

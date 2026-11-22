@@ -100,7 +100,9 @@ describe('format', () => {
     expect(formatBalanceRange('0', '49999')).toBe('$0–$50k');
     expect(formatBalanceRange('0.01', '49999.99')).toBe('$0–$50k');
     expect(formatBalanceRange('0', '250000.99')).toBe('$0–$250k');
-    expect(formatBalanceRange('1', '1000000')).toBe('$1–$1,000k');
+    expect(formatBalanceRange('1', '1000000')).toBe('$1–$1m');
+    expect(formatBalanceRange('0', '3000000')).toBe('$0–$3m');
+    expect(formatBalanceRange('0', '1500000')).toBe('$0–$1.5m');
     expect(formatBalanceRange('99.50', '12501.25')).toBe('$99.50–$12.50125k');
     expect(formatBalanceRange('250000', '')).toBe('$250k+');
     expect(formatBalanceRange('', '')).toBe('');
@@ -417,5 +419,8 @@ describe('format', () => {
     expect(access.badge).toBe('Region-restricted');
     expect(isBroadlyAvailable(row, detail)).toBe(false);
     expect(visibleAccountRows([row], false, { 'rb|cs': detail })).toEqual([]);
+  });
+  it('keeps full precision for millions that are not whole thousands', () => {
+    expect(String(formatBalanceRange('0', '1000500'))).toBe('$0–$1,000.5k');
   });
 });

@@ -39,6 +39,14 @@ describe('hide outdated explorer comments', () => {
     expect(run<number[]>(`m.outdatedComments([comment(1, 'app-v1.0.342')], null).map(c => c.databaseId)`)).toEqual([]);
   });
 
+  it('recognises the Actions bot login with and without the REST suffix', () => {
+    expect(run<number[]>(`m.outdatedComments([
+      comment(1, 'app-v1.0.342', { author: 'github-actions' }),
+      comment(2, 'app-v1.0.342'),
+      comment(3, 'app-v1.0.342', { author: 'another-bot' })
+    ], [1, 0, 344]).map(c => c.databaseId)`)).toEqual([1, 2]);
+  });
+
   it('collapses a body into a details block that names the newer release', () => {
     const out = run<string>(`m.collapsedBody('explorer run 1 on app-v1.0.5 (audit)\\n\\nbody', [1, 0, 6])`);
     expect(out.startsWith('<!-- explorer-collapsed -->')).toBe(true);

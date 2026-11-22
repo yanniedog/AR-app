@@ -1,4 +1,4 @@
-import { afterFirstValue, expectFirstValue, markFirstValue, resetFirstValueForTests } from '../src/lib/firstValue';
+import { afterFirstValue, cooperativeSliceMs, expectFirstValue, markFirstValue, resetFirstValueForTests } from '../src/lib/firstValue';
 
 describe('first value wait', () => {
   afterEach(() => { resetFirstValueForTests(); jest.useRealTimers(); });
@@ -29,5 +29,15 @@ describe('first value wait', () => {
     await jest.advanceTimersByTimeAsync(2);
     await wait;
     expect(released).toBe(true);
+  });
+
+  it('uses the caller base slice once first value has settled and a longer one before', () => {
+    expect(cooperativeSliceMs()).toBe(6);
+    expect(cooperativeSliceMs(4)).toBe(4);
+    expectFirstValue();
+    expect(cooperativeSliceMs()).toBe(24);
+    expect(cooperativeSliceMs(4)).toBe(24);
+    markFirstValue();
+    expect(cooperativeSliceMs(4)).toBe(4);
   });
 });

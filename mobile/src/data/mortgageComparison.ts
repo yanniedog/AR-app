@@ -5,6 +5,7 @@ import { calculatorAmount, MAX_CALCULATOR_MORTGAGE_AMOUNT } from './calc';
 import { lvrRangeContains, parseLvrRange } from './lvrRange';
 import { scopedRateConditions, scopedRateConditionsForRows, scopedRateConditionsForRowsCooperatively, type RateConditionContext } from './rateConditions';
 import { scopedFinancialConditionFacts, type PublishedNumericConditionFact, type NumericConditionBoundary } from './scopedFinancialConditionFacts';
+import { cooperativeSliceMs } from '../lib/firstValue';
 import { yieldToUi } from '../lib/yieldToUi';
 import { Decimal, decimalText } from './publicRateDecimal';
 
@@ -196,7 +197,7 @@ export async function prepareMortgageComparisonRowsCooperatively(rows: readonly 
   for (const row of rows) {
     if (cancelled()) return null;
     sources.push(sourceRowForPublicRow(row));
-    if (now() - checkpoint >= 4) { await yieldControl(); checkpoint = now(); }
+    if (now() - checkpoint >= cooperativeSliceMs(4)) { await yieldControl(); checkpoint = now(); }
   }
   // One reader caches each product envelope within this call. Avoid a forced
   // native yield per product: a catalogue can contain thousands of products.
@@ -207,7 +208,7 @@ export async function prepareMortgageComparisonRowsCooperatively(rows: readonly 
   for (let index = 0; index < rows.length; index++) {
     if (cancelled()) return null;
     prepared.set(rows[index], prepareComparisonMetadata(rows[index], scopedFinancialConditionFacts(scopes[index])));
-    if (now() - checkpoint >= 4) { await yieldControl(); checkpoint = now(); }
+    if (now() - checkpoint >= cooperativeSliceMs(4)) { await yieldControl(); checkpoint = now(); }
   }
   return cancelled() ? null : prepared;
 }
@@ -320,7 +321,7 @@ export async function mortgageComparisonRowsCooperatively(
         matchingTiers.set(row.lvr_tier, matches);
       }
       if (matches) candidates.push(row);
-      if ((offset + 1) % 16 === 0 && now() - sliceStarted >= 6) {
+      if ((offset + 1) % 16 === 0 && now() - sliceStarted >= cooperativeSliceMs()) {
         await yieldControl();
         sliceStarted = now();
         if (cancelled()) return null;
@@ -338,7 +339,7 @@ export async function mortgageComparisonRowsCooperatively(
     const state = match(row, parsed, context, prepared.get(row));
     if (state === 'unverified') { unverified += 1; unverifiedRows.add(row); }
     if (state === 'listed' || state === 'unverified') selected.push(row);
-    if ((offset + 1) % 16 === 0 && now() - sliceStarted >= 6) {
+    if ((offset + 1) % 16 === 0 && now() - sliceStarted >= cooperativeSliceMs()) {
       await yieldControl();
       sliceStarted = now();
       if (cancelled()) return null;
