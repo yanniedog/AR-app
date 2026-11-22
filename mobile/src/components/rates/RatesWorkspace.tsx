@@ -1169,7 +1169,7 @@ export default function RatesWorkspace() {
         item.provider ? uiJoin(', ', uiProviderName({ provider: item.provider })) : null,
         item.productCategory ? uiJoin(', ', humanizeEnum(item.productCategory)) : null, ', ', 'No listed rate')}
       style={{ minHeight: COMPACT_ROW.minHeight, height: fontScale > 1 ? undefined : COMPACT_ROW.minHeight,
-        paddingVertical: COMPACT_ROW.inset, borderBottomWidth: StyleSheet.hairlineWidth,
+        paddingVertical: COMPACT_ROW.rowInset, borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: theme.ledger.rule }}
       contentStyle={{ flexDirection: 'row', alignItems: 'center', gap: COMPACT_ROW.gap }}>
       <View style={{ width: COMPACT_ROW.lenderSlot }} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">

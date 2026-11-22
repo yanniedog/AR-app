@@ -126,7 +126,7 @@ function ProductCardSkeleton() {
         flexDirection: 'row',
         alignItems: 'center',
         gap: COMPACT_ROW.gap,
-        paddingVertical: COMPACT_ROW.inset,
+        paddingVertical: COMPACT_ROW.rowInset,
         paddingHorizontal: 0,
         backgroundColor: 'transparent',
         borderRadius: 0,
