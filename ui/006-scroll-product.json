@@ -1,0 +1,243 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Everyday Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Source date 12 Nov 2026",
+  "at": [
+   360,
+   222
+  ]
+ },
+ {
+  "label": "Save",
+  "flags": "tap",
+  "at": [
+   190,
+   372
+  ]
+ },
+ {
+  "label": "Save",
+  "at": [
+   217,
+   373
+  ]
+ },
+ {
+  "label": "Calculate",
+  "flags": "tap",
+  "at": [
+   530,
+   372
+  ]
+ },
+ {
+  "label": "Calculate",
+  "at": [
+   531,
+   372
+  ]
+ },
+ {
+  "label": "Hide Rate details",
+  "flags": "tap",
+  "at": [
+   360,
+   598
+  ]
+ },
+ {
+  "label": "Rate details",
+  "at": [
+   328,
+   598
+  ]
+ },
+ {
+  "label": "Rate type",
+  "at": [
+   315,
+   698
+  ]
+ },
+ {
+  "label": "Fixed",
+  "at": [
+   655,
+   698
+  ]
+ },
+ {
+  "label": "Term",
+  "at": [
+   319,
+   750
+  ]
+ },
+ {
+  "label": "5 yrs",
+  "at": [
+   659,
+   750
+  ]
+ },
+ {
+  "label": "Rate structure",
+  "at": [
+   315,
+   802
+  ]
+ },
+ {
+  "label": "Fixed",
+  "at": [
+   655,
+   802
+  ]
+ },
+ {
+  "label": "Repayment",
+  "at": [
+   232,
+   854
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "at": [
+   572,
+   854
+  ]
+ },
+ {
+  "label": "Loan purpose",
+  "at": [
+   248,
+   906
+  ]
+ },
+ {
+  "label": "Owner occupied",
+  "at": [
+   588,
+   906
+  ]
+ },
+ {
+  "label": "Listed LVR",
+  "at": [
+   303,
+   958
+  ]
+ },
+ {
+  "label": "≤90.0%",
+  "at": [
+   643,
+   958
+  ]
+ },
+ {
+  "label": "Annual fee",
+  "at": [
+   291,
+   1010
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   1010
+  ]
+ },
+ {
+  "label": "$375 · Conditions: Unverified · $50 · Conditions: Unverified · $700 · Conditions: Unverified · $487 · Conditions: Unveri",
+  "at": [
+   372,
+   1122
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

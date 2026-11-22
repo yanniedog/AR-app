@@ -1,0 +1,368 @@
+[
+ {
+  "label": "",
+  "flags": "tap",
+  "at": [
+   360,
+   800
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "at": [
+   300,
+   224
+  ]
+ },
+ {
+  "label": "Close Temporary filters",
+  "flags": "tap",
+  "at": [
+   640,
+   224
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   859
+  ]
+ },
+ {
+  "label": "Availability",
+  "at": [
+   360,
+   341
+  ]
+ },
+ {
+  "label": "Listed rate",
+  "flags": "tap,sel",
+  "at": [
+   190,
+   425
+  ]
+ },
+ {
+  "label": "Listed rate",
+  "at": [
+   190,
+   423
+  ]
+ },
+ {
+  "label": "No listed rate",
+  "flags": "tap",
+  "at": [
+   530,
+   425
+  ]
+ },
+ {
+  "label": "No listed rate",
+  "at": [
+   530,
+   423
+  ]
+ },
+ {
+  "label": "Loan purpose",
+  "at": [
+   360,
+   541
+  ]
+ },
+ {
+  "label": "Investor",
+  "flags": "tap",
+  "at": [
+   108,
+   629
+  ]
+ },
+ {
+  "label": "Investor",
+  "at": [
+   108,
+   629
+  ]
+ },
+ {
+  "label": "Owner occupied",
+  "flags": "tap",
+  "at": [
+   327,
+   629
+  ]
+ },
+ {
+  "label": "Owner occupied",
+  "at": [
+   327,
+   629
+  ]
+ },
+ {
+  "label": "Unspecified purpose",
+  "flags": "tap",
+  "at": [
+   186,
+   741
+  ]
+ },
+ {
+  "label": "Unspecified purpose",
+  "at": [
+   186,
+   741
+  ]
+ },
+ {
+  "label": "Other purpose",
+  "flags": "tap",
+  "at": [
+   469,
+   741
+  ]
+ },
+ {
+  "label": "Other purpose",
+  "at": [
+   469,
+   741
+  ]
+ },
+ {
+  "label": "Rate type",
+  "at": [
+   360,
+   857
+  ]
+ },
+ {
+  "label": "Fixed",
+  "flags": "tap",
+  "at": [
+   92,
+   945
+  ]
+ },
+ {
+  "label": "Fixed",
+  "at": [
+   92,
+   945
+  ]
+ },
+ {
+  "label": "Variable",
+  "flags": "tap",
+  "at": [
+   244,
+   945
+  ]
+ },
+ {
+  "label": "Variable",
+  "at": [
+   244,
+   945
+  ]
+ },
+ {
+  "label": "Fixed · bundle",
+  "flags": "tap",
+  "at": [
+   449,
+   945
+  ]
+ },
+ {
+  "label": "Fixed · bundle",
+  "at": [
+   449,
+   945
+  ]
+ },
+ {
+  "label": "Introductory",
+  "flags": "tap",
+  "at": [
+   133,
+   1057
+  ]
+ },
+ {
+  "label": "Introductory",
+  "at": [
+   133,
+   1057
+  ]
+ },
+ {
+  "label": "Variable · bundle",
+  "flags": "tap",
+  "at": [
+   380,
+   1057
+  ]
+ },
+ {
+  "label": "Variable · bundle",
+  "at": [
+   380,
+   1057
+  ]
+ },
+ {
+  "label": "Repayment",
+  "at": [
+   360,
+   1173
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "flags": "tap",
+  "at": [
+   175,
+   1261
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "at": [
+   175,
+   1261
+  ]
+ },
+ {
+  "label": "Interest only",
+  "flags": "tap",
+  "at": [
+   435,
+   1261
+  ]
+ },
+ {
+  "label": "Interest only",
+  "at": [
+   435,
+   1261
+  ]
+ },
+ {
+  "label": "LVR · Tier",
+  "at": [
+   360,
+   1377
+  ]
+ },
+ {
+  "label": "LVR ≤0.700%",
+  "flags": "tap",
+  "at": [
+   139,
+   1423
+  ]
+ },
+ {
+  "label": "LVR ≤0.700%",
+  "at": [
+   139,
+   1438
+  ]
+ },
+ {
+  "label": "LVR ≤0.850%",
+  "flags": "tap",
+  "at": [
+   368,
+   1423
+  ]
+ },
+ {
+  "label": "LVR ≤0.850%",
+  "at": [
+   368,
+   1438
+  ]
+ },
+ {
+  "label": "LVR ≤10.0%",
+  "flags": "tap",
+  "at": [
+   589,
+   1423
+  ]
+ },
+ {
+  "label": "LVR ≤10.0%",
+  "at": [
+   589,
+   1438
+  ]
+ },
+ {
+  "label": "LVR ≤17.5%",
+  "flags": "tap",
+  "at": [
+   131,
+   1479
+  ]
+ },
+ {
+  "label": "LVR ≤17.5%",
+  "at": [
+   131,
+   1494
+  ]
+ },
+ {
+  "label": "LVR ≤30.0%",
+  "flags": "tap",
+  "at": [
+   344,
+   1479
+  ]
+ },
+ {
+  "label": "LVR ≤30.0%",
+  "at": [
+   344,
+   1494
+  ]
+ },
+ {
+  "label": "Reset",
+  "flags": "tap",
+  "at": [
+   154,
+   1502
+  ]
+ },
+ {
+  "label": "Reset",
+  "at": [
+   154,
+   1503
+  ]
+ },
+ {
+  "label": "Show 6,878 rates",
+  "flags": "tap",
+  "at": [
+   494,
+   1502
+  ]
+ },
+ {
+  "label": "Show 6,878 rates",
+  "at": [
+   494,
+   1503
+  ]
+ }
+]

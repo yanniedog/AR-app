@@ -1,0 +1,348 @@
+[
+ {
+  "label": "",
+  "flags": "tap",
+  "at": [
+   360,
+   800
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "at": [
+   300,
+   224
+  ]
+ },
+ {
+  "label": "Close Temporary filters",
+  "flags": "tap",
+  "at": [
+   640,
+   224
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   859
+  ]
+ },
+ {
+  "label": "Show Published details",
+  "flags": "tap",
+  "at": [
+   360,
+   249
+  ]
+ },
+ {
+  "label": "Published details",
+  "at": [
+   328,
+   229
+  ]
+ },
+ {
+  "label": "Lenders",
+  "at": [
+   360,
+   309
+  ]
+ },
+ {
+  "label": "Search lenders",
+  "flags": "tap",
+  "at": [
+   386,
+   407
+  ]
+ },
+ {
+  "label": "360 MMS",
+  "flags": "tap",
+  "at": [
+   118,
+   533
+  ]
+ },
+ {
+  "label": "360 MMS",
+  "at": [
+   118,
+   533
+  ]
+ },
+ {
+  "label": "AAA FINANCIAL CORPORATION",
+  "flags": "tap",
+  "at": [
+   445,
+   533
+  ]
+ },
+ {
+  "label": "AAA FINANCIAL CORPORATION",
+  "at": [
+   445,
+   533
+  ]
+ },
+ {
+  "label": "Abacus Home Loans",
+  "flags": "tap",
+  "at": [
+   187,
+   645
+  ]
+ },
+ {
+  "label": "Abacus Home Loans",
+  "at": [
+   187,
+   645
+  ]
+ },
+ {
+  "label": "AFG Align",
+  "flags": "tap",
+  "at": [
+   445,
+   645
+  ]
+ },
+ {
+  "label": "AFG Align",
+  "at": [
+   445,
+   645
+  ]
+ },
+ {
+  "label": "AFG Commercial",
+  "flags": "tap",
+  "at": [
+   164,
+   757
+  ]
+ },
+ {
+  "label": "AFG Commercial",
+  "at": [
+   164,
+   757
+  ]
+ },
+ {
+  "label": "AFG Home Loans - Retro",
+  "flags": "tap",
+  "at": [
+   490,
+   757
+  ]
+ },
+ {
+  "label": "AFG Home Loans - Retro",
+  "at": [
+   490,
+   757
+  ]
+ },
+ {
+  "label": "AFG Home Loans Alpha",
+  "flags": "tap",
+  "at": [
+   206,
+   869
+  ]
+ },
+ {
+  "label": "AFG Home Loans Alpha",
+  "at": [
+   206,
+   869
+  ]
+ },
+ {
+  "label": "Alb'ay Ijarah Home Finance",
+  "flags": "tap",
+  "at": [
+   226,
+   981
+  ]
+ },
+ {
+  "label": "Alb'ay Ijarah Home Finance",
+  "at": [
+   226,
+   981
+  ]
+ },
+ {
+  "label": "AMP - My AMP",
+  "flags": "tap",
+  "at": [
+   555,
+   981
+  ]
+ },
+ {
+  "label": "AMP - My AMP",
+  "at": [
+   555,
+   981
+  ]
+ },
+ {
+  "label": "ANZ",
+  "flags": "tap",
+  "at": [
+   86,
+   1093
+  ]
+ },
+ {
+  "label": "ANZ",
+  "at": [
+   86,
+   1093
+  ]
+ },
+ {
+  "label": "Apollo",
+  "flags": "tap",
+  "at": [
+   221,
+   1093
+  ]
+ },
+ {
+  "label": "Apollo",
+  "at": [
+   221,
+   1093
+  ]
+ },
+ {
+  "label": "Arab Bank Australia Limited",
+  "flags": "tap",
+  "at": [
+   229,
+   1205
+  ]
+ },
+ {
+  "label": "Arab Bank Australia Limited",
+  "at": [
+   229,
+   1205
+  ]
+ },
+ {
+  "label": "Athena Home Loans",
+  "flags": "tap",
+  "at": [
+   184,
+   1317
+  ]
+ },
+ {
+  "label": "Athena Home Loans",
+  "at": [
+   184,
+   1317
+  ]
+ },
+ {
+  "label": "Aussie Activate",
+  "flags": "tap",
+  "at": [
+   474,
+   1317
+  ]
+ },
+ {
+  "label": "Aussie Activate",
+  "at": [
+   474,
+   1317
+  ]
+ },
+ {
+  "label": "Aussie Elevate",
+  "flags": "tap",
+  "at": [
+   149,
+   1405
+  ]
+ },
+ {
+  "label": "Aussie Elevate",
+  "at": [
+   149,
+   1420
+  ]
+ },
+ {
+  "label": "Aussie Select",
+  "flags": "tap",
+  "at": [
+   391,
+   1405
+  ]
+ },
+ {
+  "label": "Aussie Select",
+  "at": [
+   391,
+   1420
+  ]
+ },
+ {
+  "label": "Australian Military Bank",
+  "flags": "tap",
+  "at": [
+   203,
+   1461
+  ]
+ },
+ {
+  "label": "Australian Military Bank",
+  "at": [
+   203,
+   1476
+  ]
+ },
+ {
+  "label": "Reset",
+  "flags": "tap",
+  "at": [
+   154,
+   1502
+  ]
+ },
+ {
+  "label": "Reset",
+  "at": [
+   154,
+   1503
+  ]
+ },
+ {
+  "label": "Show 4,349 rates",
+  "flags": "tap",
+  "at": [
+   494,
+   1502
+  ]
+ },
+ {
+  "label": "Show 4,349 rates",
+  "at": [
+   494,
+   1503
+  ]
+ }
+]
