@@ -1,0 +1,332 @@
+[
+ {
+  "label": "Verified · 1.0.355",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Back",
+  "flags": "tap",
+  "at": [
+   70,
+   331
+  ]
+ },
+ {
+  "label": "App health audit",
+  "at": [
+   308,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   672,
+   331
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   894
+  ]
+ },
+ {
+  "label": "Verified upload",
+  "at": [
+   360,
+   343
+  ]
+ },
+ {
+  "label": "Verified upload",
+  "at": [
+   186,
+   342
+  ]
+ },
+ {
+  "label": "Uploaded",
+  "at": [
+   360,
+   371
+  ]
+ },
+ {
+  "label": "https://paste.rs/Coiti",
+  "at": [
+   360,
+   399
+  ]
+ },
+ {
+  "label": "https://paste.c-net.org/3e6ac1e4-e36e-5d54-3e40-672ffa4b76f6",
+  "at": [
+   360,
+   459
+  ]
+ },
+ {
+  "label": "Copy paste.rs link",
+  "flags": "tap",
+  "at": [
+   360,
+   565
+  ]
+ },
+ {
+  "label": "Copy paste.rs link",
+  "at": [
+   361,
+   565
+  ]
+ },
+ {
+  "label": "Copy paste.c-net.org link",
+  "flags": "tap",
+  "at": [
+   360,
+   680
+  ]
+ },
+ {
+  "label": "Copy paste.c-net.org link",
+  "at": [
+   361,
+   680
+  ]
+ },
+ {
+  "label": "Audit history",
+  "at": [
+   360,
+   879
+  ]
+ },
+ {
+  "label": "Retained runs",
+  "at": [
+   360,
+   963
+  ]
+ },
+ {
+  "label": "1 / 120",
+  "at": [
+   360,
+   1011
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1115
+  ]
+ },
+ {
+  "label": "Live checks",
+  "flags": "tap,sel",
+  "at": [
+   140,
+   1115
+  ]
+ },
+ {
+  "label": "Live checks",
+  "at": [
+   140,
+   1116
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1235
+  ]
+ },
+ {
+  "label": "Performance",
+  "flags": "tap,sel",
+  "at": [
+   149,
+   1235
+  ]
+ },
+ {
+  "label": "Performance",
+  "at": [
+   149,
+   1236
+  ]
+ },
+ {
+  "label": "UX & fluidity",
+  "flags": "tap",
+  "at": [
+   394,
+   1235
+  ]
+ },
+ {
+  "label": "UX & fluidity",
+  "at": [
+   394,
+   1236
+  ]
+ },
+ {
+  "label": "Coverage",
+  "flags": "tap",
+  "at": [
+   605,
+   1235
+  ]
+ },
+ {
+  "label": "Coverage",
+  "at": [
+   615,
+   1236
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1350
+  ]
+ },
+ {
+  "label": "Failures",
+  "flags": "tap",
+  "at": [
+   113,
+   1350
+  ]
+ },
+ {
+  "label": "Failures",
+  "at": [
+   113,
+   1356
+  ]
+ },
+ {
+  "label": "Check completion",
+  "flags": "tap",
+  "at": [
+   363,
+   1350
+  ]
+ },
+ {
+  "label": "Check completion",
+  "at": [
+   363,
+   1356
+  ]
+ },
+ {
+  "label": "Duration",
+  "flags": "tap",
+  "at": [
+   610,
+   1350
+  ]
+ },
+ {
+  "label": "Duration",
+  "at": [
+   616,
+   1356
+  ]
+ },
+ {
+  "label": "Slowest check",
+  "flags": "tap,sel",
+  "at": [
+   702,
+   1350
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

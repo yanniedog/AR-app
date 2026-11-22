@@ -1,0 +1,375 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Profile",
+  "at": [
+   207,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Saved requirements",
+  "at": [
+   360,
+   305
+  ]
+ },
+ {
+  "label": "Scope · All screens",
+  "at": [
+   360,
+   353
+  ]
+ },
+ {
+  "label": "Home loans · Saved requirements 0",
+  "at": [
+   360,
+   393
+  ]
+ },
+ {
+  "label": "Loan purpose",
+  "at": [
+   360,
+   457
+  ]
+ },
+ {
+  "label": "Investor",
+  "flags": "tap",
+  "at": [
+   108,
+   541
+  ]
+ },
+ {
+  "label": "Investor",
+  "at": [
+   108,
+   541
+  ]
+ },
+ {
+  "label": "Owner occupied",
+  "flags": "tap",
+  "at": [
+   327,
+   541
+  ]
+ },
+ {
+  "label": "Owner occupied",
+  "at": [
+   327,
+   541
+  ]
+ },
+ {
+  "label": "Unspecified",
+  "flags": "tap",
+  "at": [
+   569,
+   541
+  ]
+ },
+ {
+  "label": "Unspecified",
+  "at": [
+   569,
+   541
+  ]
+ },
+ {
+  "label": "OTHER",
+  "flags": "tap",
+  "at": [
+   103,
+   653
+  ]
+ },
+ {
+  "label": "OTHER",
+  "at": [
+   103,
+   653
+  ]
+ },
+ {
+  "label": "Rate type",
+  "at": [
+   360,
+   745
+  ]
+ },
+ {
+  "label": "Fixed",
+  "flags": "tap",
+  "at": [
+   92,
+   829
+  ]
+ },
+ {
+  "label": "Fixed",
+  "at": [
+   92,
+   829
+  ]
+ },
+ {
+  "label": "Variable",
+  "flags": "tap",
+  "at": [
+   244,
+   829
+  ]
+ },
+ {
+  "label": "Variable",
+  "at": [
+   244,
+   829
+  ]
+ },
+ {
+  "label": "Fixed · bundle",
+  "flags": "tap",
+  "at": [
+   449,
+   829
+  ]
+ },
+ {
+  "label": "Fixed · bundle",
+  "at": [
+   449,
+   829
+  ]
+ },
+ {
+  "label": "Introductory",
+  "flags": "tap",
+  "at": [
+   133,
+   941
+  ]
+ },
+ {
+  "label": "Introductory",
+  "at": [
+   133,
+   941
+  ]
+ },
+ {
+  "label": "Variable · bundle",
+  "flags": "tap",
+  "at": [
+   380,
+   941
+  ]
+ },
+ {
+  "label": "Variable · bundle",
+  "at": [
+   380,
+   941
+  ]
+ },
+ {
+  "label": "Repayment",
+  "at": [
+   360,
+   1033
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "flags": "tap",
+  "at": [
+   175,
+   1117
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "at": [
+   175,
+   1117
+  ]
+ },
+ {
+  "label": "Interest only",
+  "flags": "tap",
+  "at": [
+   435,
+   1117
+  ]
+ },
+ {
+  "label": "Interest only",
+  "at": [
+   435,
+   1117
+  ]
+ },
+ {
+  "label": "LVR",
+  "at": [
+   360,
+   1209
+  ]
+ },
+ {
+  "label": "<60",
+  "flags": "tap",
+  "at": [
+   81,
+   1293
+  ]
+ },
+ {
+  "label": "<60",
+  "at": [
+   81,
+   1293
+  ]
+ },
+ {
+  "label": "60-70",
+  "flags": "tap",
+  "at": [
+   208,
+   1293
+  ]
+ },
+ {
+  "label": "60-70",
+  "at": [
+   208,
+   1293
+  ]
+ },
+ {
+  "label": "70-80",
+  "flags": "tap",
+  "at": [
+   348,
+   1293
+  ]
+ },
+ {
+  "label": "70-80",
+  "at": [
+   348,
+   1293
+  ]
+ },
+ {
+  "label": "80-90",
+  "flags": "tap",
+  "at": [
+   488,
+   1293
+  ]
+ },
+ {
+  "label": "80-90",
+  "at": [
+   488,
+   1293
+  ]
+ },
+ {
+  "label": ">90",
+  "flags": "tap",
+  "at": [
+   616,
+   1293
+  ]
+ },
+ {
+  "label": ">90",
+  "at": [
+   616,
+   1293
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   360,
+   1379
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

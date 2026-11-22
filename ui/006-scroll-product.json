@@ -1,0 +1,179 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Offset Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "$132 · Conditions: Unverified · $700 · Conditions: Unverified · $50 · Conditions: Unverified · $487 · Conditions: Unveri",
+  "at": [
+   372,
+   219
+  ]
+ },
+ {
+  "label": "Offset account",
+  "at": [
+   145,
+   552
+  ]
+ },
+ {
+  "label": "Unknown · Conditions: Unverified",
+  "at": [
+   485,
+   552
+  ]
+ },
+ {
+  "label": "Availability",
+  "at": [
+   228,
+   604
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   568,
+   604
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   286,
+   656
+  ]
+ },
+ {
+  "label": "Unverified",
+  "at": [
+   626,
+   656
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   360,
+   808
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "flags": "tap",
+  "at": [
+   360,
+   926
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "at": [
+   386,
+   926
+  ]
+ },
+ {
+  "label": "Show Fees",
+  "flags": "tap",
+  "at": [
+   360,
+   1152
+  ]
+ },
+ {
+  "label": "Fees",
+  "at": [
+   328,
+   1152
+  ]
+ },
+ {
+  "label": "Published product history",
+  "at": [
+   360,
+   1316
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
