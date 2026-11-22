@@ -24,4 +24,19 @@ describe('LVR published as a ratio', () => {
   it('matches a selected 80% filter against a ratio tier of 0.8', () => {
     expect(matchesLvrTier('lvr_=0.8', ['lvr_=80%'])).toBe(true);
   });
+
+  it('reads open-ended ratio bounds as percentages so filtering matches the label', () => {
+    expect(parseLvrRange('lvr_>=0.7')).toMatchObject({ lo: 70, inclusive: true });
+    expect(parseLvrRange('lvr_0.7+')).toMatchObject({ lo: 70 });
+    expect(parseLvrRange('lvr_>0.8')).toMatchObject({ lo: 80, inclusive: false });
+    expect(lvrRangeContains(parseLvrRange('lvr_>=0.7')!, 65)).toBe(false);
+    expect(String(lvrTierLabel('lvr_>=0.7'))).toBe('LVR ≥70.0%');
+  });
+  it('leaves explicitly percentage-marked values alone', () => {
+    expect(parseLvrRange('lvr_=0.7%')).toMatchObject({ hi: 0.7 });
+    expect(String(lvrTierLabel('lvr_=0.7%'))).toBe('LVR ≤0.700%');
+  });
+  it('labels underscore ratio ranges', () => {
+    expect(String(lvrTierLabel('lvr_0.6_0.8'))).toBe('LVR 60.0–80.0%');
+  });
 });
