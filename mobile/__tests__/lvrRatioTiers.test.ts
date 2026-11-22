@@ -39,4 +39,8 @@ describe('LVR published as a ratio', () => {
   it('labels underscore ratio ranges', () => {
     expect(String(lvrTierLabel('lvr_0.6_0.8'))).toBe('LVR 60.0–80.0%');
   });
+  it('keeps ratio precision beyond six decimals', () => {
+    expect(parseLvrRange('lvr_=0.8000001')).toMatchObject({ hi: 80.00001 });
+    expect(parseLvrRange('lvr_>=0.0000001')).toMatchObject({ lo: 0.00001 });
+  });
 });

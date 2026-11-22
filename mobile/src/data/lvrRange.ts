@@ -2,7 +2,7 @@
 export interface LvrRange { lo: number; hi: number; inclusive: boolean; hiInclusive?: boolean }
 
 /** A few lenders publish LVR as a ratio (0.7 for 70%); no LVR band is 1% or lower. */
-export const lvrRatioToPercent = (n: number): number => (n > 0 && n <= 1 ? Math.round(n * 1e6) / 1e4 : n);
+export const lvrRatioToPercent = (n: number): number => (n > 0 && n <= 1 ? Number((n * 100).toPrecision(12)) : n);
 
 export function parseLvrRange(value: string | undefined): LvrRange | null {
   // A "%" in the published tier marks it as already a percentage.
