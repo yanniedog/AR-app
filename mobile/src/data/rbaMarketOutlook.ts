@@ -8,7 +8,7 @@ import {
 } from './rbaMarketOutlookParse';
 import type { RbaBondForwards, RbaMarketOutlook } from './rbaMarketOutlookTypes';
 import { RBA_F17_FORWARD_URL, RBA_J1_FORECAST_URL } from './officialEconomicSources';
-import { logOfficialDataFailure } from './officialDataFailure';
+import { logOfficialDataFailure, parseOfficialData } from './officialDataFailure';
 
 export type { RbaBondForwards, RbaMarketOutlook } from './rbaMarketOutlookTypes';
 export { parseRbaBondForwardsCsv, parseRbaEconomistsCsv } from './rbaMarketOutlookParse';
@@ -139,19 +139,16 @@ async function fetchCsv(url: string): Promise<string> {
 }
 
 async function readSource<T>(url: string, parse: (text: string) => T): Promise<T> {
+  // A request begun before a local audit started is still a real failure; one begun inside it is expected.
+  const startedInAudit = isLocalAppHealthAudit();
   let text: string;
   try {
     text = await fetchCsv(url);
   } catch (error) {
-    if (!isLocalAppHealthAudit()) logOfficialDataFailure(url, 'request', error);
+    if (!startedInAudit) logOfficialDataFailure(url, 'request', error);
     throw error;
   }
-  try {
-    return parse(text);
-  } catch (error) {
-    logOfficialDataFailure(url, 'parse', error);
-    throw error;
-  }
+  return parseOfficialData(url, () => parse(text), startedInAudit);
 }
 
 async function commit(

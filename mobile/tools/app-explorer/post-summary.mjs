@@ -76,11 +76,11 @@ if (crash.length) {
 }
 const official = new Map();
 for (const line of logcat.split('\n')) {
-  const m = line.match(/official-data: stage=(\w+) source=(\S+) reason=(.+?)\s*$/);
+  const m = line.match(/official-data-summary: stage=(\w+) source=(\S+) reason=(.+?)\s*$/);
   if (m) official.set(`${m[2]} ${m[1]} ${m[3]}`, (official.get(`${m[2]} ${m[1]} ${m[3]}`) || 0) + 1);
 }
 if (official.size) {
-  out.push('', 'Official data fetch failures (app log):', '| source | stage | reason | times |', '| --- | --- | --- | --- |');
+  out.push('', 'Official data fetch failures (app log, each distinct failure once):', '| source | stage | reason | times |', '| --- | --- | --- | --- |');
   for (const [key, count] of [...official].slice(0, 12)) {
     const [source, stage, ...reason] = key.split(' ');
     out.push(`| ${source} | ${stage} | ${reason.join(' ').replace(/\|/g, '/')} | ${count} |`);
