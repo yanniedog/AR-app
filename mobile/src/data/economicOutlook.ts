@@ -1,4 +1,5 @@
 import { cache } from './cache';
+import { logOfficialDataFailure, parseOfficialData } from './officialDataFailure';
 import { getLocalAppHealthAuditGeneration, isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import {
   ABS_CPI_RELEASE_URL,
@@ -130,6 +131,7 @@ interface FetchedCsv {
 }
 
 async function fetchCsv(url: string, timeoutMs = 15_000): Promise<FetchedCsv> {
+  const startedInAudit = isLocalAppHealthAudit();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -145,6 +147,9 @@ async function fetchCsv(url: string, timeoutMs = 15_000): Promise<FetchedCsv> {
       ?? response.headers?.get?.('Last-Modified')
       ?? null;
     return { text, lastModified };
+  } catch (error) {
+    if (!startedInAudit) logOfficialDataFailure(url, 'request', error);
+    throw error;
   } finally {
     clearTimeout(timer);
   }
@@ -262,8 +267,9 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       ),
       (async () => {
         try {
+          const forecastText = await fetchText(URLS.cashForecast, 5_000);
           return {
-            forecast: parseCashForecastCsv(await fetchText(URLS.cashForecast, 5_000)),
+            forecast: parseOfficialData(URLS.cashForecast, () => parseCashForecastCsv(forecastText)),
             error: null as string | null,
           };
         } catch (error) {
@@ -276,7 +282,8 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       (async () => {
         try {
           return {
-            history: parseCashRateTargetCsv(await fetchText(URLS.cashRate)),
+            history: await fetchText(URLS.cashRate).then(text =>
+              parseOfficialData(URLS.cashRate, () => parseCashRateTargetCsv(text))),
             error: null as string | null,
           };
         } catch (error) {
@@ -292,7 +299,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
           const publicationDate = httpDateToIso(fetched.lastModified)
             || checkedAt.slice(0, 10);
           return {
-            series: parseAbsCpiCsv(fetched.text, publicationDate),
+            series: parseOfficialData(ABS_HEADLINE_CPI_URL, () => parseAbsCpiCsv(fetched.text, publicationDate)),
             error: null as string | null,
           };
         } catch (error) {
@@ -327,7 +334,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
         };
       }
       try {
-        let parsed = parseRbaSeriesCsv(text, definition.seriesId);
+        let parsed = parseOfficialData(URLS[definition.source], () => parseRbaSeriesCsv(text, definition.seriesId));
         let sourceUrl: string = URLS[definition.source];
         let frequency = definition.frequency;
         let shortLabel = definition.shortLabel;
