@@ -1,4 +1,4 @@
-import { parseCsv, parseCsvQuoted, parseRbaSeriesCsv } from '../src/data/economicOutlookParse';
+import { parseCsv, parseCsvQuoted, parseRbaSeriesCsv, parseRbaSeriesCsvFull } from '../src/data/economicOutlookParse';
 
 function seeded(seed: number) {
   let s = seed;
@@ -59,24 +59,75 @@ describe('parseCsv', () => {
       split.mockRestore();
     }
   });
-  it('parses an RBA table once when several series are read from the same text', () => {
-    const text = [
-      'Title,A,B',
-      'Series ID,S1,S2',
-      'Publication date,01-Jan-2026,01-Jan-2026',
-      '31-Mar-2026,1.5,2.5',
-      '30-Jun-2026,1.6,2.6',
-    ].join('\n');
-    const split = jest.spyOn(String.prototype, 'split');
-    try {
-      const first = parseRbaSeriesCsv(text, 'S1');
-      const callsAfterFirst = split.mock.calls.length;
-      const second = parseRbaSeriesCsv(text, 'S2');
-      expect(split.mock.calls.length).toBe(callsAfterFirst);
-      expect(first.points.map((point) => point.value)).toEqual([1.5, 1.6]);
-      expect(second.points.map((point) => point.value)).toEqual([2.5, 2.6]);
-    } finally {
-      split.mockRestore();
-    }
+  describe('parseRbaSeriesCsv', () => {
+    const outcome = (fn: () => unknown) => {
+      try { return { value: fn() }; } catch (error) { return { error: String((error as Error).message) }; }
+    };
+    const same = (text: string, seriesId: string) =>
+      expect(outcome(() => parseRbaSeriesCsv(text, seriesId))).toEqual(
+        outcome(() => parseRbaSeriesCsvFull(text, seriesId)),
+      );
+    const table = [
+      'Title,A,B,C',
+      'Series ID,S1,S2,S3',
+      'Publication date,01-Jan-2026,02-Jan-2026,03-Jan-2026',
+      '31/03/2026,1.5,2.5,',
+      '30-Jun-2026,1.6,,3.6',
+      '30-Jun-2026,1.7,2.7,3.7',
+      '30/09/2026,1.8',
+      'not a date,9,9,9',
+      '',
+    ];
+
+    it('gives the same series as the full parser on varied tables', () => {
+      for (const id of ['S1', 'S2', 'S3', 'S9', 'Series ID']) same(table.join('\n'), id);
+      same(table.join('\r\n'), 'S2');
+      same(`\uFEFF${table.join('\n')}`, 'S1');
+      same(table.slice(0, 2).join('\n'), 'S1');
+      same(table.slice(2).join('\n'), 'S1');
+      same(table.filter((line) => !line.startsWith('Publication')).join('\n'), 'S3');
+      same(['"Title","A"', 'Series ID,S1', '"31/03/2026","1,500"'].join('\n'), 'S1');
+      same(['Title,A', '"Series ID","S1"', 'Publication date,"01-Jan-2026"', '31/03/2026,"2.5"'].join('\n'), 'S1');
+    });
+
+    it('falls back to the full parser when a quoted field spans lines', () => {
+      const text = ['Title,"multi', 'line"', 'Series ID,S1', '31/03/2026,4.5'].join('\n');
+      same(text, 'S1');
+      expect(parseRbaSeriesCsv(text, 'S1').points).toEqual([{ date: '2026-03-31', value: 4.5 }]);
+    });
+
+    it('matches the full parser on random tables', () => {
+      const next = seeded(7);
+      const pick = <T,>(items: T[]) => items[Math.floor(next() * items.length)];
+      for (let run = 0; run < 300; run += 1) {
+        const width = 2 + Math.floor(next() * 6);
+        const ids = Array.from({ length: width }, (_, index) => `S${index}`);
+        const lines = ['Title,' + ids.map(() => 'x').join(','), 'Series ID,' + ids.join(',')];
+        if (next() > 0.3) lines.push('Publication date,' + ids.map(() => '01-Jan-2026').join(','));
+        const rows = Math.floor(next() * 8);
+        for (let row = 0; row < rows; row += 1) {
+          const cells = ids.map(() => pick(['', '1.25', '-3', 'n/a', ' 4.5 ', '"7.5"', '1,5']));
+          const keep = Math.max(0, cells.length - Math.floor(next() * 3));
+          const date = pick(['31/03/2026', '30-Jun-2026', '1/1/2020', 'bad', '31/03/2026']);
+          lines.push([date, ...cells.slice(0, keep)].join(','));
+        }
+        const text = lines.join(pick(['\n', '\r\n']));
+        same(text, pick([...ids, 'S9']));
+      }
+    });
+
+    it('does not split data rows into every cell', () => {
+      const wide = ['Title,' + 'x,'.repeat(40) + 'x', 'Series ID,' + Array.from({ length: 41 }, (_, i) => `S${i}`).join(',')];
+      for (let row = 0; row < 50; row += 1) wide.push(`31/03/20${10 + (row % 20)},${Array.from({ length: 41 }, (_, i) => i + row).join(',')}`);
+      const split = jest.spyOn(String.prototype, 'split');
+      try {
+        const series = parseRbaSeriesCsv(wide.join('\n'), 'S40');
+        expect(series.points.length).toBeGreaterThan(0);
+        // One split for the lines, one per header line at most; never one per data row.
+        expect(split.mock.calls.length).toBeLessThanOrEqual(4);
+      } finally {
+        split.mockRestore();
+      }
+    });
   });
 });

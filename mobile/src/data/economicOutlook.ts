@@ -23,7 +23,6 @@ import {
   parseCashRateTargetCsv,
   parseRbaSeriesCsv,
   preferNewerSeries,
-  releaseParsedCsvCache,
 } from './economicOutlookParse';
 import {
   INDICATOR_DEFINITIONS,
@@ -214,7 +213,13 @@ async function commitEconomicResult(
       accepted = latestSuccessful.payload;
       return;
     }
-    if (persist) await cache.writeEconomicOutlook(payload);
+    if (persist) {
+      // Time only the write, not the wait behind an earlier commit.
+      const writeStartedAt = monotonicNow();
+      await cache.writeEconomicOutlook(payload);
+      const writeMs = Math.round(monotonicNow() - writeStartedAt);
+      if (writeMs > SLOW_PARSE_MS) debugLog.warn('economic-outlook', `slow save: ${writeMs} ms`);
+    }
     // A native write already started before audit entry cannot be cancelled,
     // but its completion must not publish online observations into the chart.
     if (isLocalAppHealthAudit() || auditGeneration !== getLocalAppHealthAuditGeneration()) {
@@ -395,7 +400,6 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       }
     });
 
-    releaseParsedCsvCache();
     const fetchMs = Math.max(0, Math.round(allSettledAt - fetchStartedAt - parseMsWhileFetching));
     parseMs = Math.round(parseMs);
     const slowRefresh = slowRefreshMessage(fetchMs, parseMs);

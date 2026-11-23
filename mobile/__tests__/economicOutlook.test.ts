@@ -774,6 +774,43 @@ describe('economic outlook', () => {
     expect(String(slow[0][1])).toBe('slow refresh: fetch 8100 ms, parse 200 ms');
   });
 
+  it('logs a slow save separately from fetch and parse', async () => {
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(null);
+    let clock = 0;
+    jest.spyOn(performance, 'now').mockImplementation(() => clock);
+    jest.spyOn(cache, 'writeEconomicOutlook').mockImplementation(async () => { clock += 700; });
+    const warn = jest.spyOn(debugLog, 'warn').mockImplementation(() => undefined);
+    jest.spyOn(global, 'fetch').mockImplementation(async (input) => mockCsvResponse(String(input)));
+
+    await loadEconomicOutlook(true);
+    const messages = warn.mock.calls.filter(([tag]) => tag === 'economic-outlook').map(([, message]) => String(message));
+    expect(messages).toEqual(['slow save: 700 ms']);
+  });
+
+  it('does not report time spent queued behind an earlier commit as a slow save', async () => {
+    const cached = fullOutlookCsv('2020-01-01T00:00:00.000Z');
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(cached);
+    let clock = 0;
+    jest.spyOn(performance, 'now').mockImplementation(() => clock);
+    let finishFirstWrite!: () => void;
+    const firstWrite = new Promise<void>((resolve) => { finishFirstWrite = resolve; });
+    const write = jest.spyOn(cache, 'writeEconomicOutlook')
+      .mockImplementationOnce(() => firstWrite)
+      .mockImplementation(async () => undefined);
+    const warn = jest.spyOn(debugLog, 'warn').mockImplementation(() => undefined);
+    jest.spyOn(global, 'fetch').mockImplementation(async (input) => mockCsvResponse(String(input)));
+
+    const first = loadEconomicOutlook(false);
+    for (let i = 0; i < 60 && !write.mock.calls.length; i += 1) await Promise.resolve();
+    const second = loadEconomicOutlook(true);
+    for (let i = 0; i < 60; i += 1) await Promise.resolve();
+    clock += 5_000; // the second refresh is queued behind the first write for 5 s
+    finishFirstWrite();
+    await Promise.all([first, second]);
+    expect(warn.mock.calls.filter(([tag, message]) => tag === 'economic-outlook' && String(message).startsWith('slow save'))).toHaveLength(1);
+    expect(warn).toHaveBeenCalledWith('economic-outlook', 'slow save: 5000 ms');
+  });
+
   it('counts the cash-rate parser as parse time, not fetch time', async () => {
     jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(null);
     jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
