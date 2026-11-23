@@ -11,7 +11,9 @@ import {
   parseRbaSeriesCsv,
   preferNewerSeries,
   resetEconomicOutlookRuntimeCacheForTests,
+  slowRefreshMessage,
 } from '../src/data/economicOutlook';
+import { debugLog } from '../src/lib/debugLog';
 import { cache } from '../src/data/cache';
 import { getLocalAppHealthAuditGeneration, isLocalAppHealthAudit } from '../src/lib/appHealthTransportGuard';
 
@@ -713,5 +715,82 @@ describe('economic outlook', () => {
     expect(outlook.refreshErrors).toEqual(
       expect.arrayContaining([expect.stringContaining('older official response ignored')]),
     );
+  });
+  it('reports a slow refresh only above the fetch and parse thresholds', () => {
+    expect(slowRefreshMessage(8_000, 400)).toBeNull();
+    expect(slowRefreshMessage(8_001, 0)).toBe('slow refresh: fetch 8001 ms, parse 0 ms');
+    expect(slowRefreshMessage(0, 401)).toBe('slow refresh: fetch 0 ms, parse 401 ms');
+  });
+
+  it('logs a warning when the online fetch phase is slow and stays quiet when it is fast', async () => {
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(null);
+    jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
+    const warn = jest.spyOn(debugLog, 'warn').mockImplementation(() => undefined);
+    // A fake monotonic clock that only moves when a fetch "takes" time, so parsing always reads as 0 ms.
+    let clock = 0;
+    jest.spyOn(performance, 'now').mockImplementation(() => clock);
+    const fetchSpy = jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      clock += 9_000;
+      return mockCsvResponse(String(input));
+    });
+
+    await loadEconomicOutlook(true);
+    const slow = warn.mock.calls.filter(([tag]) => tag === 'economic-outlook');
+    expect(slow).toHaveLength(1);
+    const match = /^slow refresh: fetch (\d+) ms, parse (\d+) ms$/.exec(String(slow[0][1]));
+    expect(match).not.toBeNull();
+    expect(Number(match![1])).toBeGreaterThan(8_000);
+    expect(Number(match![2])).toBe(0);
+
+    warn.mockClear();
+    resetEconomicOutlookRuntimeCacheForTests();
+    fetchSpy.mockImplementation(async (input) => mockCsvResponse(String(input)));
+    await loadEconomicOutlook(true);
+    expect(warn.mock.calls.filter(([tag]) => tag === 'economic-outlook')).toHaveLength(0);
+  });
+
+  it('keeps indicator parse time out of the fetch figure', async () => {
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(null);
+    jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
+    const warn = jest.spyOn(debugLog, 'warn').mockImplementation(() => undefined);
+    let clock = 0;
+    jest.spyOn(performance, 'now').mockImplementation(() => clock);
+    let fetches = 0;
+    jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      fetches += 1;
+      if (fetches === 1) clock += 8_100;
+      return mockCsvResponse(String(input));
+    });
+    const parseModule = jest.requireActual('../src/data/economicOutlookParse') as typeof import('../src/data/economicOutlookParse');
+    const realParse = parseModule.parseRbaSeriesCsv;
+    jest.spyOn(parseModule, 'parseRbaSeriesCsv').mockImplementation((text: string, seriesId: string) => {
+      clock += 25;
+      return realParse(text, seriesId);
+    });
+
+    await loadEconomicOutlook(true);
+    const slow = warn.mock.calls.filter(([tag]) => tag === 'economic-outlook');
+    expect(slow).toHaveLength(1);
+    expect(String(slow[0][1])).toBe('slow refresh: fetch 8100 ms, parse 200 ms');
+  });
+
+  it('counts the cash-rate parser as parse time, not fetch time', async () => {
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(null);
+    jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
+    const warn = jest.spyOn(debugLog, 'warn').mockImplementation(() => undefined);
+    let clock = 0;
+    jest.spyOn(performance, 'now').mockImplementation(() => clock);
+    jest.spyOn(global, 'fetch').mockImplementation(async (input) => mockCsvResponse(String(input)));
+    const parseModule = jest.requireActual('../src/data/economicOutlookParse') as typeof import('../src/data/economicOutlookParse');
+    const realParse = parseModule.parseCashRateTargetCsv;
+    jest.spyOn(parseModule, 'parseCashRateTargetCsv').mockImplementation((text: string) => {
+      clock += 600;
+      return realParse(text);
+    });
+
+    await loadEconomicOutlook(true);
+    const slow = warn.mock.calls.filter(([tag]) => tag === 'economic-outlook');
+    expect(slow).toHaveLength(1);
+    expect(String(slow[0][1])).toBe('slow refresh: fetch 0 ms, parse 600 ms');
   });
 });
