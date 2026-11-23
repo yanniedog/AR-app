@@ -865,7 +865,7 @@ function renderMarkdown(report, baseline) {
     '',
     `Mode ${report.mode} | ${report.steps.length} steps | crashes ${crashed.length} | step failures ${failed.length} | settle timeouts ${slow.length} | steps with JS/native errors ${withErrors.length}`,
     baseline ? `Baseline ${baseline.version}` : '',
-    report.audit ? `**${auditOutcomeLine(report.audit)} | audit log ${report.audit.url ? (report.audit.logBytes ? `${report.audit.logBytes} bytes (audit-log.txt) ${report.audit.logContentUrl || report.audit.url}` : `fetch failed (${report.audit.logError ?? report.audit.logStatus}) ${report.audit.url}`) : 'not uploaded'} | debug log ${report.audit.debugLog?.url ? (report.audit.debugLog.bytes ? `${report.audit.debugLog.bytes} bytes (debug-log.txt) ${report.audit.debugLog.url}` : `fetch failed (${report.audit.debugLog.error ?? report.audit.debugLog.status}) ${report.audit.debugLog.url}`) : report.audit.debugLog?.error ?? 'none'}**` : '',
+    report.audit ? `**${auditOutcomeLine(report.audit)} | audit log ${report.audit.url ? (report.audit.logError ? `unverified (${report.audit.logError}) ${report.audit.url}` : `${report.audit.logBytes ?? '?'} bytes (audit-log.txt) ${report.audit.logContentUrl || report.audit.url}`) : 'not uploaded'} | debug log ${report.audit.debugLog?.url ? (report.audit.debugLog.bytes ? `${report.audit.debugLog.bytes} bytes (debug-log.txt) ${report.audit.debugLog.url}` : `fetch failed (${report.audit.debugLog.error ?? report.audit.debugLog.status}) ${report.audit.debugLog.url}`) : report.audit.debugLog?.error ?? 'none'}**` : '',
     '',
     '| # | step | settle ms | Δ vs base | jank | p90 ms | mem MB | notes |',
     '|---|---|---:|---:|---:|---:|---:|---|',

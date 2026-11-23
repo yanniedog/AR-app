@@ -25,7 +25,7 @@ if (fs.existsSync(path.join(dir, 'audit-log.txt'))) {
     out.push(`Audit log could not be verified: ${error.message}`, '');
   }
 }
-const completion = auditCompletion(decoded) ?? audit.completion;
+const completion = auditCompletion(decoded);
 out.push(audit.kind ? `**${auditOutcomeLine({ ...audit, completion })}**` : auditLine, '');
 if (completion) {
   const fields = [['Collection', completion.collectionComplete], ['Coverage', completion.coverageComplete], ['Details', completion.detailsComplete]];
