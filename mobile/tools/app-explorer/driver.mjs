@@ -7,6 +7,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { computeVerdict, renderOutcome } from './session-verdict.mjs';
+import { auditCompletion, auditOutcomeLine, decodeAuditExport } from './audit-export.mjs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
@@ -705,11 +706,18 @@ class Explorer {
         audit.logContentUrl = contentUrl;
         fs.writeFileSync(path.join(this.out, 'audit-log.txt'), body);
         audit.logBytes = Buffer.byteLength(body);
+        const completion = auditCompletion(decodeAuditExport(body));
+        if (completion) audit.completion = completion;
+        else audit.logError = 'Audit export did not include a recognised completion outcome';
       } catch (error) {
         audit.logError = String(error.message || error);
       }
     }
-    audit.debugLog = await this.uploadDebugLog();
+    try {
+      audit.debugLog = await this.uploadDebugLog();
+    } catch (error) {
+      audit.debugLog = { error: String(error.message || error) };
+    }
     this.audit = audit;
     fs.writeFileSync(path.join(this.out, 'audit.json'), JSON.stringify(audit, null, 2));
     console.log(`Audit ${kind}: ${url ? `log ${audit.logBytes ?? '?'} bytes from ${url}` : 'no log URL'} after ${Math.round(elapsedMs / 1000)} s`);
@@ -857,7 +865,7 @@ function renderMarkdown(report, baseline) {
     '',
     `Mode ${report.mode} | ${report.steps.length} steps | crashes ${crashed.length} | step failures ${failed.length} | settle timeouts ${slow.length} | steps with JS/native errors ${withErrors.length}`,
     baseline ? `Baseline ${baseline.version}` : '',
-    report.audit ? `**Audit ${report.audit.kind}: outcome ${report.audit.outcome ?? 'completed'} | ${Math.round(report.audit.elapsedMs / 1000)} s | audit log ${report.audit.url ? (report.audit.logBytes ? `${report.audit.logBytes} bytes (audit-log.txt) ${report.audit.logContentUrl || report.audit.url}` : `fetch failed (${report.audit.logError ?? report.audit.logStatus}) ${report.audit.url}`) : 'not uploaded'} | debug log ${report.audit.debugLog?.url ? (report.audit.debugLog.bytes ? `${report.audit.debugLog.bytes} bytes (debug-log.txt) ${report.audit.debugLog.url}` : `fetch failed (${report.audit.debugLog.error ?? report.audit.debugLog.status}) ${report.audit.debugLog.url}`) : report.audit.debugLog?.error ?? 'none'}**` : '',
+    report.audit ? `**${auditOutcomeLine(report.audit)} | audit log ${report.audit.url ? (report.audit.logBytes ? `${report.audit.logBytes} bytes (audit-log.txt) ${report.audit.logContentUrl || report.audit.url}` : `fetch failed (${report.audit.logError ?? report.audit.logStatus}) ${report.audit.url}`) : 'not uploaded'} | debug log ${report.audit.debugLog?.url ? (report.audit.debugLog.bytes ? `${report.audit.debugLog.bytes} bytes (debug-log.txt) ${report.audit.debugLog.url}` : `fetch failed (${report.audit.debugLog.error ?? report.audit.debugLog.status}) ${report.audit.debugLog.url}`) : report.audit.debugLog?.error ?? 'none'}**` : '',
     '',
     '| # | step | settle ms | Δ vs base | jank | p90 ms | mem MB | notes |',
     '|---|---|---:|---:|---:|---:|---:|---|',
