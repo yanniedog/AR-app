@@ -88,7 +88,7 @@ if (official.size) {
 }
 const reach = read('source-reachability.txt').split('\n').filter(Boolean);
 if (reach.length) {
-  out.push('', 'Official data reachability from the runner (curl):', '```', ...reach.slice(0, 8).map(l => l.slice(0, 200)), '```');
+  out.push('', 'Official data reachability from the runner (curl):', '```', ...reach.slice(0, 12).map(l => l.slice(0, 200)), '```');
 }
 out.push('', `Results branch: explorer/run-${runId}`);
 let body = out.join('\n');

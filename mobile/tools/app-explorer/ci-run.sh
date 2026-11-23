@@ -31,7 +31,11 @@ mkdir -p explorer-out
 for url in \
   https://www.rba.gov.au/statistics/tables/csv/f17-forward-rates.csv \
   https://www.rba.gov.au/statistics/tables/csv/j1-cash-rate.csv \
+  https://www.rba.gov.au/statistics/tables/csv/f1-data.csv \
   https://www.rba.gov.au/statistics/tables/csv/g1-data.csv \
+  https://www.rba.gov.au/statistics/tables/csv/g3-data.csv \
+  https://www.rba.gov.au/statistics/tables/csv/h4-data.csv \
+  https://www.rba.gov.au/statistics/tables/csv/h5-data.csv \
   https://data.api.abs.gov.au/rest/data/ABS,CPI,2.0.0/3.10001.10.50.M?startPeriod=2015-01\&format=csv; do
   result=$(curl -sS -o /dev/null -m 20 -H 'Accept: text/csv' -w '%{http_code} %{time_total}s %{size_download}B' "$url" 2>&1 | tail -1 | tr -d '\r' || true)
   printf '%s | %s\n' "${url%%\?*}" "${result:-no response}" >> explorer-out/source-reachability.txt
