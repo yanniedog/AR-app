@@ -353,6 +353,8 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
     );
 
     const allSettledAt = monotonicNow();
+    // Parsing done while the requests were in flight; indicator parsing below is not part of the fetch phase.
+    const parseMsWhileFetching = parseMs;
     const indicatorEntries = INDICATOR_DEFINITIONS.map((definition) => {
       const text = textBySource.get(definition.source);
       if (!text) {
@@ -394,7 +396,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
     });
 
     releaseParsedCsvCache();
-    const fetchMs = Math.max(0, Math.round(allSettledAt - fetchStartedAt - parseMs));
+    const fetchMs = Math.max(0, Math.round(allSettledAt - fetchStartedAt - parseMsWhileFetching));
     parseMs = Math.round(parseMs);
     const slowRefresh = slowRefreshMessage(fetchMs, parseMs);
     if (slowRefresh) debugLog.warn('economic-outlook', slowRefresh);
