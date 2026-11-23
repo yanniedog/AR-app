@@ -102,6 +102,17 @@ describe('app explorer UX review', () => {
     expect(r.findings.filter(f => f.text === 'Covered row title')).toEqual([]);
   });
 
+  it('does not report crowding for a control cut off by the bottom tab bar', () => {
+    const tabs = [
+      { text: 'Rates', clickable: true, bounds: [0, 1393, 240, 1552] },
+      { text: 'Saved', clickable: true, bounds: [240, 1393, 480, 1552] },
+      { text: 'Market', clickable: true, bounds: [480, 1393, 720, 1552] },
+    ];
+    const sliver = { text: 'Forecast Dec 26', clickable: true, bounds: [32, 1370, 160, 1392] };
+    const r = review({ rba: [...tabs, sliver] });
+    expect(r.findings.filter(f => f.check === 'crowded-targets')).toEqual([]);
+  });
+
   it('keeps small controls near the bottom when there is no tab bar, and edge-aligned children that are not clipped', () => {
     const small = { text: 'Tiny', clickable: true, bounds: [20, 1400, 100, 1440] };
     const scroller = { scrollable: true, cls: 'ScrollView', bounds: [0, 585, 720, 1392] };

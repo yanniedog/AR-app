@@ -280,9 +280,12 @@ function jargon({ screen, app, allowProse }) {
   return out;
 }
 
-function crowded({ screen, app, density }) {
+function crowded({ screen, app, density, size }) {
   const dp = DP(density);
-  const taps = app.filter(n => n.clickable && n.enabled && !n.scrollable && area(n.bounds) < 400000);
+  const barTop = bottomBarTop(app, size);
+  // A control cut off by the tab bar reports only its visible sliver, which sits flush against the bar.
+  const underBar = n => n.bounds[3] >= barTop - 2 && n.bounds[1] > size[1] * 0.5 && !TAB_LABELS.test((n.text || n.desc || '').trim());
+  const taps = app.filter(n => n.clickable && n.enabled && !n.scrollable && area(n.bounds) < 400000 && !underBar(n));
   const out = [];
   for (let i = 0; i < taps.length && out.length < 4; i++) {
     for (let j = i + 1; j < taps.length; j++) {
