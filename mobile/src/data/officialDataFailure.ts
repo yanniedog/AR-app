@@ -11,7 +11,8 @@ export function officialDataFailureReason(error: unknown): string {
   if (name === 'AbortError' || /abort/i.test(message)) return 'timeout';
   if (/not-allowlisted|policy/i.test(`${name} ${message}`)) return 'blocked-by-policy';
   if (/network request failed|failed to fetch|unable to resolve|ssl|certificate|connection/i.test(message)) {
-    return `network (${message.replace(/\s+/g, ' ').slice(0, 60)})`;
+    // Keep enough to show the root cause of a TLS failure (for example a missing trust anchor).
+    return `network (${message.replace(/\s+/g, ' ').slice(0, 160)})`;
   }
   return `${name}: ${message.replace(/\s+/g, ' ').slice(0, 80)}`;
 }

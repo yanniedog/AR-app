@@ -42,6 +42,12 @@ for url in \
   # curl exit codes name the cause of a 000: 6 DNS, 7 connect, 28 timeout, 35/60 TLS, 56 reset.
   printf '%s | %s | curl-exit=%s\n' "${url%%\?*}" "${result:-no response}" "$rc" >> explorer-out/source-reachability.txt
 done
+# Certificate chain the runner sees for RBA, and the emulator's Android version and clock, to explain TLS failures in the app.
+{
+  echo "emulator android=$(adb shell getprop ro.build.version.release 2>/dev/null | tr -d '\r') api=$(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r') date=$(adb shell date -u +%FT%TZ 2>/dev/null | tr -d '\r')"
+  echo "runner date=$(date -u +%FT%TZ)"
+  echo | timeout 20 openssl s_client -connect www.rba.gov.au:443 -servername www.rba.gov.au -showcerts 2>/dev/null | grep -E '^ *[0-9]+ s:|^ +i:|Verify return code' || echo "openssl chain unavailable"
+} > explorer-out/rba-tls.txt 2>&1 || true
 status=0
 node mobile/tools/app-explorer/driver.mjs "${args[@]}" || status=$?
 # UX rubric review of whatever the run captured, including after a crash.

@@ -90,6 +90,10 @@ const reach = read('source-reachability.txt').split('\n').filter(Boolean);
 if (reach.length) {
   out.push('', 'Official data reachability from the runner (curl):', '```', ...reach.slice(0, 12).map(l => l.slice(0, 200)), '```');
 }
+const tls = read('rba-tls.txt').split('\n').filter(Boolean);
+if (tls.length) {
+  out.push('', 'RBA TLS chain and emulator clock:', '```', ...tls.slice(0, 10).map(l => l.slice(0, 200)), '```');
+}
 out.push('', `Results branch: explorer/run-${runId}`);
 let body = out.join('\n');
 if (body.length > 60000) body = body.slice(0, 60000) + '\n...truncated';
