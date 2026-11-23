@@ -11,7 +11,9 @@ import {
   parseRbaSeriesCsv,
   preferNewerSeries,
   resetEconomicOutlookRuntimeCacheForTests,
+  slowRefreshMessage,
 } from '../src/data/economicOutlook';
+import { debugLog } from '../src/lib/debugLog';
 import { cache } from '../src/data/cache';
 import { getLocalAppHealthAuditGeneration, isLocalAppHealthAudit } from '../src/lib/appHealthTransportGuard';
 
@@ -713,5 +715,34 @@ describe('economic outlook', () => {
     expect(outlook.refreshErrors).toEqual(
       expect.arrayContaining([expect.stringContaining('older official response ignored')]),
     );
+  });
+  it('reports a slow refresh only above the fetch and parse thresholds', () => {
+    expect(slowRefreshMessage(8_000, 400)).toBeNull();
+    expect(slowRefreshMessage(8_001, 0)).toBe('slow refresh: fetch 8001 ms, indicator parse 0 ms');
+    expect(slowRefreshMessage(0, 401)).toBe('slow refresh: fetch 0 ms, indicator parse 401 ms');
+  });
+
+  it('logs a warning when the online fetch phase is slow and stays quiet when it is fast', async () => {
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(null);
+    jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
+    const warn = jest.spyOn(debugLog, 'warn').mockImplementation(() => undefined);
+    let offset = 0;
+    const realNow = Date.now.bind(Date);
+    jest.spyOn(Date, 'now').mockImplementation(() => realNow() + offset);
+    const fetchSpy = jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      offset += 9_000;
+      return mockCsvResponse(String(input));
+    });
+
+    await loadEconomicOutlook(true);
+    const slow = warn.mock.calls.filter(([tag]) => tag === 'economic-outlook');
+    expect(slow).toHaveLength(1);
+    expect(String(slow[0][1])).toMatch(/^slow refresh: fetch \d+ ms, indicator parse \d+ ms$/);
+
+    warn.mockClear();
+    resetEconomicOutlookRuntimeCacheForTests();
+    fetchSpy.mockImplementation(async (input) => mockCsvResponse(String(input)));
+    await loadEconomicOutlook(true);
+    expect(warn.mock.calls.filter(([tag]) => tag === 'economic-outlook')).toHaveLength(0);
   });
 });

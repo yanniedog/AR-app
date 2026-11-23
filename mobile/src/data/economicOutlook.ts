@@ -63,6 +63,15 @@ export { buildEconomicOutlookFromCsv, economicSignal } from './economicOutlookSi
 
 const SOURCE_KEYS = ECONOMIC_SOURCE_KEYS;
 
+const SLOW_FETCH_MS = 8_000;
+const SLOW_PARSE_MS = 400;
+
+/** Warning text when a refresh phase is slow enough to explain a stalled Economy lens. */
+export function slowRefreshMessage(fetchMs: number, parseMs: number): string | null {
+  if (fetchMs <= SLOW_FETCH_MS && parseMs <= SLOW_PARSE_MS) return null;
+  return `slow refresh: fetch ${fetchMs} ms, indicator parse ${parseMs} ms`;
+}
+
 export class EconomicOutlookUnavailableError extends Error {
   constructor() {
     super('Economic signals are not saved on this device. Refresh this section when online.');
@@ -369,9 +378,8 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
 
     const parseMs = Date.now() - parseStartedAt;
     const fetchMs = parseStartedAt - fetchStartedAt;
-    if (parseMs > 400 || fetchMs > 8_000) {
-      debugLog.warn('economic-outlook', `slow refresh: fetch ${fetchMs} ms, indicator parse ${parseMs} ms`);
-    }
+    const slowRefresh = slowRefreshMessage(fetchMs, parseMs);
+    if (slowRefresh) debugLog.warn('economic-outlook', slowRefresh);
     const forecastEntry = forecastSettled;
     const cashRateEntry = cashRateSettled;
 
