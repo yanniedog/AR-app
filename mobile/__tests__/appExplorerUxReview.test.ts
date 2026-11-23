@@ -152,6 +152,15 @@ describe('app explorer UX review', () => {
     expect(r.rubric.find(x => x.key === 'onboarding')!.score).toBeLessThan(5);
   });
 
+  it('measures a slow relaunch separately from the first install', () => {
+    const r = review({ 'open-app': [row('Basic Loan', 'Bank B', 5.9, 5.8, 300)], 'cold-start': [row('Basic Loan', 'Bank B', 5.9, 5.8, 300)] },
+      [{ firstContentMs: 2000 }, { name: 'cold start', firstContentMs: 8800 }]);
+    expect(r.firstRun.firstValueMs).toBe(2000);
+    expect((r.firstRun as { relaunchValueMs?: number }).relaunchValueMs).toBe(8800);
+    expect(checks(r)).toContain('slow-relaunch');
+    expect(checks(r)).not.toContain('slow-first-value');
+  });
+
   it('flags a dead-end error state and offers a fix for every finding', () => {
     const r = review({ rates: [{ text: 'Data unavailable', bounds: [100, 600, 620, 660] }] });
     const dead = r.findings.find(f => f.check === 'dead-end-state');

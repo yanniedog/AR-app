@@ -8,7 +8,7 @@ import { checkScreen, contrastFindings, decodePng, FIXES } from './ux-checks.mjs
 export const PKG = 'com.eyex.australianrates';
 const LEGAL = /^\/?(about|terms|privacy|third-party-notices|licen[cs]es?)$/i;
 /** Anything that may frustrate, confuse or intimidate a user, or make them less likely to return. */
-export const FRUSTRATION = new Set(['dead-end', 'dead-end-state', 'spinner-no-result', 'slow', 'slow-first-value', 'no-first-value', 'jargon', 'clutter',
+export const FRUSTRATION = new Set(['dead-end', 'dead-end-state', 'spinner-no-result', 'slow', 'slow-first-value', 'slow-relaunch', 'no-first-value', 'jargon', 'clutter',
   'no-primary-action', 'tap-target', 'crowded-targets', 'nav-inconsistent', 'first-run-gate', 'intimidating-first-run',
   'no-return-reason', 'no-engagement-hook', 'truncated-text']);
 const RUBRIC = [
@@ -19,7 +19,7 @@ const RUBRIC = [
   ['helpfulness', 'Helpfulness', ['dead-end-state', 'spinner-no-result', 'dead-end']],
   ['appropriateness', 'Appropriateness', ['prose', 'accuracy']],
   ['onboarding', 'Onboarding ease', ['slow-first-value', 'no-first-value', 'first-run-gate']],
-  ['barriers', 'Barriers to entry and use', ['slow-first-value', 'no-first-value', 'first-run-gate', 'dead-end-state']],
+  ['barriers', 'Barriers to entry and use', ['slow-first-value', 'slow-relaunch', 'no-first-value', 'first-run-gate', 'dead-end-state']],
   ['engagement', 'Engagement hooks', ['no-engagement-hook', 'no-return-reason']],
   ['frustration', 'Frustration and abandonment risk', [...FRUSTRATION]],
 ];
@@ -187,6 +187,15 @@ export async function reviewRun(dir, { sample } = {}) {
   if (firstRun.firstValueMs != null && firstRun.firstValueMs >= FIRST_VALUE_MINOR_MS) {
     findings.push({ check: 'slow-first-value', severity: firstRun.firstValueMs >= FIRST_VALUE_MAJOR_MS ? 'major' : 'minor', screen: 'cold start', text: '', at: [0, 0], detail: `${(firstRun.firstValueMs / 1000).toFixed(1)} s from launch to rates showing` });
   }
+  // A returning user has cached data, so a relaunch is held to the same limits and reported separately from the first install.
+  const relaunch = screens.slice(1).find(s => /cold[ -]start|relaunch/i.test(s.name));
+  if (relaunch) {
+    const ms = relaunch.step.firstContentMs;
+    firstRun.relaunchValueMs = Number.isFinite(ms) && parseRows(relaunch.nodes).length > 0 && !errorScreen(relaunch.nodes) ? ms : null;
+    if (firstRun.relaunchValueMs != null && firstRun.relaunchValueMs >= FIRST_VALUE_MINOR_MS) {
+      findings.push({ check: 'slow-relaunch', severity: firstRun.relaunchValueMs >= FIRST_VALUE_MAJOR_MS ? 'major' : 'minor', screen: relaunch.name, text: '', at: [0, 0], detail: `${(firstRun.relaunchValueMs / 1000).toFixed(1)} s from relaunch to rates showing` });
+    }
+  }
   for (const g of firstRun.gates) findings.push({ check: 'first-run-gate', severity: 'major', screen: 'cold start', text: g, at: [0, 0], detail: 'control must be tapped before reaching rates' });
   const firstNodes = (screens[0] && screens[0].nodes) || [];
   // An ordinary field such as Rates search is not a barrier; a setup or permission request is.
@@ -231,7 +240,7 @@ export function summaryLines(r) {
   const worst = [...r.rubric].filter(x => x.score != null).sort((a, b) => a.score - b.score).slice(0, 3);
   const lines = [`UX review: ${r.major} major, ${r.findingsTotal - r.major} minor across ${r.screens} screens. Weakest: ${worst.map(w => `${w.title} ${w.score}/5`).join(', ')}.`];
   if (!r.contrastMeasured) lines.push('Contrast not measured.');
-  lines.push(`First value ${sec(r.firstRun.firstValueMs)}, ${r.firstRun.gates.length} gate taps. Taps: ${r.tasks.map(t => `${t.task.toLowerCase()} ${t.taps == null ? 'unknown' : t.taps}`).join(', ')}.`);
+  lines.push(`First value ${sec(r.firstRun.firstValueMs)}${r.firstRun.relaunchValueMs !== undefined ? `, relaunch ${sec(r.firstRun.relaunchValueMs)}` : ''}, ${r.firstRun.gates.length} gate taps. Taps: ${r.tasks.map(t => `${t.task.toLowerCase()} ${t.taps == null ? 'unknown' : t.taps}`).join(', ')}.`);
   const line = f => `- ${f.severity} | ${f.screen}: ${f.check}${f.text ? ` "${f.text.slice(0, 50)}"` : ''}, ${f.detail} | Fix: ${f.fix}`;
   for (const f of r.findings.filter(f => f.severity === 'major' && !FRUSTRATION.has(f.check)).slice(0, 4)) lines.push(line(f));
   const fr = r.findings.filter(f => FRUSTRATION.has(f.check));
