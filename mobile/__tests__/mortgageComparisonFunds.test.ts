@@ -60,7 +60,7 @@ test('listed 80% bounds retain exact equality and one-cent differences without d
 });
 
 test('small published bounds in exponential numeric notation retain exact open-ended comparisons', () => {
-  const tinyBound = { ...row, lvr_tier: 'lvr_>=0.00000001', balance_min: 0, balance_max: 100000000 };
+  const tinyBound = { ...row, lvr_tier: 'lvr_>=0.00000001%', balance_min: 0, balance_max: 100000000 };
   expect(mortgageComparisonMatch(tinyBound, funds('100000000', '0.01'))).toBe('outside');
   expect(mortgageComparisonMatch(tinyBound, funds('99999999.99', '0.01'))).toBe('listed');
   expect(mortgageComparisonMatch(tinyBound, funds('99999999.98', '0.01'))).toBe('listed');

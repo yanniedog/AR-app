@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { renderOutcome } from './session-verdict.mjs';
+import { groupAuditFailures, renderAuditFailureGroups } from './audit-findings.mjs';
 
 const [dir, runId] = process.argv.slice(2);
 const read = f => { try { return fs.readFileSync(path.join(dir, f), 'utf8'); } catch { return ''; } };
@@ -57,11 +58,12 @@ if (decoded) {
   const byCode = {};
   for (const c of failed) byCode[c.failureCode || 'none'] = (byCode[c.failureCode || 'none'] || 0) + 1;
   out.push('Failures by code: ' + JSON.stringify(byCode), '');
+  out.push(...renderAuditFailureGroups(groupAuditFailures(checks)), '');
   out.push('| check | kind | ms | code |', '| --- | --- | --- | --- |');
-  for (const c of failed.slice(0, 60)) {
+  for (const c of failed.slice(0, 30)) {
     out.push(`| ${c.id} | ${c.kind} | ${Math.round(c.durationMs || 0)} | ${c.failureCode || ''} |`);
   }
-  if (failed.length > 60) out.push(`| ... ${failed.length - 60} more in the results branch | | | |`);
+  if (failed.length > 30) out.push(`| ... ${failed.length - 30} more in the results branch | | | |`);
 }
 
 const logcat = read('logcat.txt');
@@ -71,6 +73,26 @@ if (crash.length) {
   const journeys = logcat.split('\n').filter(l => /perf-audit.*"id":"journey-/.test(l)).slice(-6)
     .map(l => (l.match(/"id":"(journey-[^"]+)".*?"status":"(\w+)"/) || []).slice(1).join(' '));
   if (journeys.length) out.push('', 'Last journeys before crash: ' + journeys.join(', '));
+}
+const official = new Map();
+for (const line of logcat.split('\n')) {
+  const m = line.match(/official-data-summary: stage=(\w+) source=(\S+) reason=(.+?)\s*$/);
+  if (m) official.set(`${m[2]} ${m[1]} ${m[3]}`, (official.get(`${m[2]} ${m[1]} ${m[3]}`) || 0) + 1);
+}
+if (official.size) {
+  out.push('', 'Official data fetch failures (app log, each distinct failure once):', '| source | stage | reason | times |', '| --- | --- | --- | --- |');
+  for (const [key, count] of [...official].slice(0, 12)) {
+    const [source, stage, ...reason] = key.split(' ');
+    out.push(`| ${source} | ${stage} | ${reason.join(' ').replace(/\|/g, '/')} | ${count} |`);
+  }
+}
+const reach = read('source-reachability.txt').split('\n').filter(Boolean);
+if (reach.length) {
+  out.push('', 'Official data reachability from the runner (curl):', '```', ...reach.slice(0, 12).map(l => l.slice(0, 200)), '```');
+}
+const tls = read('rba-tls.txt').split('\n').filter(Boolean);
+if (tls.length) {
+  out.push('', 'RBA TLS chain and emulator clock:', '```', ...tls.slice(0, 10).map(l => l.slice(0, 200)), '```');
 }
 out.push('', `Results branch: explorer/run-${runId}`);
 let body = out.join('\n');

@@ -59,7 +59,7 @@ it('keeps an indexed policy result for every local destination without transport
     urlValidation: 'pass', httpAttempted: false, handlerAttempted: false,
   } });
   expect(results[1]).toMatchObject({ status: 'fail', metrics: {
-    urlValidation: 'fail', host: null, destinationPath: null,
+    urlValidation: 'fail', host: 'unapproved.example', destinationPath: '/statistics/',
   } });
   expect(fetch).not.toHaveBeenCalled();
   expect(canOpenUrl).not.toHaveBeenCalled();

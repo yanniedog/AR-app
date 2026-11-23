@@ -46,6 +46,7 @@ import { useStore } from '../../src/data/store';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
 import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
 import { useVirtualizedListReadiness } from '../../src/hooks/useVirtualizedListReadiness';
+import { nextListIdentityVersion, type ListIdentityVersion } from '../../src/lib/virtualizedListReadiness';
 import { openProduct } from '../../src/lib/nav';
 import {
   auditActionInteger,
@@ -530,11 +531,13 @@ export default function BankDetail() {
   } : null, [core, activeProduct]);
   const mortgageFilterRows = useMemo(() => core ? stableRowsForProvider(core.sections.Mortgage.rates, provider) : [], [core, provider]);
   const productCount = productItems.length;
-  const productListRevision = useRef({ items: productItems, version: 0 });
-  if (productListRevision.current.items !== productItems) {
-    productListRevision.current = { items: productItems, version: productListRevision.current.version + 1 };
-  }
-  const listRevision = `${provider}:${coreSha ?? core?.run_date ?? ''}:${productListRevision.current.version}`;
+  const productListRevision = useRef<ListIdentityVersion | null>(null);
+  productListRevision.current = nextListIdentityVersion(productListRevision.current, productItems.map(item => item.id));
+  const listVersion = productListRevision.current.version;
+  const seenListVersion = useRef(listVersion);
+  // A different set of rows is a new list, so it starts at the top, not at the old scroll offset.
+  if (seenListVersion.current !== listVersion) { seenListVersion.current = listVersion; listOffset.current = 0; const session = providerSessions.get(provider); if (session) session.offset = 0; }
+  const listRevision = `${provider}:${coreSha ?? core?.run_date ?? ''}:${listVersion}`;
   const listReadiness = useVirtualizedListReadiness(listRevision, productCount);
 
   const handleMoveSelect = useCallback(
@@ -851,7 +854,7 @@ export default function BankDetail() {
         {moveDetailShown ? <ScrollView testID="provider-move-detail" nestedScrollEnabled style={{ flexGrow: 0, flexShrink: 0, maxHeight: 180 }}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4 }} onLayout={event => setMoveDetailHeight(Math.min(180, event.nativeEvent.layout.height))}>{moveDetail}</ScrollView> : null}
         <FlashList
-          key={`${productView}:${provider}`}
+          key={`${productView}:${listRevision}`}
           horizontal={productView === 'carousel'}
           snapToInterval={productView === 'carousel' ? cardWidth : undefined}
           decelerationRate={productView === 'carousel' ? 'fast' : 'normal'}

@@ -160,3 +160,20 @@ describe('virtualized list readiness', () => {
     });
   });
 });
+
+describe('nextListIdentityVersion', () => {
+  const { nextListIdentityVersion } = require('../src/lib/virtualizedListReadiness');
+  test('keeps the version for the same ids in a new array', () => {
+    const first = nextListIdentityVersion(null, ['a', 'b']);
+    expect(nextListIdentityVersion(first, ['a', 'b'])).toBe(first);
+  });
+  test('moves the version when the ids or their order change', () => {
+    const first = nextListIdentityVersion(null, ['a', 'b']);
+    expect(nextListIdentityVersion(first, ['b', 'a']).version).toBe(first.version + 1);
+    expect(nextListIdentityVersion(first, ['a']).version).toBe(first.version + 1);
+  });
+  test('ids that join to the same text still differ', () => {
+    const first = nextListIdentityVersion(null, ['ab', 'c']);
+    expect(nextListIdentityVersion(first, ['a', 'bc']).version).toBe(first.version + 1);
+  });
+});
