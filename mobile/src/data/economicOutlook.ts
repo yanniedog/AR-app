@@ -213,7 +213,13 @@ async function commitEconomicResult(
       accepted = latestSuccessful.payload;
       return;
     }
-    if (persist) await cache.writeEconomicOutlook(payload);
+    if (persist) {
+      // Time only the write, not the wait behind an earlier commit.
+      const writeStartedAt = monotonicNow();
+      await cache.writeEconomicOutlook(payload);
+      const writeMs = Math.round(monotonicNow() - writeStartedAt);
+      if (writeMs > SLOW_PARSE_MS) debugLog.warn('economic-outlook', `slow save: ${writeMs} ms`);
+    }
     // A native write already started before audit entry cannot be cancelled,
     // but its completion must not publish online observations into the chart.
     if (isLocalAppHealthAudit() || auditGeneration !== getLocalAppHealthAuditGeneration()) {
@@ -456,11 +462,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       cashRateForecast: forecastEntry.forecast ?? cached?.cashRateForecast ?? null,
       cashRateHistory,
     };
-    const commitStartedAt = monotonicNow();
-    const committed = await commitEconomicResult(sequence, fresh, true, auditGeneration, cached);
-    const commitMs = Math.round(monotonicNow() - commitStartedAt);
-    if (commitMs > SLOW_PARSE_MS) debugLog.warn('economic-outlook', `slow save: ${commitMs} ms`);
-    return committed;
+    return commitEconomicResult(sequence, fresh, true, auditGeneration, cached);
   })();
   const tracked = run.finally(() => {
     if (inFlight?.promise === tracked) inFlight = null;
