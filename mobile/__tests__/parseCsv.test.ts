@@ -53,8 +53,8 @@ describe('parseCsv', () => {
       split.mockClear();
       parseCsv('a,"b,c"\n1,2');
       // Only the line split and the per-line quote count; no comma split on the quoted row.
-      expect(split.mock.calls.some(([separator]) => separator === ',')).toBe(true);
-      expect(split.mock.calls.filter(([separator]) => separator === ',').length).toBe(1);
+      expect(split.mock.calls.some(([separator]) => String(separator) === ',')).toBe(true);
+      expect(split.mock.calls.filter(([separator]) => String(separator) === ',').length).toBe(1);
     } finally {
       split.mockRestore();
     }
