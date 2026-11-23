@@ -49,7 +49,7 @@ module.exports = ({ config }) => {
   if (playManaged) permissions.delete('REQUEST_INSTALL_PACKAGES');
   else permissions.add('REQUEST_INSTALL_PACKAGES');
   const fontScalePlugin = './plugins/with-main-activity-font-scale';
-  const plugins = [...(config.plugins ?? []), './plugins/with-external-link-queries'];
+  const plugins = [...(config.plugins ?? []), './plugins/with-external-link-queries', './plugins/with-rba-trust-anchor'];
   if (!plugins.some(plugin => (Array.isArray(plugin) ? plugin[0] : plugin) === fontScalePlugin)) {
     plugins.push(fontScalePlugin);
   }
