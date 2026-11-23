@@ -5,9 +5,14 @@ const text = e => (e && typeof e === 'object' ? e.message || '' : e || '');
 /** One short cause per failed check: the stuck probe, the error text, or the failure code. */
 export function failureCause(check) {
   const blocker = check.diagnostic?.readiness?.blockers?.[0];
-  if (blocker?.surface && blocker?.probe) return `${blocker.surface} ${blocker.probe} never became ready`;
+  if (blocker?.surface && blocker?.probe) {
+    return blocker.code === 'probe-pending' || !blocker.code
+      ? `${blocker.surface} ${blocker.probe} never became ready`
+      : `${blocker.surface} ${blocker.probe} ${blocker.code}`;
+  }
   if (blocker?.code) return `readiness blocked: ${blocker.code}`;
-  const message = text(check.error).replace(/\(\d+ms\)/, '').replace(/\d+/g, '#').trim();
+  // Only timings vary between otherwise identical failures; keep codes such as HTTP 404 and 500 apart.
+  const message = text(check.error).replace(/\(\d+ms\)/g, '').replace(/\s+/g, ' ').trim();
   if (message) return message.slice(0, 120);
   return check.failureCode || 'failed';
 }
@@ -28,10 +33,12 @@ export function groupAuditFailures(checks) {
   return [...groups.values()].sort((a, b) => b.count - a.count);
 }
 
+const cell = v => String(v).replace(/[\\|`*_<>\[\]@\r\n]/g, ' ');
+
 export function renderAuditFailureGroups(groups) {
   if (!groups.length) return [];
   const out = ['Failure causes:', '| count | kind | cause | slowest ms | examples |', '| ---: | --- | --- | ---: | --- |'];
-  for (const g of groups.slice(0, 15)) out.push(`| ${g.count} | ${g.kind} | ${g.cause} | ${g.maxMs} | ${g.examples.join(', ')} |`);
+  for (const g of groups.slice(0, 15)) out.push(`| ${g.count} | ${cell(g.kind)} | ${cell(g.cause)} | ${g.maxMs} | ${cell(g.examples.join(', '))} |`);
   if (groups.length > 15) out.push(`| | | ${groups.length - 15} more causes | | |`);
   return out;
 }
