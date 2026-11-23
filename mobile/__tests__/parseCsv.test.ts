@@ -1,4 +1,4 @@
-import { parseCsv, parseCsvQuoted } from '../src/data/economicOutlookParse';
+import { parseCsv, parseCsvQuoted, parseRbaSeriesCsv } from '../src/data/economicOutlookParse';
 
 function seeded(seed: number) {
   let s = seed;
@@ -55,6 +55,26 @@ describe('parseCsv', () => {
       // Only the line split and the per-line quote count; no comma split on the quoted row.
       expect(split.mock.calls.some(([separator]) => String(separator) === ',')).toBe(true);
       expect(split.mock.calls.filter(([separator]) => String(separator) === ',').length).toBe(1);
+    } finally {
+      split.mockRestore();
+    }
+  });
+  it('parses an RBA table once when several series are read from the same text', () => {
+    const text = [
+      'Title,A,B',
+      'Series ID,S1,S2',
+      'Publication date,01-Jan-2026,01-Jan-2026',
+      '31-Mar-2026,1.5,2.5',
+      '30-Jun-2026,1.6,2.6',
+    ].join('\n');
+    const split = jest.spyOn(String.prototype, 'split');
+    try {
+      const first = parseRbaSeriesCsv(text, 'S1');
+      const callsAfterFirst = split.mock.calls.length;
+      const second = parseRbaSeriesCsv(text, 'S2');
+      expect(split.mock.calls.length).toBe(callsAfterFirst);
+      expect(first.points.map((point) => point.value)).toEqual([1.5, 1.6]);
+      expect(second.points.map((point) => point.value)).toEqual([2.5, 2.6]);
     } finally {
       split.mockRestore();
     }

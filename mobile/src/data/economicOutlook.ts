@@ -1,4 +1,5 @@
 import { cache } from './cache';
+import { debugLog } from '../lib/debugLog';
 import { logOfficialDataFailure, parseOfficialData } from './officialDataFailure';
 import { getLocalAppHealthAuditGeneration, isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import {
@@ -251,6 +252,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
     }
 
     const checkedAt = new Date().toISOString();
+    const fetchStartedAt = Date.now();
     const [sourceEntries, forecastSettled, cashRateSettled, absHeadlineSettled] = await Promise.all([
       Promise.all(
         SOURCE_KEYS.map(async (source) => {
@@ -324,6 +326,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
         .map((entry) => [entry.source, entry.error!] as const),
     );
 
+    const parseStartedAt = Date.now();
     const indicatorEntries = INDICATOR_DEFINITIONS.map((definition) => {
       const text = textBySource.get(definition.source);
       if (!text) {
@@ -364,6 +367,11 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       }
     });
 
+    const parseMs = Date.now() - parseStartedAt;
+    const fetchMs = parseStartedAt - fetchStartedAt;
+    if (parseMs > 400 || fetchMs > 8_000) {
+      debugLog.warn('economic-outlook', `slow refresh: fetch ${fetchMs} ms, indicator parse ${parseMs} ms`);
+    }
     const forecastEntry = forecastSettled;
     const cashRateEntry = cashRateSettled;
 

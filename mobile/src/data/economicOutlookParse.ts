@@ -82,8 +82,20 @@ function rowByLabel(rows: string[][], label: string): string[] | undefined {
   return rows.find((row) => row[0]?.replace(/^\uFEFF/, '').trim() === label);
 }
 
+// Several indicators read different columns of the same RBA table, so the
+// parsed rows are reused for consecutive calls with the same text.
+let lastParsedText: string | null = null;
+let lastParsedRows: string[][] = [];
+function parseCsvShared(text: string): string[][] {
+  if (lastParsedText !== text) {
+    lastParsedRows = parseCsv(text);
+    lastParsedText = text;
+  }
+  return lastParsedRows;
+}
+
 export function parseRbaSeriesCsv(text: string, seriesId: string): ParsedSeries {
-  const rows = parseCsv(text);
+  const rows = parseCsvShared(text);
   const ids = rowByLabel(rows, 'Series ID');
   if (!ids) throw new Error('RBA table is missing its Series ID row');
   const column = ids.indexOf(seriesId);
