@@ -607,14 +607,18 @@ export default function RatesWorkspace() {
   // Background index warming must not invalidate that result preparation or its viewport.
   const queryNeedsSearchIndex = deepSearchActive && debouncedQuery.trim().length > 0;
   const resultSearchIndex = queryNeedsSearchIndex ? searchIndex : null;
-  const indexedRows = useMemo(() => indexedPricing && !path.length && !hierarchyScoped
+  // A closed suitability gate hides the results and invalidates their membership.
+  // Let the details build finish before spending CPU on rows the screen cannot use.
+  const suitabilityReady = isSuitabilityFilterReady(effectiveFilters.includeNonStandard);
+  const indexedRows = useMemo(() => suitabilityReady && indexedPricing && !path.length && !hierarchyScoped
     ? indexedPricing.filtered(resultFilters, sortKey, mortgageRateMetric) : null,
-  [indexedPricing, path.length, hierarchyScoped, resultFilters, sortKey, mortgageRateMetric]);
+  [suitabilityReady, indexedPricing, path.length, hierarchyScoped, resultFilters, sortKey, mortgageRateMetric]);
   const criteriaPending = effectiveFilters.factCriteria.length > 0 && (productCriteria.status === 'idle' || productCriteria.status === 'loading');
-  const cooperativeResults = usePreparedSearchRows(indexedRows ? EMPTY_RATE_ROWS : mortgageScope.rows, resultFilters, sortKey, section,
+  const resultPreparationBlocked = !suitabilityReady || criteriaPending;
+  const cooperativeResults = usePreparedSearchRows(resultPreparationBlocked || indexedRows ? EMPTY_RATE_ROWS : mortgageScope.rows, resultFilters, sortKey, section,
     filterDetails, resultSearchIndex, depositRankMetric, mortgageRateMetric,
-    suitabilityRevision, isFocused && !indexedRows && !criteriaPending);
-  const preparedResults = criteriaPending ? { ...cooperativeResults, rows: EMPTY_RATE_ROWS, ready: false, error: null }
+    suitabilityRevision, isFocused && !indexedRows && !resultPreparationBlocked);
+  const preparedResults = resultPreparationBlocked ? { ...cooperativeResults, rows: EMPTY_RATE_ROWS, ready: false, error: null }
     : indexedRows ? { ...cooperativeResults, rows: indexedRows, ready: true, error: null } : cooperativeResults;
   const rows = preparedResults.rows;
   // Ancillary facet inventories must not compete with the matching-result
@@ -624,7 +628,7 @@ export default function RatesWorkspace() {
     mortgageSearchActive ? baseRows : EMPTY_RATE_ROWS,
     mortgageSearchActive ? filterDetails : undefined,
     section, suitabilityRevision,
-    publicPricing.ready && preparedResults.ready && isSuitabilityFilterReady(effectiveFilters.includeNonStandard),
+    publicPricing.ready && preparedResults.ready && suitabilityReady,
   );
   const unverifiedResultCount = useMemo(
     () => (section !== 'Mortgage' || mortgageScope.unverified === 0 ? 0 : rows.reduce((count, row) => count + (mortgageScope.unverifiedRows.has(row) ? 1 : 0), 0)),
@@ -764,7 +768,7 @@ export default function RatesWorkspace() {
     queryNeedsSearchIndex &&
     !searchIndex &&
     (searchIndexStatus === 'unavailable' || searchIndexStatus === 'error');
-  const detailFiltersPending = !isSuitabilityFilterReady(effectiveFilters.includeNonStandard) ||
+  const detailFiltersPending = !suitabilityReady ||
     (effectiveFilters.accountFeatures.length > 0 ||
       effectiveFilters.eligibilityCriteria.length > 0 ||
       effectiveFilters.factCriteria.length > 0) &&
