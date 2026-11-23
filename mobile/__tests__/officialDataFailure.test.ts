@@ -10,7 +10,7 @@ describe('officialDataFailureReason', () => {
     expect(officialDataFailureReason(abort)).toBe('timeout');
   });
   it('reports network and policy failures', () => {
-    expect(officialDataFailureReason(new TypeError('Network request failed'))).toBe('network');
+    expect(officialDataFailureReason(new TypeError('Network request failed'))).toBe('network (Network request failed)');
     expect(officialDataFailureReason(new Error('not-allowlisted'))).toBe('blocked-by-policy');
   });
   it('keeps parse errors short', () => {

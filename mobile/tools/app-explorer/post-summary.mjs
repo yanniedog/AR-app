@@ -86,6 +86,10 @@ if (official.size) {
     out.push(`| ${source} | ${stage} | ${reason.join(' ').replace(/\|/g, '/')} | ${count} |`);
   }
 }
+const reach = read('source-reachability.txt').split('\n').filter(Boolean);
+if (reach.length) {
+  out.push('', 'Official data reachability from the runner (curl):', '```', ...reach.slice(0, 8).map(l => l.slice(0, 200)), '```');
+}
 out.push('', `Results branch: explorer/run-${runId}`);
 let body = out.join('\n');
 if (body.length > 60000) body = body.slice(0, 60000) + '\n...truncated';

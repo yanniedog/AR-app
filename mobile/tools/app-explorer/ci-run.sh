@@ -25,6 +25,17 @@ if [ "${MODE:-crawl}" = audit ] || [ "${MODE:-crawl}" = full ]; then
   # Targeted screenshots first so a later audit crash cannot lose them.
   node mobile/tools/app-explorer/shots.mjs explorer-out/shots || { mkdir -p explorer-out/shots; echo failed > explorer-out/shots/shots-failed; }
 fi
+# Can the runner itself reach the official data sources? Separates a blocked network from an app defect.
+mkdir -p explorer-out
+: > explorer-out/source-reachability.txt
+for url in \
+  https://www.rba.gov.au/statistics/tables/csv/f17-forward-rates.csv \
+  https://www.rba.gov.au/statistics/tables/csv/j1-cash-rate.csv \
+  https://www.rba.gov.au/statistics/tables/csv/g1-data.csv \
+  https://data.api.abs.gov.au/rest/data/ABS,CPI,2.0.0/3.10001.10.50.M?startPeriod=2015-01\&format=csv; do
+  result=$(curl -sS -o /dev/null -m 20 -H 'Accept: text/csv' -w '%{http_code} %{time_total}s %{size_download}B' "$url" 2>&1 | tail -1 | tr -d '\r' || true)
+  printf '%s | %s\n' "${url%%\?*}" "${result:-no response}" >> explorer-out/source-reachability.txt
+done
 status=0
 node mobile/tools/app-explorer/driver.mjs "${args[@]}" || status=$?
 # UX rubric review of whatever the run captured, including after a crash.
