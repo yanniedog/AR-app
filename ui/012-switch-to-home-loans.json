@@ -1,0 +1,601 @@
+[
+ {
+  "label": "Rates",
+  "at": [
+   361,
+   149
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   673,
+   149
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   277
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "sel",
+  "at": [
+   133,
+   275
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   277
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   275
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   277
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   275
+  ]
+ },
+ {
+  "label": "Search",
+  "flags": "tap",
+  "at": [
+   386,
+   399
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "flags": "tap",
+  "at": [
+   80,
+   521
+  ]
+ },
+ {
+  "label": "Filter",
+  "at": [
+   80,
+   543
+  ]
+ },
+ {
+  "label": "Sort · Comparison rate",
+  "flags": "tap",
+  "at": [
+   223,
+   521
+  ]
+ },
+ {
+  "label": "Comparison",
+  "at": [
+   223,
+   543
+  ]
+ },
+ {
+  "label": "Compare",
+  "flags": "tap",
+  "at": [
+   386,
+   521
+  ]
+ },
+ {
+  "label": "Compare",
+  "at": [
+   386,
+   543
+  ]
+ },
+ {
+  "label": "Lenders",
+  "flags": "tap",
+  "at": [
+   524,
+   521
+  ]
+ },
+ {
+  "label": "Lenders",
+  "at": [
+   524,
+   543
+  ]
+ },
+ {
+  "label": "Search actions",
+  "flags": "tap",
+  "at": [
+   640,
+   521
+  ]
+ },
+ {
+  "label": "More",
+  "at": [
+   640,
+   543
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   989
+  ]
+ },
+ {
+  "label": "View MoveBank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   314
+  ]
+ },
+ {
+  "label": "Offset Home Loan, MoveBank, Comparison rate 6.35%, Advertised rate 6.29% · Variable · Principal & interest · Owner occup",
+  "flags": "tap",
+  "at": [
+   384,
+   314
+  ]
+ },
+ {
+  "label": "Save, Offset Home Loan, MoveBank, Comparison rate 6.35%",
+  "id": "rate-save:MoveBank%7C74f0010a-eb8f-41cd-83d7-296aacc988ca%7CRESIDENTIAL_MORTGAGES%7COffset%20Home%20Loan:20",
+  "flags": "tap",
+  "at": [
+   640,
+   306
+  ]
+ },
+ {
+  "label": "View Virgin Money · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   386
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.36%, Advertised rate 6.34% · Variable · Principal & interes",
+  "flags": "tap",
+  "at": [
+   384,
+   386
+  ]
+ },
+ {
+  "label": "Virgin · Virgin Money Lite Home Loan",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   344
+  ]
+ },
+ {
+  "label": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.36%, Listed LVR >70.0%–80.0%",
+  "id": "rate-save:Virgin%20Money%7C5bc12280-2272-ee11-8179-6045bd3d38f0%7CRESIDENTIAL_MORTGAGES%7CVirgin%20Money%20Lite%20Home%20Loan:151",
+  "flags": "tap",
+  "at": [
+   640,
+   378
+  ]
+ },
+ {
+  "label": "View Bank First · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   458
+  ]
+ },
+ {
+  "label": "Basic Home Loan Variable LVR 70-80%, Bank First, Comparison rate 6.39%, Advertised rate 6.34% · Variable · Principal & i",
+  "flags": "tap",
+  "at": [
+   384,
+   458
+  ]
+ },
+ {
+  "label": "BFirst · Basic Home Loan Variable LVR 70-80%",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   416
+  ]
+ },
+ {
+  "label": "Save, Basic Home Loan Variable LVR 70-80%, Bank First, Comparison rate 6.39%",
+  "id": "rate-save:Bank%20First%7C7c62778e-f5a7-4c96-b9f3-6fa2e0328820%7CRESIDENTIAL_MORTGAGES%7CBasic%20Home%20Loan%20Variable%20LVR%2070-80%25:1",
+  "flags": "tap",
+  "at": [
+   640,
+   450
+  ]
+ },
+ {
+  "label": "View MoveBank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   530
+  ]
+ },
+ {
+  "label": "Everyday Home Loan, MoveBank, Comparison rate 6.39%, Advertised rate 6.64% · Fixed · 5 yrs · Principal & interest · Owne",
+  "flags": "tap",
+  "at": [
+   384,
+   530
+  ]
+ },
+ {
+  "label": "MoveBank · Everyday Home Loan",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   488
+  ]
+ },
+ {
+  "label": "Save, Everyday Home Loan, MoveBank, Comparison rate 6.39%",
+  "id": "rate-save:MoveBank%7C3b68aefd-3bd6-4674-940a-137fb97563bb%7CRESIDENTIAL_MORTGAGES%7CEveryday%20Home%20Loan:13",
+  "flags": "tap",
+  "at": [
+   640,
+   522
+  ]
+ },
+ {
+  "label": "View MoveBank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   602
+  ]
+ },
+ {
+  "label": "Offset Home Loan, MoveBank, Comparison rate 6.39%, Advertised rate 6.69% · Fixed · 1 yr · Principal & interest · Owner o",
+  "flags": "tap",
+  "at": [
+   384,
+   602
+  ]
+ },
+ {
+  "label": "MoveBank · Offset Home Loan",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   560
+  ]
+ },
+ {
+  "label": "Save, Offset Home Loan, MoveBank, Comparison rate 6.39%",
+  "id": "rate-save:MoveBank%7C74f0010a-eb8f-41cd-83d7-296aacc988ca%7CRESIDENTIAL_MORTGAGES%7COffset%20Home%20Loan:3",
+  "flags": "tap",
+  "at": [
+   640,
+   594
+  ]
+ },
+ {
+  "label": "View Unity Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   699
+  ]
+ },
+ {
+  "label": "Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Comparison rate 6.39%, Advertised rate 6.3",
+  "flags": "tap",
+  "at": [
+   384,
+   699
+  ]
+ },
+ {
+  "label": "Unity Bank · Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   658
+  ]
+ },
+ {
+  "label": "Save, Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Comparison rate 6.39%",
+  "id": "rate-save:Unity%20Bank%7CL23_60-80LVR_OCC_PRIN%7CRESIDENTIAL_MORTGAGES%7CMomentum%20Home%20Loan%2060-80LVR%20-%20Owner%20Occupier%20-%20Variable%20-%20P%26I%20SO:1",
+  "flags": "tap",
+  "at": [
+   640,
+   699
+  ]
+ },
+ {
+  "label": "View Central West CUL · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   843
+  ]
+ },
+ {
+  "label": "Premium Smart Home Loan, Central West CUL, Comparison rate 6.40%, Advertised rate 6.34% · Variable · Principal & interes",
+  "flags": "tap",
+  "at": [
+   384,
+   843
+  ]
+ },
+ {
+  "label": "Central West CUL · Premium Smart Home Loan",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   802
+  ]
+ },
+ {
+  "label": "Save, Premium Smart Home Loan, Central West CUL, Comparison rate 6.40%",
+  "id": "rate-save:Central%20West%20CUL%7CPremium_Smart_Home_Loan%7CRESIDENTIAL_MORTGAGES%7CPremium%20Smart%20Home%20Loan:1",
+  "flags": "tap",
+  "at": [
+   640,
+   843
+  ]
+ },
+ {
+  "label": "1–20 / 1,175 rates",
+  "at": [
+   148,
+   959
+  ]
+ },
+ {
+  "label": "Rates per page",
+  "at": [
+   125,
+   1015
+  ]
+ },
+ {
+  "label": "10",
+  "flags": "tap",
+  "at": [
+   190,
+   1099
+  ]
+ },
+ {
+  "label": "10",
+  "at": [
+   190,
+   1097
+  ]
+ },
+ {
+  "label": "20",
+  "flags": "tap,sel",
+  "at": [
+   530,
+   1099
+  ]
+ },
+ {
+  "label": "20",
+  "at": [
+   530,
+   1097
+  ]
+ },
+ {
+  "label": "Page 1",
+  "flags": "tap,sel,off",
+  "at": [
+   138,
+   1213
+  ]
+ },
+ {
+  "label": "1",
+  "at": [
+   138,
+   1213
+  ]
+ },
+ {
+  "label": "Page 2",
+  "flags": "tap",
+  "at": [
+   242,
+   1213
+  ]
+ },
+ {
+  "label": "2",
+  "at": [
+   242,
+   1214
+  ]
+ },
+ {
+  "label": "Page 3",
+  "flags": "tap",
+  "at": [
+   346,
+   1213
+  ]
+ },
+ {
+  "label": "3",
+  "at": [
+   346,
+   1214
+  ]
+ },
+ {
+  "label": "Page 4",
+  "flags": "tap",
+  "at": [
+   450,
+   1213
+  ]
+ },
+ {
+  "label": "4",
+  "at": [
+   450,
+   1214
+  ]
+ },
+ {
+  "label": "Page 59",
+  "flags": "tap",
+  "at": [
+   583,
+   1213
+  ]
+ },
+ {
+  "label": "59",
+  "at": [
+   583,
+   1214
+  ]
+ },
+ {
+  "label": "First page",
+  "flags": "tap,off",
+  "at": [
+   84,
+   1326
+  ]
+ },
+ {
+  "label": "First",
+  "at": [
+   84,
+   1327
+  ]
+ },
+ {
+  "label": "Previous page",
+  "flags": "tap,off",
+  "at": [
+   279,
+   1326
+  ]
+ },
+ {
+  "label": "Previous",
+  "at": [
+   279,
+   1327
+  ]
+ },
+ {
+  "label": "Next page",
+  "flags": "tap",
+  "at": [
+   474,
+   1326
+  ]
+ },
+ {
+  "label": "Next",
+  "at": [
+   474,
+   1327
+  ]
+ },
+ {
+  "label": "Last page",
+  "flags": "tap",
+  "at": [
+   638,
+   1326
+  ]
+ },
+ {
+  "label": "Last",
+  "at": [
+   638,
+   1327
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

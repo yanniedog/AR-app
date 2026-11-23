@@ -1,0 +1,78 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "at": [
+   356,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "Exact rate no longer available",
+  "at": [
+   360,
+   848
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

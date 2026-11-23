@@ -1,0 +1,403 @@
+[
+ {
+  "label": "Market",
+  "at": [
+   360,
+   149
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   672,
+   149
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   803
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   148
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   133
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   148
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   133
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   148
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   133
+  ]
+ },
+ {
+  "label": "Recent movements",
+  "at": [
+   260,
+   200
+  ]
+ },
+ {
+  "label": "24 Nov 2026",
+  "at": [
+   608,
+   192
+  ]
+ },
+ {
+  "label": "Last 7 days · 10 banks · ↑ 10 · ↓ 0",
+  "id": "market-pulse",
+  "at": [
+   360,
+   232
+  ]
+ },
+ {
+  "label": "ME Bank - ME Go · Increase · Home loans · Average +5.0 bps · 2/2 products · 21 Nov 2026 · Median 7.32% → 7.29%",
+  "flags": "tap",
+  "at": [
+   360,
+   378
+  ]
+ },
+ {
+  "label": "ME Bank - ME Go",
+  "at": [
+   322,
+   314
+  ]
+ },
+ {
+  "label": "ME Bank - ME Go",
+  "at": [
+   66,
+   378
+  ]
+ },
+ {
+  "label": "Increase · Home loans · 2/2 products · 21 Nov 2026",
+  "at": [
+   322,
+   378
+  ]
+ },
+ {
+  "label": "+5.0 bps",
+  "at": [
+   634,
+   356
+  ]
+ },
+ {
+  "label": "Average",
+  "at": [
+   638,
+   400
+  ]
+ },
+ {
+  "label": "Median 7.32% → 7.29%",
+  "at": [
+   322,
+   442
+  ]
+ },
+ {
+  "label": "Macquarie Bank Limited · Increase · Home loans · Average +20.0 bps · 2/2 products · 20 Nov 2026 · Median 6.84% → 6.84%",
+  "flags": "tap",
+  "at": [
+   360,
+   587
+  ]
+ },
+ {
+  "label": "Macquarie Bank Limited",
+  "at": [
+   314,
+   523
+  ]
+ },
+ {
+  "label": "Macquarie Bank Limited",
+  "at": [
+   66,
+   587
+  ]
+ },
+ {
+  "label": "Increase · Home loans · 2/2 products · 20 Nov 2026",
+  "at": [
+   314,
+   587
+  ]
+ },
+ {
+  "label": "+20.0 bps",
+  "at": [
+   626,
+   565
+  ]
+ },
+ {
+  "label": "Average",
+  "at": [
+   638,
+   609
+  ]
+ },
+ {
+  "label": "Median 6.84% → 6.84%",
+  "at": [
+   314,
+   651
+  ]
+ },
+ {
+  "label": "Regional Australia Bank · Increase · Home loans · Average +25.0 bps · 2/4 products · 20 Nov 2026 · Median 6.76% → 6.85%",
+  "flags": "tap",
+  "at": [
+   360,
+   796
+  ]
+ },
+ {
+  "label": "Regional Australia Bank",
+  "at": [
+   314,
+   732
+  ]
+ },
+ {
+  "label": "Regional Australia Bank",
+  "at": [
+   66,
+   796
+  ]
+ },
+ {
+  "label": "Increase · Home loans · 2/4 products · 20 Nov 2026",
+  "at": [
+   314,
+   796
+  ]
+ },
+ {
+  "label": "+25.0 bps",
+  "at": [
+   626,
+   774
+  ]
+ },
+ {
+  "label": "Average",
+  "at": [
+   638,
+   818
+  ]
+ },
+ {
+  "label": "Median 6.76% → 6.85%",
+  "at": [
+   314,
+   860
+  ]
+ },
+ {
+  "label": "First Option Bank · Increase · Home loans · Average +50.0 bps · 2/2 products · 19 Nov 2026 · Median 6.39% → 6.89%",
+  "flags": "tap",
+  "at": [
+   360,
+   1005
+  ]
+ },
+ {
+  "label": "First Option Bank",
+  "at": [
+   314,
+   941
+  ]
+ },
+ {
+  "label": "First Option Bank",
+  "at": [
+   66,
+   1005
+  ]
+ },
+ {
+  "label": "Increase · Home loans · 2/2 products · 19 Nov 2026",
+  "at": [
+   314,
+   1005
+  ]
+ },
+ {
+  "label": "+50.0 bps",
+  "at": [
+   626,
+   983
+  ]
+ },
+ {
+  "label": "Average",
+  "at": [
+   638,
+   1027
+  ]
+ },
+ {
+  "label": "Median 6.39% → 6.89%",
+  "at": [
+   314,
+   1069
+  ]
+ },
+ {
+  "label": "Maitland Mutual Limited · Increase · Home loans · Average +25.0 bps · 2/4 products · 19 Nov 2026 · Median 6.54% → 6.64%",
+  "flags": "tap",
+  "at": [
+   360,
+   1214
+  ]
+ },
+ {
+  "label": "Maitland Mutual Limited",
+  "at": [
+   314,
+   1150
+  ]
+ },
+ {
+  "label": "Maitland Mutual Limited",
+  "at": [
+   66,
+   1214
+  ]
+ },
+ {
+  "label": "Increase · Home loans · 2/4 products · 19 Nov 2026",
+  "at": [
+   314,
+   1214
+  ]
+ },
+ {
+  "label": "+25.0 bps",
+  "at": [
+   626,
+   1192
+  ]
+ },
+ {
+  "label": "Average",
+  "at": [
+   638,
+   1236
+  ]
+ },
+ {
+  "label": "Median 6.54% → 6.64%",
+  "at": [
+   314,
+   1278
+  ]
+ },
+ {
+  "label": "Show more",
+  "flags": "tap",
+  "at": [
+   360,
+   1367
+  ]
+ },
+ {
+  "label": "Show more",
+  "at": [
+   361,
+   1381
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap,sel",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "sel",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
