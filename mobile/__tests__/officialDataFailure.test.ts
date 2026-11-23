@@ -20,6 +20,11 @@ describe('officialDataFailureReason', () => {
     expect(reason).toContain('Trust anchor for certification path not found');
     expect(reason.length).toBe('network ()'.length + 160);
   });
+  it('treats a TLS error name as a network failure even when the message has no TLS words', () => {
+    const error = new Error(`handshake rejected ${'y'.repeat(200)}`);
+    error.name = 'SSLHandshakeException';
+    expect(officialDataFailureReason(error)).toBe(`network (${error.message.slice(0, 160)})`);
+  });
   it('keeps parse errors short', () => {
     expect(officialDataFailureReason(new Error('x'.repeat(300)))).toHaveLength('Error: '.length + 80);
   });
