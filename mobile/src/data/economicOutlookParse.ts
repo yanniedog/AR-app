@@ -94,6 +94,12 @@ function parseCsvShared(text: string): string[][] {
   return lastParsedRows;
 }
 
+/** Drop the reused table so a finished refresh does not keep it in memory. */
+export function releaseParsedCsvCache(): void {
+  lastParsedText = null;
+  lastParsedRows = [];
+}
+
 export function parseRbaSeriesCsv(text: string, seriesId: string): ParsedSeries {
   const rows = parseCsvShared(text);
   const ids = rowByLabel(rows, 'Series ID');
