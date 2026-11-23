@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { auditCompletion, auditCoverageLine, auditOutcomeLine, decodeAuditExport } from './audit-export.mjs';
 import { renderOutcome } from './session-verdict.mjs';
+import { groupAuditFailures, renderAuditFailureGroups } from './audit-findings.mjs';
 
 const [dir, runId] = process.argv.slice(2);
 const read = f => { try { return fs.readFileSync(path.join(dir, f), 'utf8'); } catch { return ''; } };
@@ -75,6 +76,7 @@ if (decoded) {
     && position.category === 'timing').map(position => position.position));
   const performanceFailures = checks.flatMap((check, index) => check.status === 'fail'
     ? [{ ...check, timing: timingPositions.has(index + 1) }] : []);
+  out.push(...renderAuditFailureGroups(groupAuditFailures(performanceFailures)), '');
   const healthFailures = (decoded.appHealth?.checks ?? []).filter(check => check.status === 'fail')
     .map(check => ({ id: check.code, kind: 'app health', failureCode: check.domain }));
   const ordered = [...healthFailures, ...performanceFailures].sort((a, b) => Number(Boolean(a.timing)) - Number(Boolean(b.timing)));
@@ -92,6 +94,26 @@ if (crash.length) {
   const journeys = logcat.split('\n').filter(l => /perf-audit.*"id":"journey-/.test(l)).slice(-6)
     .map(l => (l.match(/"id":"(journey-[^"]+)".*?"status":"(\w+)"/) || []).slice(1).join(' '));
   if (journeys.length) out.push('', 'Last journeys before crash: ' + journeys.join(', '));
+}
+const official = new Map();
+for (const line of logcat.split('\n')) {
+  const m = line.match(/official-data-summary: stage=(\w+) source=(\S+) reason=(.+?)\s*$/);
+  if (m) official.set(`${m[2]} ${m[1]} ${m[3]}`, (official.get(`${m[2]} ${m[1]} ${m[3]}`) || 0) + 1);
+}
+if (official.size) {
+  out.push('', 'Official data fetch failures (app log, each distinct failure once):', '| source | stage | reason | times |', '| --- | --- | --- | --- |');
+  for (const [key, count] of [...official].slice(0, 12)) {
+    const [source, stage, ...reason] = key.split(' ');
+    out.push(`| ${source} | ${stage} | ${reason.join(' ').replace(/\|/g, '/')} | ${count} |`);
+  }
+}
+const reach = read('source-reachability.txt').split('\n').filter(Boolean);
+if (reach.length) {
+  out.push('', 'Official data reachability from the runner (curl):', '```', ...reach.slice(0, 12).map(l => l.slice(0, 200)), '```');
+}
+const tls = read('rba-tls.txt').split('\n').filter(Boolean);
+if (tls.length) {
+  out.push('', 'RBA TLS chain and emulator clock:', '```', ...tls.slice(0, 10).map(l => l.slice(0, 200)), '```');
 }
 out.push('', `Results branch: explorer/run-${runId}`);
 let body = out.join('\n');

@@ -105,6 +105,13 @@ export async function auditExternalLink(
   }
   if (!trusted.ok) {
     result.validation = check('fail', trusted.message);
+    // A link rejected only by the source allowlist is a plain public URL; name it so the audit says which
+    // source is unapproved. Credential or unsafe URLs stay unnamed.
+    if (/not approved/.test(trusted.message)) try {
+      const rejected = new StandardUrl(request.url);
+      result.host = rejected.hostname.toLowerCase();
+      result.path = rejected.pathname;
+    } catch { /* an unparseable URL has no host to report */ }
     return result;
   }
   result.validation = check('pass', 'Approved, credential-free HTTPS destination.');

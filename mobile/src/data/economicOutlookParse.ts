@@ -1,6 +1,6 @@
 import type { CashRateForecast, EconomicPoint, ParsedSeries } from './economicOutlookTypes';
 
-export function parseCsv(text: string): string[][] {
+export function parseCsvQuoted(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = '';
@@ -31,6 +31,27 @@ export function parseCsv(text: string): string[][] {
   if (field || row.length) {
     row.push(field.trim());
     if (row.some((cell) => cell !== '')) rows.push(row);
+  }
+  return rows;
+}
+
+/**
+ * Splits on newlines natively and splits unquoted rows on commas, which is far faster on Hermes than the
+ * character loop for the half-megabyte RBA tables. Rows with quotes, and any quoted field that spans lines, use the loop.
+ */
+export function parseCsv(text: string): string[][] {
+  const source = text.replace(/^\uFEFF/, '');
+  const rows: string[][] = [];
+  for (const line of source.split(/\r\n|\r|\n/)) {
+    let cells: string[];
+    if (line.includes('"')) {
+      if ((line.split('"').length - 1) % 2) return parseCsvQuoted(text);
+      cells = parseCsvQuoted(line)[0] ?? [];
+    } else {
+      cells = line.split(',');
+      for (let i = 0; i < cells.length; i += 1) cells[i] = cells[i].trim();
+    }
+    if (cells.some((cell) => cell !== '')) rows.push(cells);
   }
   return rows;
 }

@@ -102,6 +102,17 @@ describe('app explorer UX review', () => {
     expect(r.findings.filter(f => f.text === 'Covered row title')).toEqual([]);
   });
 
+  it('does not report crowding for a control cut off by the bottom tab bar', () => {
+    const tabs = [
+      { text: 'Rates', clickable: true, bounds: [0, 1393, 240, 1552] },
+      { text: 'Saved', clickable: true, bounds: [240, 1393, 480, 1552] },
+      { text: 'Market', clickable: true, bounds: [480, 1393, 720, 1552] },
+    ];
+    const sliver = { text: 'Forecast Dec 26', clickable: true, bounds: [32, 1370, 160, 1392] };
+    const r = review({ rba: [...tabs, sliver] });
+    expect(r.findings.filter(f => f.check === 'crowded-targets')).toEqual([]);
+  });
+
   it('keeps small controls near the bottom when there is no tab bar, and edge-aligned children that are not clipped', () => {
     const small = { text: 'Tiny', clickable: true, bounds: [20, 1400, 100, 1440] };
     const scroller = { scrollable: true, cls: 'ScrollView', bounds: [0, 585, 720, 1392] };
@@ -150,6 +161,15 @@ describe('app explorer UX review', () => {
     ] }, [{ settleMs: 17000, firstContentMs: 16000 }]);
     expect(checks(r)).toEqual(expect.arrayContaining(['first-run-gate', 'slow-first-value', 'intimidating-first-run']));
     expect(r.rubric.find(x => x.key === 'onboarding')!.score).toBeLessThan(5);
+  });
+
+  it('measures a slow relaunch separately from the first install', () => {
+    const r = review({ 'open-app': [row('Basic Loan', 'Bank B', 5.9, 5.8, 300)], 'cold-start': [row('Basic Loan', 'Bank B', 5.9, 5.8, 300)] },
+      [{ firstContentMs: 2000 }, { name: 'cold start', firstContentMs: 8800 }]);
+    expect(r.firstRun.firstValueMs).toBe(2000);
+    expect((r.firstRun as { relaunchValueMs?: number }).relaunchValueMs).toBe(8800);
+    expect(checks(r)).toContain('slow-relaunch');
+    expect(checks(r)).not.toContain('slow-first-value');
   });
 
   it('flags a dead-end error state and offers a fix for every finding', () => {
