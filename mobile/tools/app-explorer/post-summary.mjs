@@ -2,7 +2,7 @@
 // Usage: node post-summary.mjs <explorer-out dir> <run id>
 import fs from 'node:fs';
 import path from 'node:path';
-import { auditCompletion, auditOutcomeLine, decodeAuditExport } from './audit-export.mjs';
+import { auditCompletion, auditCoverageLine, auditOutcomeLine, decodeAuditExport } from './audit-export.mjs';
 import { renderOutcome } from './session-verdict.mjs';
 
 const [dir, runId] = process.argv.slice(2);
@@ -27,9 +27,11 @@ if (fs.existsSync(path.join(dir, 'audit-log.txt'))) {
 }
 const completion = auditCompletion(decoded);
 out.push(audit.kind ? `**${auditOutcomeLine({ ...audit, completion })}**` : auditLine, '');
-if (completion) {
-  const fields = [['Collection', completion.collectionComplete], ['Coverage', completion.coverageComplete], ['Details', completion.detailsComplete]];
-  out.push(fields.map(([name, value]) => `${name}: ${value === true ? 'complete' : value === false ? 'incomplete' : 'unverified'}`).join(' | '), '');
+if (completion) out.push(auditCoverageLine(completion), '');
+if (audit.debugLog?.url) {
+  out.push(`Debug log: ${audit.debugLog.url}${audit.debugLog.error ? ` (fetch failed: ${audit.debugLog.error})` : ''}`, '');
+} else if (audit.debugLog?.error) {
+  out.push(`Debug log: ${audit.debugLog.error}`, '');
 }
 if (audit.url) out.push(`Audit log: ${audit.url}`, '');
 if (audit.logContentUrl && audit.logContentUrl !== audit.url) out.push(`Audit log (full file): ${audit.logContentUrl}`, '');
@@ -69,13 +71,18 @@ if (decoded) {
     const timing = positions.filter(position => position.category === 'timing').length;
     out.push(`Failure positions: ${positions.length - timing} non-timing | ${timing} timing`, '');
   }
-  const timingIds = new Set(positions.filter(position => position.category === 'timing').map(position => position.checkId));
-  const ordered = [...failed].sort((a, b) => Number(timingIds.has(a.id)) - Number(timingIds.has(b.id)));
-  out.push('| check | kind | ms | code |', '| --- | --- | --- | --- |');
+  const timingPositions = new Set(positions.filter(position => position.source === 'performance'
+    && position.category === 'timing').map(position => position.position));
+  const performanceFailures = checks.flatMap((check, index) => check.status === 'fail'
+    ? [{ ...check, timing: timingPositions.has(index + 1) }] : []);
+  const healthFailures = (decoded.appHealth?.checks ?? []).filter(check => check.status === 'fail')
+    .map(check => ({ id: check.code, kind: 'app health', failureCode: check.domain }));
+  const ordered = [...healthFailures, ...performanceFailures].sort((a, b) => Number(Boolean(a.timing)) - Number(Boolean(b.timing)));
+  out.push('| check | kind | ms | code |', '| --- | --- | --- | ----- |');
   for (const c of ordered.slice(0, 60)) {
-    out.push(`| ${c.id} | ${c.kind} | ${Math.round(c.durationMs || 0)} | ${c.failureCode || ''} |`);
+    out.push(`| ${c.id ?? '(redacted)'} | ${c.kind} | ${Math.round(c.durationMs || 0)} | ${c.failureCode || ''} |`);
   }
-  if (failed.length > 60) out.push(`| ... ${failed.length - 60} more in the results branch | | | |`);
+  if (ordered.length > 60) out.push(`| ... ${ordered.length - 60} more in the results branch | | | |`);
 }
 
 const logcat = read('logcat.txt');

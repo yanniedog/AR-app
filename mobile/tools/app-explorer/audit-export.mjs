@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 
 // Match the public uploader's limits in compactDiagnosticJson.ts.
-const MAX_ENVELOPE_BYTES = 2 * 1024 * 1024;
+export const MAX_ENVELOPE_BYTES = 2 * 1024 * 1024;
 const MAX_REPORT_BYTES = 32 * 1024 * 1024;
 const OUTCOMES = new Set(['successful', 'warning', 'failed', 'incomplete']);
 
@@ -36,4 +36,9 @@ export function auditOutcomeLine(audit) {
   const outcome = audit.completion?.outcome ?? 'unverified';
   const runner = audit.outcome ? ` | runner: ${audit.outcome}` : '';
   return `Audit ${audit.kind}: outcome ${outcome}${runner} | ${Math.round(audit.elapsedMs / 1000)} s`;
+}
+
+export function auditCoverageLine(completion) {
+  const fields = [['Collection', completion.collectionComplete], ['Coverage', completion.coverageComplete], ['Details', completion.detailsComplete]];
+  return fields.map(([name, value]) => `${name}: ${value === true ? 'complete' : value === false ? 'incomplete' : 'unverified'}`).join(' | ');
 }
