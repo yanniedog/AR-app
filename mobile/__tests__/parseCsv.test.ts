@@ -43,4 +43,20 @@ describe('parseCsv', () => {
     expect(parsed).toHaveLength(20001);
     expect(parsed).toEqual(parseCsvQuoted(text));
   });
+
+  it('takes the native-split path for unquoted rows and the character parser only when quotes are present', () => {
+    const split = jest.spyOn(String.prototype, 'split');
+    try {
+      parseCsv('a,b\n1,2\n3,4');
+      // One split for the lines plus one per row; the character parser never calls split.
+      expect(split.mock.calls.length).toBeGreaterThanOrEqual(4);
+      split.mockClear();
+      parseCsv('a,"b,c"\n1,2');
+      // Only the line split and the per-line quote count; no comma split on the quoted row.
+      expect(split.mock.calls.some(([separator]) => separator === ',')).toBe(true);
+      expect(split.mock.calls.filter(([separator]) => separator === ',').length).toBe(1);
+    } finally {
+      split.mockRestore();
+    }
+  });
 });
