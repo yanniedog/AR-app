@@ -10,7 +10,9 @@ export function officialDataFailureReason(error: unknown): string {
   if (status) return `http-${status}`;
   if (name === 'AbortError' || /abort/i.test(message)) return 'timeout';
   if (/not-allowlisted|policy/i.test(`${name} ${message}`)) return 'blocked-by-policy';
-  if (/network request failed|failed to fetch|unable to resolve|ssl|certificate|connection/i.test(message)) return 'network';
+  if (/network request failed|failed to fetch|unable to resolve|ssl|certificate|connection/i.test(message)) {
+    return `network (${message.replace(/\s+/g, ' ').slice(0, 60)})`;
+  }
   return `${name}: ${message.replace(/\s+/g, ' ').slice(0, 80)}`;
 }
 
