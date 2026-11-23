@@ -1,4 +1,5 @@
 import { cache } from './cache';
+import { logOfficialDataFailure } from './officialDataFailure';
 import { getLocalAppHealthAuditGeneration, isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import {
   ABS_CPI_RELEASE_URL,
@@ -145,6 +146,9 @@ async function fetchCsv(url: string, timeoutMs = 15_000): Promise<FetchedCsv> {
       ?? response.headers?.get?.('Last-Modified')
       ?? null;
     return { text, lastModified };
+  } catch (error) {
+    if (!isLocalAppHealthAudit()) logOfficialDataFailure(url, 'request', error);
+    throw error;
   } finally {
     clearTimeout(timer);
   }

@@ -8,6 +8,7 @@ import {
 } from './rbaMarketOutlookParse';
 import type { RbaBondForwards, RbaMarketOutlook } from './rbaMarketOutlookTypes';
 import { RBA_F17_FORWARD_URL, RBA_J1_FORECAST_URL } from './officialEconomicSources';
+import { logOfficialDataFailure } from './officialDataFailure';
 
 export type { RbaBondForwards, RbaMarketOutlook } from './rbaMarketOutlookTypes';
 export { parseRbaBondForwardsCsv, parseRbaEconomistsCsv } from './rbaMarketOutlookParse';
@@ -137,6 +138,22 @@ async function fetchCsv(url: string): Promise<string> {
   }
 }
 
+async function readSource<T>(url: string, parse: (text: string) => T): Promise<T> {
+  let text: string;
+  try {
+    text = await fetchCsv(url);
+  } catch (error) {
+    if (!isLocalAppHealthAudit()) logOfficialDataFailure(url, 'request', error);
+    throw error;
+  }
+  try {
+    return parse(text);
+  } catch (error) {
+    logOfficialDataFailure(url, 'parse', error);
+    throw error;
+  }
+}
+
 async function commit(
   sequence: number,
   expectedGeneration: number,
@@ -216,8 +233,8 @@ export async function loadRbaMarketOutlook(force = false): Promise<RbaMarketOutl
     if (!force && cached?.refreshStatus === 'current' && age >= 0 && age < ECONOMIC_RECHECK_MS) return freezePayload(cached);
     const checkedAt = new Date().toISOString();
     const [bonds, economists] = await Promise.allSettled([
-      fetchCsv(RBA_F17_FORWARD_URL).then((text) => parseRbaBondForwardsCsv(text)),
-      fetchCsv(RBA_J1_FORECAST_URL).then((text) => parseRbaEconomistsCsv(text)),
+      readSource(RBA_F17_FORWARD_URL, parseRbaBondForwardsCsv),
+      readSource(RBA_J1_FORECAST_URL, parseRbaEconomistsCsv),
     ]);
     return commit(sequence, expectedGeneration, auditGeneration, {
       schema_version: 1,
