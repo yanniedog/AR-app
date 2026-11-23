@@ -37,8 +37,10 @@ for url in \
   https://www.rba.gov.au/statistics/tables/csv/h4-data.csv \
   https://www.rba.gov.au/statistics/tables/csv/h5-data.csv \
   https://data.api.abs.gov.au/rest/data/ABS,CPI,2.0.0/3.10001.10.50.M?startPeriod=2015-01\&format=csv; do
-  result=$(curl -sS -o /dev/null -m 20 -H 'Accept: text/csv' -w '%{http_code} %{time_total}s %{size_download}B' "$url" 2>&1 | tail -1 | tr -d '\r' || true)
-  printf '%s | %s\n' "${url%%\?*}" "${result:-no response}" >> explorer-out/source-reachability.txt
+  rc=0
+  result=$(curl -sS -o /dev/null -m 20 -H 'Accept: text/csv' -w '%{http_code} %{time_total}s %{size_download}B' "$url" 2>/dev/null) || rc=$?
+  # curl exit codes name the cause of a 000: 6 DNS, 7 connect, 28 timeout, 35/60 TLS, 56 reset.
+  printf '%s | %s | curl-exit=%s\n' "${url%%\?*}" "${result:-no response}" "$rc" >> explorer-out/source-reachability.txt
 done
 status=0
 node mobile/tools/app-explorer/driver.mjs "${args[@]}" || status=$?
