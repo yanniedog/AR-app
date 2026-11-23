@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { renderOutcome } from './session-verdict.mjs';
+import { groupAuditFailures, renderAuditFailureGroups } from './audit-findings.mjs';
 
 const [dir, runId] = process.argv.slice(2);
 const read = f => { try { return fs.readFileSync(path.join(dir, f), 'utf8'); } catch { return ''; } };
@@ -57,11 +58,12 @@ if (decoded) {
   const byCode = {};
   for (const c of failed) byCode[c.failureCode || 'none'] = (byCode[c.failureCode || 'none'] || 0) + 1;
   out.push('Failures by code: ' + JSON.stringify(byCode), '');
+  out.push(...renderAuditFailureGroups(groupAuditFailures(checks)), '');
   out.push('| check | kind | ms | code |', '| --- | --- | --- | --- |');
-  for (const c of failed.slice(0, 60)) {
+  for (const c of failed.slice(0, 30)) {
     out.push(`| ${c.id} | ${c.kind} | ${Math.round(c.durationMs || 0)} | ${c.failureCode || ''} |`);
   }
-  if (failed.length > 60) out.push(`| ... ${failed.length - 60} more in the results branch | | | |`);
+  if (failed.length > 30) out.push(`| ... ${failed.length - 30} more in the results branch | | | |`);
 }
 
 const logcat = read('logcat.txt');

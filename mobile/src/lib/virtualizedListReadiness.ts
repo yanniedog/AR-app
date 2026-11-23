@@ -47,3 +47,19 @@ export function isVirtualizedListVisiblyCommitted(
   return isVirtualizedListRevisionReady(state, activeRevision, itemCount) &&
     (itemCount === 0 || state.visibleCount > 0);
 }
+
+export interface ListIdentityVersion {
+  signature: string;
+  version: number;
+}
+
+/** The version moves only when the ordered item ids change. A new array holding
+ * the same ids keeps its version, so a painted list is not marked unpainted. */
+export function nextListIdentityVersion(
+  current: ListIdentityVersion | null,
+  ids: readonly string[],
+): ListIdentityVersion {
+  const signature = ids.join('\u0001');
+  if (current && current.signature === signature) return current;
+  return { signature, version: (current?.version ?? 0) + 1 };
+}
