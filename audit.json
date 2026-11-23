@@ -1,0 +1,34 @@
+{
+  "kind": "live",
+  "url": "https://paste.rs/XlGtx",
+  "outcome": null,
+  "elapsedMs": 973806,
+  "visibleOutcome": [
+    "Navigate up",
+    "App health audit",
+    "Account",
+    "Verified upload",
+    "Verified upload",
+    "Uploaded",
+    "https://paste.rs/XlGtx",
+    "https://paste.c-net.org/dac572ce-e849-b3f3-856c-ec9dcc2276f1",
+    "Copy paste.rs link",
+    "Copy paste.rs link",
+    "Copy paste.c-net.org link",
+    "Copy paste.c-net.org link",
+    "Audit history",
+    "Retained runs",
+    "1 / 120",
+    "Live checks",
+    "Live checks",
+    "Performance",
+    "Performance",
+    "UX & fluidity"
+  ],
+  "logStatus": 200,
+  "logContentUrl": "https://paste.c-net.org/dac572ce-e849-b3f3-856c-ec9dcc2276f1",
+  "logBytes": 857558,
+  "debugLog": {
+    "error": "Upload and copy link not found"
+  }
+}

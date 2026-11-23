@@ -1,0 +1,177 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Debug log",
+  "at": [
+   243,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "Pending · Observed: 24 Nov 2026 · Pending: 24 Nov 2026",
+  "at": [
+   387,
+   281
+  ]
+ },
+ {
+  "label": "Private diagnostics",
+  "at": [
+   360,
+   431
+  ]
+ },
+ {
+  "label": "Device / network / rate / product / receipt / error",
+  "at": [
+   360,
+   479
+  ]
+ },
+ {
+  "label": "Privacy",
+  "at": [
+   360,
+   567
+  ]
+ },
+ {
+  "label": "Redaction unguaranteed",
+  "at": [
+   360,
+   615
+  ]
+ },
+ {
+  "label": "Local file",
+  "at": [
+   360,
+   723
+  ]
+ },
+ {
+  "label": "Android/data/com.eyex.australianrates/files/logs/ar-local.log",
+  "at": [
+   360,
+   799
+  ]
+ },
+ {
+  "label": "Copy path",
+  "flags": "tap",
+  "at": [
+   360,
+   903
+  ]
+ },
+ {
+  "label": "Copy path",
+  "at": [
+   387,
+   904
+  ]
+ },
+ {
+  "label": "Copy",
+  "at": [
+   360,
+   1039
+  ]
+ },
+ {
+  "label": "Clipboard",
+  "at": [
+   360,
+   1087
+  ]
+ },
+ {
+  "label": "Share",
+  "at": [
+   360,
+   1175
+  ]
+ },
+ {
+  "label": "Operating-system share sheet",
+  "at": [
+   360,
+   1223
+  ]
+ },
+ {
+  "label": "Upload",
+  "at": [
+   360,
+   1311
+  ]
+ },
+ {
+  "label": "Public hosting",
+  "at": [
+   360,
+   1359
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
