@@ -21,6 +21,13 @@ describe('external link audit', () => {
     expect(dependencies.fetch).not.toHaveBeenCalled();
   });
 
+  it('names the host and path of a link the source allowlist rejects, without its query', async () => {
+    const result = await auditExternalLink({ ...request, url: 'https://example.invalid/key-info?x=1' }, options());
+    expect(result.validation.status).toBe('fail');
+    expect(result).toMatchObject({ host: 'example.invalid', path: '/key-info' });
+    expect(JSON.stringify(result)).not.toContain('x=1');
+  });
+
   it('checks the OS receiver and HEAD without opening a browser or recording query values', async () => {
     const dependencies = options();
     const result = await auditExternalLink(request, dependencies);
