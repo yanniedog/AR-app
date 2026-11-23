@@ -536,7 +536,7 @@ export default function BankDetail() {
   const listVersion = productListRevision.current.version;
   const seenListVersion = useRef(listVersion);
   // A different set of rows is a new list, so it starts at the top, not at the old scroll offset.
-  if (seenListVersion.current !== listVersion) { seenListVersion.current = listVersion; listOffset.current = 0; }
+  if (seenListVersion.current !== listVersion) { seenListVersion.current = listVersion; listOffset.current = 0; const session = providerSessions.get(provider); if (session) session.offset = 0; }
   const listRevision = `${provider}:${coreSha ?? core?.run_date ?? ''}:${listVersion}`;
   const listReadiness = useVirtualizedListReadiness(listRevision, productCount);
 
@@ -854,7 +854,7 @@ export default function BankDetail() {
         {moveDetailShown ? <ScrollView testID="provider-move-detail" nestedScrollEnabled style={{ flexGrow: 0, flexShrink: 0, maxHeight: 180 }}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4 }} onLayout={event => setMoveDetailHeight(Math.min(180, event.nativeEvent.layout.height))}>{moveDetail}</ScrollView> : null}
         <FlashList
-          key={`${productView}:${provider}:${listVersion}`}
+          key={`${productView}:${listRevision}`}
           horizontal={productView === 'carousel'}
           snapToInterval={productView === 'carousel' ? cardWidth : undefined}
           decelerationRate={productView === 'carousel' ? 'fast' : 'normal'}

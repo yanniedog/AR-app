@@ -14,6 +14,10 @@ describe('audit failure grouping', () => {
     const { cause } = run([check('a', { diagnostic: { readiness: { blockers: [{ surface: 'lender.details', probe: 'lender.products' }] } } })]);
     expect(cause).toBe('lender.details lender.products never became ready');
   });
+  test('falls back to the blocker code when no probe is named', () => {
+    const { cause } = run([check('a', { diagnostic: { readiness: { blockers: [{ code: 'no-surfaces' }] } } })]);
+    expect(cause).toBe('readiness blocked: no-surfaces');
+  });
   test('folds numbers in error text so one cause is one group', () => {
     const { groups } = run([
       check('a', { error: { message: 'Step exceeded the 10-second limit (10015ms)' } }),

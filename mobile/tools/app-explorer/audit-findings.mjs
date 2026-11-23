@@ -5,7 +5,8 @@ const text = e => (e && typeof e === 'object' ? e.message || '' : e || '');
 /** One short cause per failed check: the stuck probe, the error text, or the failure code. */
 export function failureCause(check) {
   const blocker = check.diagnostic?.readiness?.blockers?.[0];
-  if (blocker) return `${blocker.surface} ${blocker.probe} never became ready`;
+  if (blocker?.surface && blocker?.probe) return `${blocker.surface} ${blocker.probe} never became ready`;
+  if (blocker?.code) return `readiness blocked: ${blocker.code}`;
   const message = text(check.error).replace(/\(\d+ms\)/, '').replace(/\d+/g, '#').trim();
   if (message) return message.slice(0, 120);
   return check.failureCode || 'failed';
