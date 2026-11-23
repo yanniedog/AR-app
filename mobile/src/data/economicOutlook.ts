@@ -23,7 +23,6 @@ import {
   parseCashRateTargetCsv,
   parseRbaSeriesCsv,
   preferNewerSeries,
-  releaseParsedCsvCache,
 } from './economicOutlookParse';
 import {
   INDICATOR_DEFINITIONS,
@@ -395,7 +394,6 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       }
     });
 
-    releaseParsedCsvCache();
     const fetchMs = Math.max(0, Math.round(allSettledAt - fetchStartedAt - parseMsWhileFetching));
     parseMs = Math.round(parseMs);
     const slowRefresh = slowRefreshMessage(fetchMs, parseMs);
@@ -458,7 +456,11 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       cashRateForecast: forecastEntry.forecast ?? cached?.cashRateForecast ?? null,
       cashRateHistory,
     };
-    return commitEconomicResult(sequence, fresh, true, auditGeneration, cached);
+    const commitStartedAt = monotonicNow();
+    const committed = await commitEconomicResult(sequence, fresh, true, auditGeneration, cached);
+    const commitMs = Math.round(monotonicNow() - commitStartedAt);
+    if (commitMs > SLOW_PARSE_MS) debugLog.warn('economic-outlook', `slow save: ${commitMs} ms`);
+    return committed;
   })();
   const tracked = run.finally(() => {
     if (inFlight?.promise === tracked) inFlight = null;
