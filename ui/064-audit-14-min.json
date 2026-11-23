@@ -1,0 +1,88 @@
+[
+ {
+  "label": "App health audit",
+  "at": [
+   184,
+   1118
+  ]
+ },
+ {
+  "label": "100%",
+  "at": [
+   620,
+   1119
+  ]
+ },
+ {
+  "label": "Estimated time: 00:15",
+  "at": [
+   360,
+   1186
+  ]
+ },
+ {
+  "label": "Checking",
+  "at": [
+   360,
+   1250
+  ]
+ },
+ {
+  "label": "Elapsed: 14:22",
+  "at": [
+   158,
+   1314
+  ]
+ },
+ {
+  "label": "Checks 2,858 / 2,859",
+  "at": [
+   522,
+   1314
+  ]
+ },
+ {
+  "label": "App health audit",
+  "at": [
+   360,
+   1366
+  ]
+ },
+ {
+  "label": "2,858 / 2,859 Checks",
+  "at": [
+   198,
+   1446
+  ]
+ },
+ {
+  "label": "Pause",
+  "flags": "tap",
+  "at": [
+   427,
+   1446
+  ]
+ },
+ {
+  "label": "Pause",
+  "at": [
+   427,
+   1447
+  ]
+ },
+ {
+  "label": "Cancel",
+  "flags": "tap",
+  "at": [
+   618,
+   1446
+  ]
+ },
+ {
+  "label": "Cancel",
+  "at": [
+   652,
+   1447
+  ]
+ }
+]
