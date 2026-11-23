@@ -534,7 +534,7 @@ export default function BankDetail() {
   if (productListRevision.current.items !== productItems) {
     productListRevision.current = { items: productItems, version: productListRevision.current.version + 1 };
   }
-  const listRevision = `${provider}:${coreSha ?? core?.run_date ?? ''}:${productListRevision.current.version}`;
+  const listRevision = `${provider}:${productView}:${coreSha ?? core?.run_date ?? ''}:${productListRevision.current.version}`;
   const listReadiness = useVirtualizedListReadiness(listRevision, productCount);
 
   const handleMoveSelect = useCallback(
@@ -851,7 +851,7 @@ export default function BankDetail() {
         {moveDetailShown ? <ScrollView testID="provider-move-detail" nestedScrollEnabled style={{ flexGrow: 0, flexShrink: 0, maxHeight: 180 }}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4 }} onLayout={event => setMoveDetailHeight(Math.min(180, event.nativeEvent.layout.height))}>{moveDetail}</ScrollView> : null}
         <FlashList
-          key={`${productView}:${provider}`}
+          key={listRevision}
           horizontal={productView === 'carousel'}
           snapToInterval={productView === 'carousel' ? cardWidth : undefined}
           decelerationRate={productView === 'carousel' ? 'fast' : 'normal'}

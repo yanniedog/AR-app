@@ -114,9 +114,9 @@
   "why": "third-party notices"
  },
  {
-  "name": "catalogue",
-  "open": "/catalogue",
-  "scroll": 0,
-  "why": "catalogue"
+  "name": "lender-bankwest-products",
+  "open": "/bank/Bankwest",
+  "scroll": 2,
+  "why": "Bankwest product rows below the lender chart and browse controls"
  }
 ]
