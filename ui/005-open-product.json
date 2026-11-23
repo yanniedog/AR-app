@@ -1,0 +1,272 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Star Classic",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Star Classic",
+  "at": [
+   414,
+   269
+  ]
+ },
+ {
+  "label": "Homestar Finance Pty Ltd",
+  "at": [
+   72,
+   337
+  ]
+ },
+ {
+  "label": "HFPL",
+  "at": [
+   72,
+   337
+  ]
+ },
+ {
+  "label": "Homestar Finance Pty Ltd",
+  "flags": "tap",
+  "at": [
+   301,
+   341
+  ]
+ },
+ {
+  "label": "Homestar Finance Pty Ltd",
+  "at": [
+   301,
+   313
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   414,
+   409
+  ]
+ },
+ {
+  "label": "Comparison rate",
+  "at": [
+   360,
+   529
+  ]
+ },
+ {
+  "label": "6.33%",
+  "at": [
+   360,
+   597
+  ]
+ },
+ {
+  "label": "6.33% Advertised rate",
+  "at": [
+   360,
+   665
+  ]
+ },
+ {
+  "label": "Source date 10 Nov 2026",
+  "at": [
+   360,
+   725
+  ]
+ },
+ {
+  "label": "Save",
+  "flags": "tap",
+  "at": [
+   190,
+   875
+  ]
+ },
+ {
+  "label": "Save",
+  "at": [
+   217,
+   876
+  ]
+ },
+ {
+  "label": "Calculate",
+  "flags": "tap",
+  "at": [
+   530,
+   875
+  ]
+ },
+ {
+  "label": "Calculate",
+  "at": [
+   531,
+   875
+  ]
+ },
+ {
+  "label": "Hide Rate details",
+  "flags": "tap",
+  "at": [
+   360,
+   1101
+  ]
+ },
+ {
+  "label": "Rate details",
+  "at": [
+   328,
+   1101
+  ]
+ },
+ {
+  "label": "Rate type",
+  "at": [
+   297,
+   1201
+  ]
+ },
+ {
+  "label": "Variable",
+  "at": [
+   637,
+   1201
+  ]
+ },
+ {
+  "label": "Term",
+  "at": [
+   291,
+   1253
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   1253
+  ]
+ },
+ {
+  "label": "Rate structure",
+  "at": [
+   297,
+   1305
+  ]
+ },
+ {
+  "label": "Variable",
+  "at": [
+   637,
+   1305
+  ]
+ },
+ {
+  "label": "Repayment",
+  "at": [
+   232,
+   1357
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "at": [
+   572,
+   1357
+  ]
+ },
+ {
+  "label": "Loan purpose",
+  "at": [
+   248,
+   1391
+  ]
+ },
+ {
+  "label": "Owner occupied",
+  "at": [
+   588,
+   1391
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
