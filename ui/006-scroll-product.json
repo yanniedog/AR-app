@@ -1,0 +1,186 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Annual fee",
+  "at": [
+   291,
+   204
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   204
+  ]
+ },
+ {
+  "label": "$0–$1k · Conditions: Unverified · $8.3–$42 · Conditions: Unverified · $129.2–$248.04 · Conditions: Unverified · $0–$0 · ",
+  "at": [
+   372,
+   342
+  ]
+ },
+ {
+  "label": "Offset account",
+  "at": [
+   145,
+   694
+  ]
+ },
+ {
+  "label": "Unknown · Conditions: Unverified",
+  "at": [
+   485,
+   694
+  ]
+ },
+ {
+  "label": "Availability",
+  "at": [
+   228,
+   746
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   568,
+   746
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   286,
+   798
+  ]
+ },
+ {
+  "label": "Unverified",
+  "at": [
+   626,
+   798
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   360,
+   950
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "flags": "tap",
+  "at": [
+   360,
+   1068
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "at": [
+   386,
+   1068
+  ]
+ },
+ {
+  "label": "Show Fees",
+  "flags": "tap",
+  "at": [
+   360,
+   1294
+  ]
+ },
+ {
+  "label": "Fees",
+  "at": [
+   328,
+   1294
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
