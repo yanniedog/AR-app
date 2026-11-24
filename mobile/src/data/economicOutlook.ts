@@ -300,8 +300,12 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
         if (!slowest || elapsed > slowest.ms) slowest = { label: tableLabel(url), ms: Math.round(elapsed) };
       }
     };
-    const beforeLargeParse = (text: string): Promise<void> | undefined =>
-      text.length > LARGE_TABLE_CHARS ? yieldToUi(0) : undefined;
+    // An audit can start while the thread is yielded, so re-check before the parse begins.
+    const beforeLargeParse = async (text: string): Promise<void> => {
+      if (text.length <= LARGE_TABLE_CHARS) return;
+      await yieldToUi(0);
+      if (invalidatedByAudit()) throw new Error('Refresh cancelled by audit');
+    };
     const [sourceEntries, forecastSettled, cashRateSettled, absHeadlineSettled] = await Promise.all([
       Promise.all(
         SOURCE_KEYS.map(async (source) => {
@@ -387,7 +391,13 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
     }> = [];
     for (const definition of INDICATOR_DEFINITIONS) {
       const text = textBySource.get(definition.source);
-      if (text) await beforeLargeParse(text);
+      if (text) {
+        try {
+          await beforeLargeParse(text);
+        } catch {
+          return localEconomicOutlook(latestSuccessful?.payload ?? cached);
+        }
+      }
       indicatorEntries.push((() => {
       if (!text) {
         return {
