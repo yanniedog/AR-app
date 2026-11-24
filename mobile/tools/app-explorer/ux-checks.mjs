@@ -434,14 +434,22 @@ export function boxContrast(png, bounds) {
   return glyph[Math.floor((glyph.length - 1) * 0.25)];
 }
 
+/** Top edge (px) of the on-screen keyboard, or Infinity when none is showing. */
+export function keyboardTop(nodes, size) {
+  const ime = nodes.filter(n => IME.test(n.pkg) && area(n.bounds) > size[0] * 100);
+  return ime.length ? Math.min(...ime.map(n => n.bounds[1])) : Infinity;
+}
+
 /** Contrast findings for the text nodes of one screen. `png` is an image from decodePng. */
 export function contrastFindings({ screen, nodes, png, pkg, density = 320, limit = 40, size = [png.width, png.height] }) {
   const dp = DP(density);
   const out = [];
   const app = appNodes(nodes, pkg);
   const barTop = bottomBarTop(app, size);
+  // Text behind the keyboard is covered, so its pixels are the keyboard's, not the text's.
+  const imeTop = keyboardTop(nodes, size);
   const scrollers = app.filter(n => n.scrollable && area(n.bounds) > 0);
-  const texts = app.filter(n => n.text && !/\n/.test(n.text) && n.cls !== 'EditText' && n.enabled && !clippedByScroller(n, scrollers, app) && !app.some(d => !d.enabled && d !== n && contains(d.bounds, n.bounds)) && !(n.bounds[3] > barTop && n.bounds[1] > size[1] * 0.5 && !TAB_LABELS.test(n.text.trim())))
+  const texts = app.filter(n => n.text && !/\n/.test(n.text) && n.cls !== 'EditText' && n.enabled && n.bounds[3] <= imeTop + LIMITS.keyboardSlackPx && !clippedByScroller(n, scrollers, app) && !app.some(d => !d.enabled && d !== n && contains(d.bounds, n.bounds)) && !(n.bounds[3] > barTop && n.bounds[1] > size[1] * 0.5 && !TAB_LABELS.test(n.text.trim())))
     .sort((a, b) => area(b.bounds) - area(a.bounds)).slice(0, limit);
   for (const n of texts) {
     if (n.text.trim().length < 2) continue;

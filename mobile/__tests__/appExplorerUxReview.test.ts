@@ -102,6 +102,22 @@ describe('app explorer UX review', () => {
     expect(r.findings.filter(f => f.text === 'Covered row title')).toEqual([]);
   });
 
+  it('does not measure contrast of text hidden behind the keyboard', () => {
+    const keyboard = { text: '', cls: 'ViewGroup', pkg: 'com.google.android.inputmethod.latin', bounds: [0, 1000, 720, 1600] };
+    const hiddenTabs = [
+      { text: 'Rates', clickable: true, bounds: [0, 1392, 240, 1560] },
+      { text: 'Saved', clickable: true, bounds: [240, 1392, 480, 1560] },
+      { text: 'Market', clickable: true, bounds: [480, 1392, 720, 1560] },
+    ];
+    const hiddenRow = { text: 'Macq Account hidden below', bounds: [200, 1100, 600, 1140] };
+    const blank = () => [240, 240, 244];
+    const r = review({ search: [keyboard, ...hiddenTabs, hiddenRow] }, [], { png: { search: blank } });
+    expect(r.findings.filter(f => f.check === 'contrast')).toEqual([]);
+    // The same text with no keyboard up is still measured.
+    const open = review({ search: [...hiddenTabs, hiddenRow] }, [], { png: { search: blank } });
+    expect(open.findings.filter(f => f.check === 'contrast').length).toBeGreaterThan(0);
+  });
+
   it('does not report crowding for a control cut off by the bottom tab bar', () => {
     const tabs = [
       { text: 'Rates', clickable: true, bounds: [0, 1393, 240, 1552] },
