@@ -14,6 +14,7 @@ import {
   slowRefreshMessage,
 } from '../src/data/economicOutlook';
 import { debugLog } from '../src/lib/debugLog';
+import * as yieldModule from '../src/lib/yieldToUi';
 import { cache } from '../src/data/cache';
 import { getLocalAppHealthAuditGeneration, isLocalAppHealthAudit } from '../src/lib/appHealthTransportGuard';
 
@@ -811,6 +812,59 @@ describe('economic outlook', () => {
     expect(warn).toHaveBeenCalledWith('economic-outlook', 'slow save: 5000 ms');
   });
 
+  it('hands the thread back before parsing a large table but not a small one', async () => {
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(null);
+    jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
+    const yielded = jest.spyOn(yieldModule, 'yieldToUi').mockResolvedValue();
+    jest.spyOn(global, 'fetch').mockImplementation(async (input) => mockCsvResponse(String(input)));
+    await loadEconomicOutlook(true);
+    expect(yielded).not.toHaveBeenCalled();
+
+    resetEconomicOutlookRuntimeCacheForTests();
+    const padding = 'Note,'.concat('x'.repeat(60_000));
+    jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      const body = csvForUrl(url);
+      const large = url.includes('h5-data') || url.includes('f1-data');
+      return {
+        ok: true,
+        headers: { get: () => null },
+        text: async () => (large ? `${padding}\n${body}` : body),
+      } as unknown as Response;
+    });
+    await loadEconomicOutlook(true);
+    // f1 once for the cash rate history, h5 once per labour indicator (three).
+    expect(yielded).toHaveBeenCalledTimes(4);
+  });
+
+  it('does not parse a large table when an audit starts during the yield', async () => {
+    const cached = fullOutlookCsv();
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(cached);
+    const write = jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
+    jest.spyOn(yieldModule, 'yieldToUi').mockImplementation(async () => {
+      jest.mocked(isLocalAppHealthAudit).mockReturnValue(true);
+    });
+    const parseModule = jest.requireActual('../src/data/economicOutlookParse') as typeof import('../src/data/economicOutlookParse');
+    const cashParse = jest.spyOn(parseModule, 'parseCashRateTargetCsv');
+    const seriesParse = jest.spyOn(parseModule, 'parseRbaSeriesCsv');
+    const padding = 'Note,'.concat('x'.repeat(60_000));
+    jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      const body = csvForUrl(url);
+      const large = url.includes('h5-data') || url.includes('f1-data');
+      return {
+        ok: true,
+        headers: { get: () => null },
+        text: async () => (large ? `${padding}\n${body}` : body),
+      } as unknown as Response;
+    });
+    const result = await loadEconomicOutlook(true);
+    expect(result.checkedAt).toBe(cached.checkedAt);
+    expect(cashParse).not.toHaveBeenCalled();
+    expect(seriesParse).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+  });
+
   it('counts the cash-rate parser as parse time, not fetch time', async () => {
     jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(null);
     jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
@@ -828,6 +882,6 @@ describe('economic outlook', () => {
     await loadEconomicOutlook(true);
     const slow = warn.mock.calls.filter(([tag]) => tag === 'economic-outlook');
     expect(slow).toHaveLength(1);
-    expect(String(slow[0][1])).toBe('slow refresh: fetch 0 ms, parse 600 ms');
+    expect(String(slow[0][1])).toBe('slow refresh: fetch 0 ms, parse 600 ms (slowest f1-data.csv 600 ms)');
   });
 });
