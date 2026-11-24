@@ -39,6 +39,8 @@ on:
   schedule:
     # Cheap check every 30 min: runs the full crawl + audit once per new app-v release.
     - cron: '7,37 * * * *'
+  release:
+    types: [published]
   workflow_run:
     # Does not fire for token-dispatched release runs; pr-auto-merge.yml dispatches the audit (nonce auto) instead.
     workflows: [mobile-android-apk]
@@ -56,6 +58,32 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  archive-old-reports:
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: mobile/tools/app-explorer
+      - name: Archive reports older than the current APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISHED_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          issue=$(gh api "repos/$GITHUB_REPOSITORY/issues?state=open&labels=app-explorer&per_page=1" -q '.[0].number // empty')
+          if [ -n "$issue" ]; then
+            node mobile/tools/app-explorer/hide-outdated.mjs "$GITHUB_REPOSITORY" "$issue" "$PUBLISHED_TAG"
+          fi
+
   # Scheduled and post-release runs only proceed when the newest release has no tested marker yet.
   pending:
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
@@ -245,8 +273,10 @@ jobs:
             gh api -X POST "repos/${GITHUB_REPOSITORY}/labels" -f name=app-explorer -f color=ededed >/dev/null 2>&1 || true
             issue=$(gh api -X POST "repos/${GITHUB_REPOSITORY}/issues" -f title='app-explorer results' -f body='One comment per explorer run: audit outcome, log URL, failures, crash excerpt.' -f 'labels[]=app-explorer' -q .number)
           fi
-          gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${issue}/comments" -F body=@summary.md >/dev/null
-          node tools-src/mobile/tools/app-explorer/hide-outdated.mjs "$GITHUB_REPOSITORY" "$issue" "$(head -n 1 summary.md)" || true
+          report_id=$(gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${issue}/comments" -F body=@summary.md -q .id)
           if [ -n "$NOTIFY_PR" ]; then
             gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${NOTIFY_PR}/comments" -F body=@summary.md >/dev/null
+          fi
+          if ! node tools-src/mobile/tools/app-explorer/hide-outdated.mjs "$GITHUB_REPOSITORY" "$issue" "" "$report_id"; then
+            echo '::warning::Explorer report posted. Archival will retry on the scheduled sweep.'
           fi
