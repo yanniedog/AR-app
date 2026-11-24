@@ -6,7 +6,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { computeVerdict, renderOutcome } from './session-verdict.mjs';
+import { computeVerdict, renderOutcome, renderSessionCoverage } from './session-verdict.mjs';
 import { auditCompletion, auditCoverageLine, auditOutcomeLine, decodeAuditExport, MAX_ENVELOPE_BYTES } from './audit-export.mjs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -114,21 +114,25 @@ export function parseHierarchy(xml) {
   return nodes;
 }
 
-async function dumpUi() {
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const out = sh('uiautomator dump --compressed /sdcard/ui.xml 2>&1', { allowFail: true, timeout: 30000 }) || '';
+async function dumpUi(deadline = Infinity) {
+  for (let attempt = 0; attempt < 4 && Date.now() < deadline; attempt += 1) {
+    const timeout = Math.min(30000, Math.max(1, deadline - Date.now()));
+    const out = sh('uiautomator dump --compressed /sdcard/ui.xml 2>&1', { allowFail: true, timeout }) || '';
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
     if (/dumped to/i.test(out)) {
-      const xml = sh('cat /sdcard/ui.xml', { allowFail: true }) || '';
+      const xml = sh('cat /sdcard/ui.xml', { allowFail: true, timeout: Math.min(60000, remaining) }) || '';
       if (xml.includes('<hierarchy')) return { xml, nodes: parseHierarchy(xml) };
     }
-    await sleep(400);
+    const retryDelay = Math.min(400, deadline - Date.now());
+    if (retryDelay > 0) await sleep(retryDelay);
   }
   return { xml: '', nodes: [] };
 }
 
 function fingerprint(nodes) {
   return createHash('sha1')
-    .update(nodes.map(n => `${n.text}|${n.desc}|${n.bounds.join(',')}`).join('\n'))
+    .update(nodes.map(n => `${n.text}|${n.desc}|${n.selected}|${n.checked}|${n.enabled}|${n.bounds.join(',')}`).join('\n'))
     .digest('hex');
 }
 
@@ -269,12 +273,15 @@ async function settle(timeoutMs, since = Date.now(), before = null, { scrolling 
 function matches(node, sel) {
   const norm = s => s.toLowerCase().replace(/\s+/g, ' ').trim();
   if (sel.id && node.id !== sel.id) return false;
+  if (sel.cls && node.cls !== sel.cls) return false;
+  for (const property of ['clickable', 'selected', 'checked', 'enabled']) {
+    if (sel[property] !== undefined && node[property] !== sel[property]) return false;
+  }
   if (sel.text && norm(node.text) !== norm(sel.text)) return false;
   if (sel.desc && norm(node.desc) !== norm(sel.desc)) return false;
-  if (sel.contains) {
-    const needle = norm(sel.contains);
-    if (!norm(node.text).includes(needle) && !norm(node.desc).includes(needle)) return false;
-  }
+  const contains = value => norm(node.text).includes(norm(value)) || norm(node.desc).includes(norm(value));
+  if (sel.contains && !contains(sel.contains)) return false;
+  if (sel.containsAny && !sel.containsAny.some(contains)) return false;
   if (sel.label) {
     const want = norm(sel.label);
     if (norm(node.text) !== want && norm(node.desc) !== want) return false;
@@ -289,8 +296,7 @@ function normalizeSelector(sel) {
 function findNode(nodes, rawSel) {
   const sel = normalizeSelector(rawSel);
   const hits = nodes.filter(n => matches(n, sel) && n.bounds[2] > n.bounds[0] && n.bounds[3] > n.bounds[1]);
-  if (!hits.length) return null;
-  return hits[Math.min(sel.index ?? 0, hits.length - 1)];
+  return hits[sel.index ?? 0] ?? null;
 }
 
 const centre = n => [Math.round((n.bounds[0] + n.bounds[2]) / 2), Math.round((n.bounds[1] + n.bounds[3]) / 2)];
@@ -740,8 +746,11 @@ class Explorer {
     }
     if (step.audit) return this.runAudit(step.audit === true ? 'live' : step.audit, step.timeoutMin ?? 90);
     const label = step.name || Object.entries(step).map(([k, v]) => `${k} ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' ');
-    if (step.launch !== undefined) return this.launch(label, { warm: step.launch === 'warm' });
-    if (step.open) return this.open(step.open, label);
+    if (step.launch !== undefined || step.open) {
+      const rec = step.open ? await this.open(step.open, label) : await this.launch(label, { warm: step.launch === 'warm' });
+      await this.postconditions(step, rec);
+      return rec;
+    }
     if (step.tap || step.longPress) {
       const sel = step.tap || step.longPress;
       const node = (step.scroll ? await this.scrollUntil(sel) : null) || await this.find(sel, step.timeout ?? 8000);
@@ -751,12 +760,11 @@ class Explorer {
       if (step.longPress) sh(`input swipe ${x} ${y} ${x} ${y} 900`);
       else sh(`input tap ${x} ${y}`);
       let rec = await this.record(label, { tapped: node.text || node.desc || node.id, at: [x, y] }, undefined, t0);
-      if (step.session && rec.responseMs == null && rec.alive) {
+      if (step.session && !step.then && !step.gone && rec.responseMs == null && rec.alive) {
         // A person whose tap did nothing taps again; record that as friction.
         const t1 = Date.now();
         sh(`input tap ${x} ${y}`);
-        rec.retapped = true;
-        rec = await this.record(`${label} again`, { tapped: rec.tapped, at: [x, y] }, undefined, t1);
+        rec = await this.record(`${label} again`, { tapped: rec.tapped, retapped: true, at: [x, y] }, undefined, t1);
         if (rec.responseMs == null) rec.error = `no reaction to tap on ${JSON.stringify(sel)}`;
       }
       await this.postconditions(step, rec);
@@ -774,11 +782,14 @@ class Explorer {
         sh(`input tap ${x} ${y}`);
         await sleep(300);
       }
+      const t0 = Date.now();
       if (step.clear) sh('input keycombination 113 29 && input keyevent 67', { allowFail: true });
       const quoted = `'${String(step.type).replace(/ /g, '%s').replace(/'/g, `'\\''`)}'`;
       sh(`input text ${quoted}`);
       if (step.submit) sh('input keyevent 66');
-      return this.record(label);
+      const rec = await this.record(label, {}, undefined, t0);
+      await this.postconditions(step, rec);
+      return rec;
     }
     if (step.scroll) {
       const t0 = Date.now();
@@ -786,7 +797,9 @@ class Explorer {
         this.swipe(step.scroll);
         await sleep(350);
       }
-      return this.record(label, {}, undefined, t0);
+      const rec = await this.record(label, {}, undefined, t0);
+      await this.postconditions(step, rec);
+      return rec;
     }
     if (step.back !== undefined) {
       const t0 = Date.now();
@@ -820,16 +833,38 @@ class Explorer {
       this.size = screenSize();
       return this.record(label);
     }
-    if (step.shot) return this.record(step.shot);
+    if (step.shot) {
+      const rec = await this.record(step.shot);
+      await this.postconditions(step, rec);
+      return rec;
+    }
     throw new Error(`Unknown step ${JSON.stringify(step)}`);
   }
 
-  /** Navigation steps can assert what should (then) or should not (gone) be on screen afterwards. */
+  /** Observe all conditions in the same hierarchy, including recovery from asynchronous updates. */
   async postconditions(step, rec) {
-    if (!step.then && !step.gone) return;
-    if (rec.error || !rec.alive) return;
-    if (step.then && !(await this.find(step.then, step.thenTimeoutMs ?? 8000))) rec.error = `expected ${JSON.stringify(step.then)} after "${step.name}"`;
-    else if (step.gone && findNode((await dumpUi()).nodes, step.gone)) rec.error = `${JSON.stringify(step.gone)} still on screen after "${step.name}"`;
+    if ((!step.then && !step.gone) || rec.error || !rec.alive) return;
+    const required = [step.then ?? []].flat();
+    const forbidden = [step.gone ?? []].flat();
+    const deadline = Date.now() + (step.thenTimeoutMs ?? 8000);
+    let nodes = this.current.nodes;
+    while (true) {
+      const appNodes = nodes.filter(node => node.pkg === PKG);
+      const missing = required.filter(sel => !findNode(appNodes, sel));
+      const present = forbidden.filter(sel => findNode(appNodes, sel));
+      if (!missing.length && !present.length && appNodes.length) return;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        rec.error = appNodes.length
+          ? `UI assertion failed: missing ${JSON.stringify(missing)}, still visible ${JSON.stringify(present)}`
+          : 'UI assertion failed: app hierarchy unavailable';
+        return;
+      }
+      await sleep(Math.min(300, remaining));
+      if (Date.now() >= deadline) continue;
+      nodes = (await dumpUi(deadline)).nodes;
+      this.current = { nodes };
+    }
   }
 
   finish(meta) {
@@ -867,6 +902,7 @@ function renderMarkdown(report, baseline) {
     `# App explorer: ${report.app?.versionName ?? '?'} (${report.app?.versionCode ?? '?'})`,
     '',
     ...(report.session ? renderOutcome(report.session) : []),
+    ...renderSessionCoverage(report),
     unavailable.length ? `**Data unavailable on ${unavailable.length} of ${report.steps.length} steps**` : '',
     report.network ? `Runner payload check: manifest HTTP ${report.network.manifestStatus}, ${report.network.manifestBytes} bytes, run_date ${report.network.runDate ?? '?'}` : '',
     '',
@@ -913,7 +949,9 @@ function appVersion() {
 function sessionScript(args) {
   const file = args.sessionScript || path.join(path.dirname(fileURLToPath(import.meta.url)), 'scripts', 'session.json');
   const steps = JSON.parse(fs.readFileSync(file, 'utf8'));
-  return [{ animations: 1 }, ...steps.map(st => ({ ...st, session: true })), { animations: 0 }];
+  const journeys = args.sessionScript ? [] : JSON.parse(fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), 'scripts', 'journeys.json'), 'utf8'));
+  return [{ animations: 1 }, ...[...steps, ...journeys.filter(step => args.fresh || !step.freshOnly)].map(st => ({ ...st, session: true })), { animations: 0 }];
 }
 
 async function main() {
@@ -951,15 +989,34 @@ async function main() {
     script = [{ launch: true, name: 'cold start' }, ...(args.routes || CRAWL_ROUTES).map(r => ({ open: r, name: r }))];
     script.push({ launch: 'warm', name: 'warm resume' }, { launch: true, name: 'cold relaunch' });
   }
+  const blockedJourneys = new Set();
+  const journeyCoverage = {};
+  let driverErrors = 0;
   for (const step of script) {
+    const coverage = step.journey
+      ? (journeyCoverage[step.journey] ??= { passed: 0, failed: 0, blocked: 0 }) : null;
+    if (coverage && blockedJourneys.has(step.journey)) {
+      coverage.blocked += 1;
+      continue;
+    }
+    let result;
     try {
-      await ex.run(step);
+      result = await ex.run(step);
     } catch (error) {
-      ex.steps.push({ n: ex.steps.length + 1, name: step.name || JSON.stringify(step), error: String(error.message || error), alive: Boolean(appPid()), settleMs: 0, frames: {}, log: { errors: [], warnings: 0 }, visible: [], session: step.session || undefined });
+      driverErrors += 1;
+      result = { n: ex.steps.length + 1, name: step.name || JSON.stringify(step), error: String(error.message || error), alive: Boolean(appPid()), settleMs: 0, frames: {}, log: { errors: [], warnings: 0 }, visible: [], session: step.session || undefined };
+      ex.steps.push(result);
+    }
+    if (coverage) {
+      if (result?.error || !result?.alive || result?.anr || result?.deadEnd || result?.settleTimedOut) {
+        coverage.failed += 1;
+        blockedJourneys.add(step.journey);
+      } else coverage.passed += 1;
     }
   }
-  const report = ex.finish(meta);
+  const report = ex.finish({ ...meta, journeyCoverage, driverErrors });
   const bad = report.steps.filter(s => !s.alive).length;
+  if (driverErrors) process.exitCode = 1;
   console.log(`Done: ${report.steps.length} steps, ${bad} crashes. Report at ${path.join(ex.out, 'report.md')}`);
 }
 
