@@ -1,4 +1,4 @@
-import { parseCsv, parseCsvQuoted, parseRbaSeriesCsv, parseRbaSeriesCsvFull } from '../src/data/economicOutlookParse';
+import { compareIsoDate, parseCashRateTargetCsv, parseCsv, parseCsvQuoted, parseRbaSeriesCsv, parseRbaSeriesCsvFull } from '../src/data/economicOutlookParse';
 
 function seeded(seed: number) {
   let s = seed;
@@ -129,5 +129,40 @@ describe('parseCsv', () => {
         split.mockRestore();
       }
     });
+  });
+});
+
+describe('date ordering', () => {
+  it('compareIsoDate orders ISO dates the same way as localeCompare', () => {
+    const rand = seeded(7);
+    const dates = Array.from({ length: 400 }, () => {
+      const year = 1969 + Math.floor(rand() * 70);
+      const month = 1 + Math.floor(rand() * 12);
+      const day = 1 + Math.floor(rand() * 28);
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    });
+    for (let i = 1; i < dates.length; i += 1) {
+      expect(Math.sign(compareIsoDate(dates[i - 1], dates[i]))).toBe(Math.sign(dates[i - 1].localeCompare(dates[i])));
+    }
+    expect(compareIsoDate('2020-01-01', '2020-01-01')).toBe(0);
+  });
+
+  it('parses a long cash rate history without calling localeCompare (very slow on Hermes)', () => {
+    const rows = ['Title,Cash rate', 'Series ID,FIRMMCRTD'];
+    const start = Date.UTC(2011, 0, 1);
+    for (let i = 4000; i > 0; i -= 1) {
+      const d = new Date(start + i * 86_400_000);
+      const day = `${d.getUTCDate()}-${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]}-${d.getUTCFullYear()}`;
+      rows.push(`${day},${i % 500 < 250 ? '4.35' : '4.10'}`);
+    }
+    const spy = jest.spyOn(String.prototype, 'localeCompare');
+    try {
+      const steps = parseCashRateTargetCsv(rows.join('\n'));
+      expect(spy).not.toHaveBeenCalled();
+      expect(steps.length).toBeGreaterThan(2);
+      for (let i = 1; i < steps.length; i += 1) expect(steps[i].date > steps[i - 1].date).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

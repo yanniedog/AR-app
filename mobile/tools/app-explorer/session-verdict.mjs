@@ -108,3 +108,33 @@ export function renderOutcome(verdict) {
   if (verdict.findings.length) lines.push('');
   return lines;
 }
+
+export function renderSessionCoverage(report) {
+  const lines = [];
+  const steps = report.steps || [];
+  const launch = steps.findIndex(step => step.session && step.name === 'open app');
+  if (launch >= 0) {
+    const nextLaunch = steps.findIndex((step, index) => index > launch && step.activityStartMs != null);
+    // Rates can finish after the launch screenshot. Attribute the trace to the same process launch.
+    const boot = steps.slice(launch, nextLaunch < 0 ? steps.length : nextLaunch).find(step => step.boot)?.boot;
+    const start = boot?.['js-start'];
+    const ready = boot?.['rates-ready'];
+    if (Number.isFinite(start) && Number.isFinite(ready) && ready >= start) {
+      const elapsed = ready - start;
+      const lastBlocker = Object.keys(boot).reverse().find(mark => mark.startsWith('last-'));
+      lines.push(`**Initial Rates readiness:** ${ms(elapsed)} from JS start (${elapsed < 3000 ? 'under' : 'at or above'} the 3 s target)${lastBlocker ? ` · last blocker: ${lastBlocker.slice(5)}` : ''}`);
+    } else {
+      lines.push('**Initial Rates readiness:** no complete boot trace captured');
+    }
+    lines.push('');
+  }
+  const journeys = Object.entries(report.journeyCoverage || {});
+  if (journeys.length) {
+    lines.push('**Extended journeys**', '');
+    for (const [name, counts] of journeys) {
+      lines.push(`- ${name}: ${counts.passed} passed, ${counts.failed} failed, ${counts.blocked} blocked`);
+    }
+    lines.push('');
+  }
+  return lines;
+}

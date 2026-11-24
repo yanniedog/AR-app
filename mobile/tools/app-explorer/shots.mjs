@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { appNodes, bottomBarTop, keyboardTop } from './ux-checks.mjs';
 
 const out = process.argv[2] || 'explorer-out/shots';
 const here = path.dirname(new URL(import.meta.url).pathname);
@@ -18,6 +19,9 @@ for (const s of manifest) {
   if (s.taps !== undefined && (!Array.isArray(s.taps) || s.taps.length > 3 || !s.taps.every(validLabel))) throw new Error(`bad shot taps: ${s.name}`);
   if (s.visibleAction !== undefined && (!validLabel(s.visibleAction) || s.scroll)) throw new Error(`bad shot action: ${s.name}`);
 }
+const PKG = 'com.eyex.australianrates';
+const DIAGNOSTIC_FIELD = 'Device / network / rate / product / receipt / error';
+const MIN_ACTION_HEIGHT_PX = 95; // 48 dp at the audit's 320 dpi, allowing one rounding pixel.
 const FLAG_TEXT = /unavailable|went wrong|something|error|failed|retry|no data|crash/i;
 
 if (!process.argv.includes('--analyze-only')) {
@@ -27,14 +31,18 @@ if (!process.argv.includes('--analyze-only')) {
     for (const [i, tap] of (s.taps || []).entries()) {
       script.push({ tap: { text: tap }, scroll: true, name: `${s.name}-tap-${i + 1}` });
     }
-    if (s.visibleAction) script.push({ waitFor: { label: s.visibleAction }, timeout: 8000, name: s.name });
+    if (s.visibleAction) script.push({ waitFor: { label: s.visibleAction, clickable: true, enabled: true }, timeout: 8000, name: s.name });
     else if (s.scroll) script.push({ scroll: 'down', times: s.scroll, name: s.name });
     else script.push({ wait: 600, name: s.name });
   }
   fs.mkdirSync(out, { recursive: true });
   const scriptPath = path.join(out, 'shots-script.json');
   fs.writeFileSync(scriptPath, JSON.stringify(script));
-  spawnSync('node', [path.join(here, 'driver.mjs'), '--mode', 'script', '--script', scriptPath, '--out', out, ...(process.env.FRESH === 'false' ? [] : ['--fresh'])], { stdio: 'inherit' });
+  fs.rmSync(path.join(out, 'report.json'), { force: true });
+  const capture = spawnSync('node', [path.join(here, 'driver.mjs'), '--mode', 'script', '--script', scriptPath, '--out', out, ...(process.env.FRESH === 'false' ? [] : ['--fresh'])], { stdio: 'inherit' });
+  if (capture.status !== 0 || !fs.existsSync(path.join(out, 'report.json'))) {
+    throw new Error('Screenshot driver did not complete a fresh capture');
+  }
 }
 
 const report = (() => { try { return JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')); } catch { return { steps: [] }; } })();
@@ -69,14 +77,17 @@ for (const s of manifest) {
     if (step.settleTimedOut) r.flags.push('never settled');
     if (step.anr) r.flags.push('ANR');
     if (step.log?.errors?.length) r.flags.push(`${step.log.errors.length} log errors`);
-    const bad = (step.visible || []).find(v => FLAG_TEXT.test(v));
+    const bad = (step.visible || []).find(v => v !== DIAGNOSTIC_FIELD && FLAG_TEXT.test(v));
     if (bad) r.flags.push(`text: ${bad.slice(0, 50)}`);
     if (!(step.visible || []).length) r.flags.push('no visible text');
     if (s.visibleAction) {
       try {
-        const { nodes } = JSON.parse(fs.readFileSync(path.join(out, 'ui', `${step.slug}.nodes.json`), 'utf8'));
-        const reachable = nodes.some(({ text, desc, clickable, enabled, bounds: [left, top, right, bottom] }) =>
-          (text === s.visibleAction || desc === s.visibleAction) && clickable && enabled && right > left && bottom > top);
+        const { nodes, size } = JSON.parse(fs.readFileSync(path.join(out, 'ui', `${step.slug}.nodes.json`), 'utf8'));
+        const app = appNodes(nodes, PKG);
+        const bottomEdge = Math.min(size[1], bottomBarTop(app, size), keyboardTop(nodes, size));
+        const reachable = app.some(({ text, desc, clickable, enabled, bounds: [left, top, right, bottom] }) =>
+          (text === s.visibleAction || desc === s.visibleAction) && clickable && enabled
+          && left >= 0 && right <= size[0] && top >= 0 && bottom <= bottomEdge && bottom - top >= MIN_ACTION_HEIGHT_PX);
         if (!reachable) r.flags.push(`action unavailable: ${s.visibleAction}`);
       } catch {
         r.flags.push('could not verify action from UI capture');
