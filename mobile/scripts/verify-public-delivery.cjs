@@ -5,6 +5,7 @@
 // checked-in TypeScript loader. No archive inflation or history reconstruction.
 const { fetchBytes } = require('./audit-public-payload.cjs');
 const { createHash } = require('node:crypto');
+const { setTimeout: wait } = require('node:timers/promises');
 const { parseDatesIndex } = require('../src/data/datesIndex.ts');
 const { assertRevisionManifest } = require('../src/data/payloadRevision.ts');
 const { payloadBundleIdentity } = require('../src/data/payloadBundleIdentity.ts');
@@ -15,10 +16,26 @@ const MAX_METADATA_BYTES = 4 * 1024 * 1024;
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const parse = (bytes) => JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
 
+// Retry the delivery gateway failure seen in APK publishing. Source, byte and integrity
+// checks still gate both channels, and every attempt uses the same URL.
+const DELIVERY_RETRY_DELAYS_MS = [15000, 45000];
+async function readDeliveryBytes(url, maxBytes, transports) {
+  for (const delay of DELIVERY_RETRY_DELAYS_MS) {
+    try {
+      return await fetchBytes(url, maxBytes, REPO, transports);
+    } catch (error) {
+      if (!/^HTTP 502:/.test(error.message)) throw error;
+      console.warn(`Public delivery HTTP 502; retrying in ${delay / 1000} s`);
+      await wait(delay);
+    }
+  }
+  return fetchBytes(url, maxBytes, REPO, transports);
+}
+
 async function verifyPublicDelivery() {
   const transports = [];
   const nonce = Date.now();
-  const read = (url) => fetchBytes(`${url}?_=${nonce}`, MAX_METADATA_BYTES, REPO, transports);
+  const read = (url) => readDeliveryBytes(`${url}?_=${nonce}`, MAX_METADATA_BYTES, transports);
   const indexBytes = await read(`${BASE}app-payload-latest/dates-index.json`);
   const rawIndex = parse(indexBytes);
   const index = parseDatesIndex(rawIndex, REPO);
@@ -45,7 +62,7 @@ async function verifyPublicDelivery() {
   const assets = {};
   for (const name of ['core', 'details']) {
     const file = manifest.files[name];
-    const bytes = await fetchBytes(file.url, file.bytes, REPO, transports);
+    const bytes = await readDeliveryBytes(file.url, file.bytes, transports);
     if (bytes.length !== file.bytes || hash(bytes) !== file.sha256) {
       throw new Error(`Public delivery ${name} asset size/SHA-256 mismatch`);
     }
