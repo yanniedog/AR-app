@@ -39,6 +39,7 @@ function errorDetail(error: unknown): string {
 function DebugLogScreenInner() {
   const theme = useTheme();
   const scrollRef = useRef<ScrollView>(null);
+  const followingLogEnd = useRef(false);
   const [text, setText] = useState(debugLog.getDisplayText());
   const [uploadReceipts, setUploadReceipts] = useState<DebugLogUploadReceipt[]>([]);
   const uploadState = useSyncExternalStore(
@@ -82,12 +83,9 @@ function DebugLogScreenInner() {
   }, [uploadState.phase]);
 
   const scrollToLogEnd = useCallback(() => {
+    followingLogEnd.current = true;
     scrollRef.current?.scrollToEnd({ animated: false });
   }, []);
-
-  useEffect(() => {
-    scrollToLogEnd();
-  }, [scrollToLogEnd, text]);
 
   const logEntryCount = text ? text.split('\n').length : 0;
   const auditActions = useMemo(() => ({
@@ -312,28 +310,21 @@ function DebugLogScreenInner() {
 
   return (
     <Screen style={{ flex: 1 }}>
-        <View style={{ padding: 16, paddingBottom: 8, gap: 12 }}>
+        <ScrollView
+          ref={scrollRef}
+          onScroll={({ nativeEvent: { contentOffset, contentSize, layoutMeasurement } }) => {
+            followingLogEnd.current = contentSize.height - contentOffset.y - layoutMeasurement.height <= 24;
+          }}
+          onContentSizeChange={() => {
+            setLogLayoutReady(true);
+            if (followingLogEnd.current) scrollToLogEnd();
+          }}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32, gap: 12 }}
+        >
           <InfoRow label="Private diagnostics" value="Device / network / rate / product / receipt / error" />
           <InfoRow label="Privacy" value="Redaction unguaranteed" />
-          <Card style={{ gap: 8 }}>
-            <AppText variant="tiny" color="textMuted">
-              {uiLabel('Local file')}
-            </AppText>
-            <AppText variant="small" selectable style={{ fontFamily: 'monospace' }}>
-              {uiIdentifier(logPathHint)}
-            </AppText>
-            <Button
-              title="Copy path"
-              icon="folder-outline"
-              variant="ghost"
-              loading={busy === 'path'}
-              onPress={() => void onCopyPath()}
-            />
-          </Card>
-          <InfoRow label="Copy" value="Clipboard" />
-          <InfoRow label="Share" value="Operating-system share sheet" />
           <InfoRow label="Upload" value="Public hosting" />
-          <InfoRow label="Full evidence" value="This device" />
           {clearFailed ? (
             <AppText accessibilityRole="alert" variant="tiny" color="danger">
               {uiJoin('Clear incomplete', ' · ', 'Export blocked')}
@@ -386,17 +377,24 @@ function DebugLogScreenInner() {
           </Row>
           {/* Upload status survives navigation and audit completion. */}
           <DebugLogUploadStatus />
-        </View>
-        <ScrollView
-          ref={scrollRef}
-          onContentSizeChange={() => setLogLayoutReady(true)}
-          style={{ flex: 1 }}
-          contentContainerStyle={{
-            paddingHorizontal: 16,
-            paddingBottom: 32,
-            gap: 12,
-          }}
-        >
+          <Card style={{ gap: 8 }}>
+            <AppText variant="tiny" color="textMuted">
+              {uiLabel('Local file')}
+            </AppText>
+            <AppText variant="small" selectable style={{ fontFamily: 'monospace' }}>
+              {uiIdentifier(logPathHint)}
+            </AppText>
+            <Button
+              title="Copy path"
+              icon="folder-outline"
+              variant="ghost"
+              loading={busy === 'path'}
+              onPress={() => void onCopyPath()}
+            />
+          </Card>
+          <InfoRow label="Copy" value="Clipboard" />
+          <InfoRow label="Share" value="Operating-system share sheet" />
+          <InfoRow label="Full evidence" value="This device" />
           {visibleReceipts.map((uploadReceipt) => (
             <Card key={uploadReceipt.url} style={{ gap: 8 }}>
               <AppText variant="tiny" color="textMuted">

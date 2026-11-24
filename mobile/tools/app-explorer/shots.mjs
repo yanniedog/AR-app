@@ -10,10 +10,13 @@ const out = process.argv[2] || 'explorer-out/shots';
 const here = path.dirname(new URL(import.meta.url).pathname);
 const manifest = JSON.parse(fs.readFileSync(path.join(here, 'shots.json'), 'utf8')).slice(0, 20);
 // Manifest values reach adb and the issue body, so only plain, bounded values are accepted.
+const validLabel = label => typeof label === 'string' && /^[a-z0-9 &-]{1,60}$/i.test(label);
 for (const s of manifest) {
   if (!/^[a-z0-9-]{1,40}$/.test(s.name)) throw new Error(`bad shot name: ${s.name}`);
   if (!/^\/[a-z0-9-]+(\/[a-z0-9-]+)*(\?[a-z0-9=&_-]*)?$/i.test(s.open)) throw new Error(`bad shot route: ${s.open}`);
   if (s.scroll !== undefined && !(Number.isInteger(s.scroll) && s.scroll >= 0 && s.scroll <= 10)) throw new Error(`bad shot scroll: ${s.scroll}`);
+  if (s.taps !== undefined && (!Array.isArray(s.taps) || s.taps.length > 3 || !s.taps.every(validLabel))) throw new Error(`bad shot taps: ${s.name}`);
+  if (s.visibleAction !== undefined && (!validLabel(s.visibleAction) || s.scroll)) throw new Error(`bad shot action: ${s.name}`);
 }
 const FLAG_TEXT = /unavailable|went wrong|something|error|failed|retry|no data|crash/i;
 
@@ -21,7 +24,11 @@ if (!process.argv.includes('--analyze-only')) {
   const script = [{ launch: true, name: 'cold start' }];
   for (const s of manifest) {
     script.push({ open: s.open, name: `${s.name}-open` });
-    if (s.scroll) script.push({ scroll: 'down', times: s.scroll, name: s.name });
+    for (const [i, tap] of (s.taps || []).entries()) {
+      script.push({ tap: { label: tap, clickable: true }, scroll: true, name: `${s.name}-tap-${i + 1}` });
+    }
+    if (s.visibleAction) script.push({ waitFor: { label: s.visibleAction, clickable: true, enabled: true }, timeout: 8000, name: s.name });
+    else if (s.scroll) script.push({ scroll: 'down', times: s.scroll, name: s.name });
     else script.push({ wait: 600, name: s.name });
   }
   fs.mkdirSync(out, { recursive: true });
@@ -50,6 +57,10 @@ for (const s of manifest) {
     if (nav.settleTimedOut) r.flags.push('open never settled');
     if (nav.anr) r.flags.push('ANR opening route');
     if (nav.log?.errors?.length) r.flags.push(`${nav.log.errors.length} log errors opening`);
+  }
+  for (const [i, tap] of (s.taps || []).entries()) {
+    const navigation = report.steps.find(st => st.name === `${s.name}-tap-${i + 1}`);
+    if (!navigation || !navigation.alive || navigation.error) r.flags.push(`could not tap ${tap}`);
   }
   if (!step) r.flags.push('not captured');
   else {
