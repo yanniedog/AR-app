@@ -219,7 +219,7 @@ export const UI_LABELS = [
   'Missing observations', 'Bank margin', 'Established', 'Developing', 'Limited',
   'Complete windows', 'Median response', 'With RBA', 'Opposite', 'Unchanged',
   'Tracked from', 'Tracked to', 'First move', 'After', 'Decision', 'Bank A–Z',
-  'Alphabetical', 'Observations', 'Monthly observations', 'Search alert', 'Best rate',
+  'Alphabetical', 'Observations', 'Monthly observations', 'Search alert', 'Best rate', 'Best advertised',
   'Improved', 'Rate changed', 'RBA cash rate changed', 'RBA cash rate held',
   'Criteria', 'AND', 'OR', 'NOT', '=', '≠', 'Meets', 'Does not meet', 'Needs information',
   'Not assessed', 'Overlapping groups', 'End excluded', 'Matched', 'Not listed', 'No exact match',

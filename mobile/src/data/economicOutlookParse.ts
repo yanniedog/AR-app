@@ -1,6 +1,6 @@
 import type { CashRateForecast, EconomicPoint, ParsedSeries } from './economicOutlookTypes';
 
-export function parseCsv(text: string): string[][] {
+export function parseCsvQuoted(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = '';
@@ -35,6 +35,27 @@ export function parseCsv(text: string): string[][] {
   return rows;
 }
 
+/**
+ * Splits on newlines natively and splits unquoted rows on commas, which is far faster on Hermes than the
+ * character loop for the half-megabyte RBA tables. Rows with quotes, and any quoted field that spans lines, use the loop.
+ */
+export function parseCsv(text: string): string[][] {
+  const source = text.replace(/^\uFEFF/, '');
+  const rows: string[][] = [];
+  for (const line of source.split(/\r\n|\r|\n/)) {
+    let cells: string[];
+    if (line.includes('"')) {
+      if ((line.split('"').length - 1) % 2) return parseCsvQuoted(text);
+      cells = parseCsvQuoted(line)[0] ?? [];
+    } else {
+      cells = line.split(',');
+      for (let i = 0; i < cells.length; i += 1) cells[i] = cells[i].trim();
+    }
+    if (cells.some((cell) => cell !== '')) rows.push(cells);
+  }
+  return rows;
+}
+
 function isoDate(value: string): string {
   const trimmed = value.trim();
   const numeric = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
@@ -61,7 +82,19 @@ function rowByLabel(rows: string[][], label: string): string[] | undefined {
   return rows.find((row) => row[0]?.replace(/^\uFEFF/, '').trim() === label);
 }
 
-export function parseRbaSeriesCsv(text: string, seriesId: string): ParsedSeries {
+function finishSeries(
+  seriesId: string,
+  publication: string,
+  parsedPoints: EconomicPoint[],
+): ParsedSeries {
+  const points = [...new Map(parsedPoints.map((point) => [point.date, point])).values()]
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (!points.length) throw new Error(`RBA series ${seriesId} has no observations`);
+  return { publicationDate: isoDate(publication), points, sourceAgency: 'rba' };
+}
+
+/** Reference implementation: parse every cell of every row. Used for quoted tables and in tests. */
+export function parseRbaSeriesCsvFull(text: string, seriesId: string): ParsedSeries {
   const rows = parseCsv(text);
   const ids = rowByLabel(rows, 'Series ID');
   if (!ids) throw new Error('RBA table is missing its Series ID row');
@@ -73,10 +106,72 @@ export function parseRbaSeriesCsv(text: string, seriesId: string): ParsedSeries 
     const value = finite(row[column] ?? '');
     return date && value != null ? [{ date, value }] : [];
   });
-  const points = [...new Map(parsedPoints.map((point) => [point.date, point])).values()]
-    .sort((a, b) => a.date.localeCompare(b.date));
-  if (!points.length) throw new Error(`RBA series ${seriesId} has no observations`);
-  return { publicationDate: isoDate(publication), points, sourceAgency: 'rba' };
+  return finishSeries(seriesId, publication, parsedPoints);
+}
+
+/** Cells of a line that contains quotes, or null when a quote is left open (the field spans lines). */
+function quotedLineCells(line: string): string[] | null {
+  if ((line.split('"').length - 1) % 2) return null;
+  return parseCsvQuoted(line)[0] ?? [];
+}
+
+/**
+ * Read one series from an RBA table. Only the date and the requested column are
+ * extracted from each data row, so the wide tables (cash rate history has dozens
+ * of columns) are not split into every cell. Quoted lines use the character parser,
+ * and a quote that spans lines falls back to parsing the whole table.
+ */
+export function parseRbaSeriesCsv(text: string, seriesId: string): ParsedSeries {
+  const lines = text.replace(/^\uFEFF/, '').split(/\r\n|\r|\n/);
+
+  let ids: string[] | undefined;
+  let publicationRow: string[] | undefined;
+  for (const line of lines) {
+    if (ids && publicationRow) break;
+    let cells: string[] | null | undefined;
+    if (line.includes('"')) {
+      cells = quotedLineCells(line);
+      if (!cells) return parseRbaSeriesCsvFull(text, seriesId);
+    }
+    const comma = line.indexOf(',');
+    const label = (cells ? cells[0] ?? '' : comma < 0 ? line : line.slice(0, comma)).trim();
+    if (label !== 'Series ID' && label !== 'Publication date') continue;
+    cells = cells ?? line.split(',').map((cell) => cell.trim());
+    if (label === 'Series ID' && !ids) ids = cells;
+    else if (label === 'Publication date' && !publicationRow) publicationRow = cells;
+  }
+  if (!ids) throw new Error('RBA table is missing its Series ID row');
+  const column = ids.indexOf(seriesId);
+  if (column < 1) throw new Error(`RBA series ${seriesId} is unavailable`);
+  const publication = publicationRow?.[column] ?? '';
+
+  const parsedPoints: EconomicPoint[] = [];
+  for (const line of lines) {
+    let dateText: string;
+    let valueText: string;
+    if (line.includes('"')) {
+      const cells = quotedLineCells(line);
+      if (!cells) return parseRbaSeriesCsvFull(text, seriesId);
+      dateText = cells[0] ?? '';
+      valueText = cells[column] ?? '';
+    } else {
+      const first = line.indexOf(',');
+      if (first < 0) continue;
+      let start = first + 1;
+      for (let index = 1; index < column && start > 0; index += 1) {
+        const next = line.indexOf(',', start);
+        start = next < 0 ? -1 : next + 1;
+      }
+      if (start < 0) continue;
+      const end = line.indexOf(',', start);
+      dateText = line.slice(0, first);
+      valueText = line.slice(start, end < 0 ? line.length : end);
+    }
+    const date = isoDate(dateText);
+    const value = finite(valueText.trim());
+    if (date && value != null) parsedPoints.push({ date, value });
+  }
+  return finishSeries(seriesId, publication, parsedPoints);
 }
 
 /** Last calendar day of an ABS TIME_PERIOD (`YYYY-MM` or `YYYY-Qn`). */

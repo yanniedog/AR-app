@@ -23,6 +23,18 @@ describe('product rate-change copy', () => {
       fromRate: 0.06,
       toRate: 0.0595,
       bps: -5,
-    }, true)).toBe('Advertised ↓ 5 bps · 1 Aug 2026');
+    }, true)).toBe('Best advertised ↓ 5 bps · 1 Aug 2026');
+  });
+
+  it('keeps the full product-page line with the best advertised rate endpoints', () => {
+    expect(productRateChangeText({
+      kind: 'changed',
+      trackedSince: '2026-07-01',
+      observations: 4,
+      observedOn: '2026-08-01',
+      fromRate: 0.0599,
+      toRate: 0.0609,
+      bps: 10,
+    })).toBe('Best advertised ↑ 10 bps · 1 Aug 2026 · 5.99% → 6.09%');
   });
 });
