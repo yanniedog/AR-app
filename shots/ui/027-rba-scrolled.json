@@ -1,0 +1,220 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "RBA",
+  "at": [
+   186,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Bond-market forward rates · Oct 26 · 4.60% · Jan 27 · 4.71% · Apr 27 · 4.85% · Jul 27 · 4.91% · Oct 27 · 4.91% · ",
+  "at": [
+   360,
+   198
+  ]
+ },
+ {
+  "label": "Cash rate · 4.85%",
+  "at": [
+   360,
+   242
+  ]
+ },
+ {
+  "label": "Bond-market forward rates · Oct 26 · 4.60%",
+  "flags": "tap",
+  "at": [
+   96,
+   334
+  ]
+ },
+ {
+  "label": "Oct 26",
+  "at": [
+   96,
+   331
+  ]
+ },
+ {
+  "label": "Bond-market forward rates · Jan 27 · 4.71%",
+  "flags": "tap,sel",
+  "at": [
+   240,
+   334
+  ]
+ },
+ {
+  "label": "Jan 27",
+  "at": [
+   240,
+   331
+  ]
+ },
+ {
+  "label": "Bond-market forward rates · Apr 27 · 4.85%",
+  "flags": "tap",
+  "at": [
+   384,
+   334
+  ]
+ },
+ {
+  "label": "Apr 27",
+  "at": [
+   384,
+   331
+  ]
+ },
+ {
+  "label": "Bond-market forward rates · Jul 27 · 4.91%",
+  "flags": "tap",
+  "at": [
+   528,
+   334
+  ]
+ },
+ {
+  "label": "Jul 27",
+  "at": [
+   528,
+   331
+  ]
+ },
+ {
+  "label": "Bond-market forward rates · Oct 27 · 4.91%",
+  "flags": "tap",
+  "at": [
+   96,
+   446
+  ]
+ },
+ {
+  "label": "Oct 27",
+  "at": [
+   96,
+   443
+  ]
+ },
+ {
+  "label": "RBA F17 · Observed 6 Oct 2026 · Published 6 Oct 2026 · Older observation",
+  "at": [
+   360,
+   558
+  ]
+ },
+ {
+  "label": "Show Sources",
+  "flags": "tap",
+  "at": [
+   360,
+   751
+  ]
+ },
+ {
+  "label": "Sources",
+  "at": [
+   328,
+   751
+  ]
+ },
+ {
+  "label": "Show Cash-rate history",
+  "flags": "tap",
+  "at": [
+   360,
+   1000
+  ]
+ },
+ {
+  "label": "Cash-rate history",
+  "at": [
+   328,
+   1000
+  ]
+ },
+ {
+  "label": "See bank responses",
+  "flags": "tap",
+  "at": [
+   360,
+   1200
+  ]
+ },
+ {
+  "label": "See bank responses",
+  "at": [
+   360,
+   1200
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap,sel",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "sel",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
