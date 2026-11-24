@@ -431,8 +431,8 @@ export default function RatesWorkspace() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [suitabilityReady, activeMortgageIndex, indexedScenarioKey, indexedInputsKey]);
   // If a ready index can answer the request, a closed gate should not start the fallback pricing pass.
-  const needsCooperativePricing = pricingActive && !task.intentError && !indexedPricing
-    && (suitabilityReady || !activeMortgageIndex);
+  const indexedPricingBlocked = !suitabilityReady && activeMortgageIndex != null;
+  const needsCooperativePricing = pricingActive && !task.intentError && !indexedPricing && !indexedPricingBlocked;
   // Default rate ranking: scope the leading rows first so page one can paint
   // before the whole book has been scoped. Anything else waits for the full pass.
   const leadingScope = useMemo((): LeadingScopeRequest | null => section === 'Mortgage' && sortKey === 'rate' && task.page === 1
@@ -461,6 +461,7 @@ export default function RatesWorkspace() {
     leadingScope: needsCooperativePricing ? leadingScope : null,
     resolutionContextKey: JSON.stringify([scenario, prefs.profileFilters, pricingMortgageFilters.loanPurposes, pricingMortgageFilters.repaymentTypes]),
   });
+  // An empty placeholder must not tell consumers that pricing is complete.
   const publicPricing = indexedPricing ? {
     ...cooperativePricing, candidates: indexedPricing.candidates,
     resolution: { rows: indexedPricing.priced, priced: indexedPricing.priced.length,
@@ -468,7 +469,7 @@ export default function RatesWorkspace() {
     mortgageScope: indexedPricing.rawScope, ready: true, error: null,
     work: { ...cooperativePricing.work, pricingStage: 'ready' as const, sourceRowCount: sourceRates.length,
       candidateCount: indexedPricing.candidates.length, pricedRowCount: indexedPricing.priced.length },
-  } : cooperativePricing;
+  } : indexedPricingBlocked ? { ...cooperativePricing, ready: false } : cooperativePricing;
   useEffect(() => {
     if (isFocused && section === 'Mortgage' && mortgagePricingReady && needsCooperativePricing && cooperativePricing.ready) {
       setSettledMortgageWork(mortgageWorkKey);
