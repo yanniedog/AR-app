@@ -19,23 +19,25 @@ const parse = (bytes) => JSON.parse(new TextDecoder('utf-8', { fatal: true }).de
 // Retry the delivery gateway failure seen in APK publishing. Source, byte and integrity
 // checks still gate both channels, and every attempt uses the same URL.
 const DELIVERY_RETRY_DELAYS_MS = [15000, 45000];
-async function readDeliveryBytes(url, maxBytes, transports) {
-  for (const delay of DELIVERY_RETRY_DELAYS_MS) {
+async function readDeliveryBytes(url, maxBytes, transports, remainingDelays) {
+  for (;;) {
     try {
       return await fetchBytes(url, maxBytes, REPO, transports);
     } catch (error) {
-      if (!/^HTTP 502:/.test(error.message)) throw error;
+      if (!/^HTTP 502:/.test(error.message) || remainingDelays.length === 0) throw error;
+      const delay = remainingDelays.shift();
       console.warn(`Public delivery HTTP 502; retrying in ${delay / 1000} s`);
       await wait(delay);
     }
   }
-  return fetchBytes(url, maxBytes, REPO, transports);
 }
 
 async function verifyPublicDelivery() {
   const transports = [];
+  // All five reads share two retries, bounding verification to seven fetch attempts.
+  const remainingDelays = [...DELIVERY_RETRY_DELAYS_MS];
   const nonce = Date.now();
-  const read = (url) => readDeliveryBytes(`${url}?_=${nonce}`, MAX_METADATA_BYTES, transports);
+  const read = (url) => readDeliveryBytes(`${url}?_=${nonce}`, MAX_METADATA_BYTES, transports, remainingDelays);
   const indexBytes = await read(`${BASE}app-payload-latest/dates-index.json`);
   const rawIndex = parse(indexBytes);
   const index = parseDatesIndex(rawIndex, REPO);
@@ -62,7 +64,7 @@ async function verifyPublicDelivery() {
   const assets = {};
   for (const name of ['core', 'details']) {
     const file = manifest.files[name];
-    const bytes = await readDeliveryBytes(file.url, file.bytes, transports);
+    const bytes = await readDeliveryBytes(file.url, file.bytes, transports, remainingDelays);
     if (bytes.length !== file.bytes || hash(bytes) !== file.sha256) {
       throw new Error(`Public delivery ${name} asset size/SHA-256 mismatch`);
     }
