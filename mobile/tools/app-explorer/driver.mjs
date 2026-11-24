@@ -332,6 +332,17 @@ function screenSize() {
   return m ? [Number(m[1]), Number(m[2])] : [720, 1600];
 }
 
+function visibleKeyboardTop([width, height]) {
+  // UiAutomator may return only the app window even when the screenshot shows the IME.
+  const displays = sh('dumpsys -t 2 window displays', { allowFail: true, timeout: 2500 }) || '';
+  for (const [, left, top, right, bottom] of displays.matchAll(
+    /InsetsSource id=[^\s]+ type=ime frame=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\][^\n]*\bvisible=true\b/g,
+  )) {
+    if (+left <= 0 && +right >= width && +top > 0 && +bottom > +top && +bottom <= height) return +top;
+  }
+  return undefined;
+}
+
 function appPid() {
   return (sh(`pidof ${PKG}`, { allowFail: true }) || '').trim();
 }
@@ -408,6 +419,7 @@ class Explorer {
     const settled = await settle(settleTimeout, since, before, { scrolling: Boolean(this.scrollStep) });
     const appAnr = systemDialogs.filter(d => d.ours).length > anrBefore;
     this.current = settled;
+    const keyboardTopPx = visibleKeyboardTop(this.size);
     const png = adb(['exec-out', 'screencap', '-p'], { encoding: 'buffer', allowFail: true });
     if (png && png.length) fs.writeFileSync(path.join(this.out, 'screens', `${slug}.png`), png);
     const screen = summarize(settled.nodes);
@@ -423,6 +435,7 @@ class Explorer {
       name,
       slug,
       settleMs: settled.settleMs,
+      keyboardTopPx,
       settleTimedOut: settled.timedOut,
       responseMs: settled.responseMs ?? undefined,
       firstContentMs: settled.firstContentMs ?? undefined,
@@ -537,6 +550,7 @@ class Explorer {
     const slug = `${index}-${String(name).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 50).toLowerCase()}`;
     const { nodes } = await dumpUi();
     dismissSystemDialog(nodes);
+    const keyboardTopPx = visibleKeyboardTop(this.size);
     const png = adb(['exec-out', 'screencap', '-p'], { encoding: 'buffer', allowFail: true });
     if (png && png.length) fs.writeFileSync(path.join(this.out, 'screens', `${slug}.png`), png);
     const screen = summarize(nodes);
@@ -544,7 +558,7 @@ class Explorer {
     fs.writeFileSync(path.join(this.out, 'ui', `${slug}.nodes.json`), JSON.stringify(rawNodes(nodes, this.size)));
     const log = drainLogcat();
     this.logAll += `\n===== ${slug} =====\n${log}`;
-    const step = { n: this.steps.length + 1, name, slug, settleMs: 0, alive: Boolean(appPid()), frames: frameStats(), memKb: memoryKb(), log: classifyLog(log), visible: screen.slice(0, 40).map(i => i.label).filter(Boolean), ...extra };
+    const step = { n: this.steps.length + 1, name, slug, settleMs: 0, keyboardTopPx, alive: Boolean(appPid()), frames: frameStats(), memKb: memoryKb(), log: classifyLog(log), visible: screen.slice(0, 40).map(i => i.label).filter(Boolean), ...extra };
     sh(`dumpsys gfxinfo ${PKG} reset`, { allowFail: true });
     this.steps.push(step);
     console.log(`[${slug}] snapshot${step.alive ? '' : ' CRASHED'}`);
@@ -805,8 +819,9 @@ class Explorer {
       const t0 = Date.now();
       for (let i = 0; i < (step.times ?? 1); i += 1) sh('input keyevent 4');
       const rec = await this.record(label, {}, undefined, t0);
-      if (step.session && rec.responseMs == null && rec.alive) rec.deadEnd = true;
       await this.postconditions(step, rec);
+      // A destination assertion can succeed after the settle sampler stopped observing.
+      if (step.session && rec.responseMs == null && rec.alive && (!step.then || rec.error)) rec.deadEnd = true;
       return rec;
     }
     if (step.key) {
