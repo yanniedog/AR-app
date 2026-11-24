@@ -1,0 +1,40 @@
+{
+  "kind": "live",
+  "url": "https://paste.rs/VUjr1",
+  "outcome": null,
+  "elapsedMs": 838698,
+  "visibleOutcome": [
+    "Navigate up",
+    "App health audit",
+    "Account",
+    "0",
+    "Rejected addresses",
+    "6",
+    "HTTP not attempted",
+    "6",
+    "HTTP attempt evidence missing",
+    "0",
+    "Unverified links",
+    "638",
+    "Executed",
+    "2,884 / 2,884",
+    "Verified upload",
+    "Verified upload",
+    "Uploaded",
+    "https://paste.rs/VUjr1",
+    "https://paste.c-net.org/7cd9b443-10b1-131b-6e04-9379f0ab893d",
+    "Copy paste.rs link"
+  ],
+  "logStatus": 200,
+  "logContentUrl": "https://paste.c-net.org/7cd9b443-10b1-131b-6e04-9379f0ab893d",
+  "logBytes": 843185,
+  "completion": {
+    "outcome": "failed",
+    "collectionComplete": true,
+    "coverageComplete": false,
+    "detailsComplete": true
+  },
+  "debugLog": {
+    "error": "Upload and copy link not found"
+  }
+}

@@ -1,0 +1,462 @@
+
+===== 001-cold-start =====
+11-24 14:15:41.094 W/australianrates( 4985): Known variants: atom, sandybridge, silvermont, goldmont, goldmont-plus, tremont, kabylake, default
+11-24 14:15:41.094 W/australianrates( 4985): Unexpected CPU variant for x86: x86_64.
+11-24 14:15:41.135 E/australianrates( 4985): Not starting debugger since process cannot load the jdwp agent.
+11-24 14:15:41.602 W/SoLoader( 4985): Initializing SoLoader: 0
+11-24 14:15:41.603 W/SoLoader( 4985): Previously recorded 0 base apk paths.
+11-24 14:15:41.603 W/SoLoader( 4985): Recording new base apk path: /data/app/~~dy11ECkDxFuqaY4oaYs62A==/com.eyex.australianrates-LaI13Uk34JIK_lI9SjO2pQ==/base.apk
+11-24 14:15:41.610 W/SoLoader( 4985): SoLoader initialized: 8
+11-24 14:15:41.700 W/unknown:BridgelessReact( 4985): ReactHost{0}.startSurface(surfaceId = 0): Schedule
+11-24 14:15:41.701 W/unknown:BridgelessReact( 4985): ReactHost{0}.attachSurface(surfaceId = 0)
+11-24 14:15:41.703 W/unknown:BridgelessReact( 4985): ReactHost{0}.getJSBundleLoader()
+11-24 14:15:41.703 W/unknown:BridgelessReact( 4985): ReactHost{0}.getOrCreateReactInstanceTask()
+11-24 14:15:41.703 W/unknown:BridgelessReact( 4985): ReactHost{0}.getOrCreateReactInstanceTask(): Start
+11-24 14:15:41.704 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:15:41.713 W/unknown:BridgelessReact( 4985): ReactHost{0}.getOrCreateReactContext(): Creating BridgelessReactContext
+11-24 14:15:41.713 W/unknown:BridgelessReact( 4985): ReactHost{0}.getOrCreateReactInstanceTask(): Creating ReactInstance
+11-24 14:15:41.715 W/OpenGLRenderer( 4985): Unknown dataspace 0
+11-24 14:15:41.805 W/OpenGLRenderer( 4985): Failed to initialize 101010-2 format, error = EGL_SUCCESS
+11-24 14:15:41.879 W/unknown:BridgelessReact( 4985): ReactHost{0}.getOrCreateReactInstanceTask(): Loading JS Bundle
+11-24 14:15:41.880 W/unknown:BridgelessReact( 4985): ReactHost{0}.getOrCreateReactInstanceTask(): Calling DevSupportManagerBase.onNewReactContextCreated(reactContext)
+11-24 14:15:41.892 W/unknown:BridgelessReact( 4985): ReactHost{0}.startSurface(surfaceId = 0): Execute
+11-24 14:15:41.901 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:15:41.908 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaProviderManager
+11-24 14:15:41.914 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.uimanager.U
+11-24 14:15:41.915 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.swmansion.rnscreens.SearchBarManager
+11-24 14:15:41.916 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.swmansion.rnscreens.ScreenFooterManager
+11-24 14:15:41.916 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.TabScreenViewManager
+11-24 14:15:41.917 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.swmansion.rnscreens.ModalScreenViewManager
+11-24 14:15:41.917 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.swmansion.rnscreens.ScreenContainerViewManager
+11-24 14:15:41.917 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.TabsHostViewManager
+11-24 14:15:41.918 W/unknown:BridgelessReact( 4985): ReactHost{0}.getOrCreateReactInstanceTask(): Executing ReactInstanceEventListeners
+11-24 14:15:41.920 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderConfigViewManager
+11-24 14:15:41.921 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.swmansion.rnscreens.ScreenContentWrapperManager
+11-24 14:15:41.923 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaViewManager
+11-24 14:15:41.923 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class expo.modules.kotlin.views.GroupViewManagerWrapper
+11-24 14:15:41.925 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.swmansion.rnscreens.ScreenViewManager
+11-24 14:15:41.925 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.th3rdwave.safeareacontext.p
+11-24 14:15:41.926 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderSubviewManager
+11-24 14:15:41.927 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.swmansion.rnscreens.ScreenStackViewManager
+11-24 14:15:41.937 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$DefsViewManager
+11-24 14:15:41.939 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.VirtualViewManager$c
+11-24 14:15:41.940 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeMergeManager
+11-24 14:15:41.942 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewManager
+11-24 14:15:41.942 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.safeareaview.c
+11-24 14:15:41.943 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LinearGradientManager
+11-24 14:15:41.944 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeGaussianBlurManager
+11-24 14:15:41.945 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.progressbar.ReactProgressBarViewManager
+11-24 14:15:41.945 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.progressbar.b
+11-24 14:15:41.946 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollViewManager
+11-24 14:15:41.947 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.text.ReactTextViewManager
+11-24 14:15:41.948 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.text.k
+11-24 14:15:41.949 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollContainerViewManager
+11-24 14:15:41.949 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeColorMatrixManager
+11-24 14:15:41.950 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ClipPathViewManager
+11-24 14:15:41.951 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PatternManager
+11-24 14:15:41.951 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$SymbolManager
+11-24 14:15:41.952 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeBlendManager
+11-24 14:15:41.953 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.view.ReactViewManager
+11-24 14:15:41.954 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.SvgViewManager
+11-24 14:15:41.955 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchManager
+11-24 14:15:41.955 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.switchview.d
+11-24 14:15:41.955 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$UseViewManager
+11-24 14:15:41.957 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$CircleViewManager
+11-24 14:15:41.957 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TSpanViewManager
+11-24 14:15:41.958 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FilterManager
+11-24 14:15:41.959 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MarkerManager
+11-24 14:15:41.960 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerButtonViewManager
+11-24 14:15:41.961 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.modal.ReactModalHostManager
+11-24 14:15:41.961 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ForeignObjectManager
+11-24 14:15:41.968 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$EllipseViewManager
+11-24 14:15:41.969 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LineViewManager
+11-24 14:15:41.971 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.text.frescosupport.FrescoBasedReactTextInlineImageViewManager
+11-24 14:15:41.971 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.text.frescosupport.a
+11-24 14:15:41.972 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeFloodManager
+11-24 14:15:41.973 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$GroupViewManager
+11-24 14:15:41.974 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextViewManager
+11-24 14:15:41.975 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ImageViewManager
+11-24 14:15:41.981 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeCompositeManager
+11-24 14:15:41.982 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.image.ReactImageManager
+11-24 14:15:41.983 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RadialGradientManager
+11-24 14:15:41.984 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.unimplementedview.ReactUnimplementedViewManager
+11-24 14:15:41.984 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MaskManager
+11-24 14:15:41.985 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RectViewManager
+11-24 14:15:41.986 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.scroll.ReactScrollViewManager
+11-24 14:15:41.986 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextPathViewManager
+11-24 14:15:41.987 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeOffsetManager
+11-24 14:15:41.988 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PathViewManager
+11-24 14:15:41.989 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.drawer.ReactDrawerLayoutManager
+11-24 14:15:41.989 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.text.ReactVirtualTextViewManager
+11-24 14:15:41.990 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.swiperefresh.SwipeRefreshLayoutManager
+11-24 14:15:41.990 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.text.t
+11-24 14:15:41.991 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.text.ReactRawTextManager
+11-24 14:15:41.991 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.text.f
+11-24 14:15:41.991 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputManager
+11-24 14:15:41.992 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.facebook.react.views.textinput.F
+11-24 14:15:41.993 W/unknown:ViewManagerPropertyUpdater( 4985): Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerRootViewManager
+11-24 14:15:41.996 W/b       ( 4985): [WARNING] Bridgeless doesn't support CatalystInstance. Accessing an API that's not part of the new architecture is not encouraged usage.
+11-24 14:15:42.106 I/ReactNativeJS( 4985): Running "main"
+11-24 14:15:42.270 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:15:42.270 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:15:42.270 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:15:42.270 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:15:42.270 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:15:42.270 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:15:42.271 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:15:42.271 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:15:42.271 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:15:42.271 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:15:42.271 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:15:42.271 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:15:42.272 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:15:42.272 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:15:42.281 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:15:42.363 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:15:42.389 W/ReactNativeJS( 4985): `new NativeEventEmitter()` was called with a non-null argument without the required `addListener` method.
+11-24 14:15:42.389 W/ReactNativeJS( 4985): `new NativeEventEmitter()` was called with a non-null argument without the required `removeListeners` method.
+11-24 14:15:42.478 W/australianrates( 4985): Entry not found
+11-24 14:15:42.478 W/ziparchive( 4985): Unable to open '/data/app/~~PhDY2MCnFs5JIgdQOsV0NA==/com.google.android.trichromelibrary_567263637-penUFnrYmOUzswLPxEHaqQ==/TrichromeLibrary.dm': No such file or directory
+11-24 14:15:42.500 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:15:42.637 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:15:44.847 W/australianrates( 4985): Cleared Reference was only reachable from finalizer (only reported once)
+11-24 14:15:44.913 W/System  ( 4985): A resource failed to call release. 
+11-24 14:15:46.663 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:15:47.442 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:15:47.714 W/System  ( 4985): A resource failed to call close. 
+11-24 14:15:53.034 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@15000d7
+11-24 14:15:53.053 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@f061c2e
+11-24 14:15:53.090 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@bfd83fd
+11-24 14:15:53.204 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@765e349
+11-24 14:15:53.255 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@1961e63
+11-24 14:15:53.451 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@94b417f
+11-24 14:15:53.551 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@7ad1c62
+11-24 14:15:53.571 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@92721f3
+11-24 14:15:53.590 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@6f3aeb0
+11-24 14:16:00.701 W/ReactNativeJS( 4985): [AR warn] boot: launch ms js-start=65961 layout-mounted=66237 cache-read=66322 hydrated=66539 splash-hide=66539 manifest=67726 resolved=68185 core-fetched=69672 core-saved=70201 rows-prepared=70495 search-index-idle=70495 leading-requested=70495 details-start=70824 leading-scoped=71057 pricing-ready=73071 last-gate=73141 details-fetched=74364 detail-filters-idle=76259 last-pricing=76259 suitability-built=76424 post-refresh-wait=76539 leading-page=76973 last-rows=84331 rates-ready=84603 pricing-starts=2 pricing-cand-ms=0 pricing-resolve-ms=0 pricing-yields=161 pricing-scope-ms=10140 leading-short=1 leading-short-rows=0 leading-scope-rows=118 leading-visible-rows=0 leading-nonstd-rows=11 filter-runs=4 filter-rows=63344 filter-yields=10 filter-ms=157 sort-runs=5 sort-rows=1175 sort-yields=5 sort-ms=44
+===== 002-browse-open =====
+11-24 14:16:01.656 W/System  ( 4985): A resource failed to call close. 
+11-24 14:16:01.772 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:16:01.773 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:16:01.776 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:16:01.776 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:16:02.011 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:16:03.209 W/System  ( 4985): A resource failed to call close. 
+11-24 14:16:06.850 W/System  ( 4985): A resource failed to call close. 
+===== 003-browse =====
+
+===== 004-watchlist-open =====
+11-24 14:16:18.140 W/System  ( 4985): A resource failed to call close. 
+11-24 14:16:18.228 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:16:18.228 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:16:18.240 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:16:18.241 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:16:21.408 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 005-watchlist =====
+
+===== 006-market-open =====
+11-24 14:16:35.570 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:16:35.571 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:16:35.572 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:16:35.572 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:16:35.694 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:16:36.083 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@b2db42a
+11-24 14:16:36.100 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@5d0d101
+11-24 14:16:36.102 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@f148c1c
+11-24 14:16:36.103 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@c359fbd
+11-24 14:16:36.104 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@2aec9b2
+===== 007-market =====
+11-24 14:16:42.960 W/System  ( 4985): A resource failed to call close. 
+===== 008-tools-open =====
+11-24 14:16:50.122 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:16:50.122 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:16:50.126 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:16:50.126 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:16:50.204 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:16:50.304 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:16:50.304 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:16:50.304 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:16:50.304 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:16:50.304 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:16:50.304 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:16:50.304 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:16:51.146 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 009-tools =====
+
+===== 010-trends-open =====
+11-24 14:17:04.367 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:17:04.367 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:17:04.382 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:17:04.383 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:17:04.434 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:17:04.434 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:17:04.434 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:17:04.434 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:17:04.434 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:17:04.434 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:17:04.434 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:17:04.661 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:17:04.824 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:17:04.824 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:17:04.824 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:17:04.825 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:17:04.825 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:17:04.825 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:17:04.825 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+===== 011-trends =====
+11-24 14:17:11.911 W/System  ( 4985): A resource failed to call close. 
+===== 012-search-open =====
+11-24 14:17:19.230 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:17:19.230 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:17:19.238 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:17:19.238 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:17:19.300 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:17:19.300 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:17:19.300 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:17:19.301 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:17:19.301 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:17:19.301 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:17:19.301 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:17:19.431 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:17:19.928 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@6e7723b
+11-24 14:17:19.952 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@4d0f717
+11-24 14:17:20.136 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@3bdb2f2
+11-24 14:17:20.206 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@d771d43
+11-24 14:17:20.264 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@3508199
+11-24 14:17:20.392 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@4dd3091
+11-24 14:17:20.398 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@8200bf6
+11-24 14:17:20.408 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@9598f0b
+11-24 14:17:20.417 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@4eb7f30
+11-24 14:17:21.887 W/System  ( 4985): A resource failed to call close. 
+===== 013-search =====
+
+===== 014-bank-rates-open =====
+11-24 14:17:35.130 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:17:35.130 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:17:35.133 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:17:35.133 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:17:35.183 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:17:35.183 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:17:35.183 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:17:35.183 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:17:35.183 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:17:35.183 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:17:35.183 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:17:35.359 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:17:35.360 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 015-bank-rates =====
+
+===== 016-compare-open =====
+11-24 14:17:49.837 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:17:49.837 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:17:49.841 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:17:49.841 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:17:49.901 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:17:49.901 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:17:49.901 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:17:49.901 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:17:49.901 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:17:49.901 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:17:49.901 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:17:49.933 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 017-compare =====
+
+===== 018-calculator-open =====
+11-24 14:18:03.816 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:18:03.816 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:18:03.822 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:18:03.822 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:18:03.902 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:18:03.902 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:18:03.902 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:18:03.902 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:18:03.902 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:18:03.902 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:18:03.902 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:18:04.031 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:18:04.875 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 019-calculator =====
+
+===== 020-projections-open =====
+11-24 14:18:18.681 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:18:18.681 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:18:18.691 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:18:18.691 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:18:18.733 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:18:18.733 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:18:18.733 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:18:18.734 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:18:18.734 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:18:18.734 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:18:18.734 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:18:18.900 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:18:18.901 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:18:18.901 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:18:18.901 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:18:18.901 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:18:18.901 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:18:18.901 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:18:18.921 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 021-projections =====
+
+===== 022-research-open =====
+11-24 14:18:32.748 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:18:32.748 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:18:32.752 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:18:32.752 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:18:32.819 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:18:32.819 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:18:32.819 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:18:32.819 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:18:32.819 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:18:32.819 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:18:32.819 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:18:32.995 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 023-research =====
+11-24 14:18:40.237 W/System  ( 4985): A resource failed to call close. 
+===== 024-rba-open =====
+11-24 14:18:47.411 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:18:47.411 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:18:47.418 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:18:47.418 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:18:47.505 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:18:47.506 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:18:47.506 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:18:47.506 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:18:47.506 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:18:47.506 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:18:47.506 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:18:47.574 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 025-rba =====
+
+===== 026-rba-scrolled-open =====
+11-24 14:19:02.225 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:19:02.225 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:19:02.227 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:19:02.227 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:19:02.282 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 027-rba-scrolled =====
+11-24 14:19:08.831 W/System  ( 4985): A resource failed to call close. 
+===== 028-rba-response-open =====
+11-24 14:19:17.710 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:19:17.710 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:19:17.716 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:19:17.716 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:19:17.768 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:19:17.768 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:19:17.768 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:19:17.768 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:19:17.768 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:19:17.768 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:19:17.768 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:19:17.797 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:19:17.966 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@e82400b
+11-24 14:19:18.182 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@4596a22
+11-24 14:19:18.187 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@b4bcb3
+11-24 14:19:18.190 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@3e51270
+11-24 14:19:18.191 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@6c729e9
+11-24 14:19:18.192 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@4c8066e
+11-24 14:19:18.347 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 029-rba-response =====
+11-24 14:19:24.799 W/System  ( 4985): A resource failed to call close. 
+===== 030-settings-open =====
+11-24 14:19:32.001 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:19:32.001 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:19:32.006 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:19:32.006 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:19:32.137 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:19:32.137 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:19:32.137 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:19:32.137 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:19:32.137 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:19:32.137 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:19:32.137 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:19:32.496 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:19:32.502 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 031-settings =====
+
+===== 032-about-open =====
+11-24 14:19:46.330 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:19:46.330 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:19:46.333 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:19:46.333 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:19:46.418 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:19:46.418 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:19:46.419 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:19:46.419 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:19:46.419 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:19:46.419 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:19:46.419 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:19:46.515 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 033-about =====
+
+===== 034-profile-open =====
+11-24 14:20:00.235 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:20:00.235 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:20:00.241 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:20:00.241 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:20:00.317 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:20:00.317 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:20:00.317 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:20:00.317 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:20:00.317 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:20:00.317 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:20:00.317 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:20:00.362 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:20:00.363 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 035-profile =====
+
+===== 036-terms-open =====
+11-24 14:20:14.387 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:20:14.387 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:20:14.390 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:20:14.390 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:20:14.468 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:20:14.468 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:20:14.468 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:20:14.468 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:20:14.468 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:20:14.468 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:20:14.468 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:20:14.496 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 037-terms =====
+
+===== 038-third-party-open =====
+11-24 14:20:28.438 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:20:28.438 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:20:28.442 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:20:28.442 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:20:28.502 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:20:28.502 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:20:28.502 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:20:28.502 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:20:28.502 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:20:28.502 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:20:28.502 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:20:28.545 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:20:28.546 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:20:29.318 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+===== 039-third-party =====
+
+===== 040-catalogue-open =====
+11-24 14:20:42.367 W/unknown:BridgelessReact( 4985): ReactContext.onHostPause()
+11-24 14:20:42.367 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostPause(activity)
+11-24 14:20:42.373 W/unknown:BridgelessReact( 4985): ReactContext.onHostResume()
+11-24 14:20:42.373 W/unknown:BridgelessReact( 4985): ReactHost{0}.onHostResume(activity)
+11-24 14:20:42.417 W/[RNScreens]( 4985): backTitle prop is not available on Android
+11-24 14:20:42.417 W/[RNScreens]( 4985): backTitleFontFamily prop is not available on Android
+11-24 14:20:42.417 W/[RNScreens]( 4985): backTitleVisible prop is not available on Android
+11-24 14:20:42.417 W/[RNScreens]( 4985): disableBackButtonMenu prop is not available on Android
+11-24 14:20:42.417 W/[RNScreens]( 4985): largeTitleFontFamily prop is not available on Android
+11-24 14:20:42.417 W/[RNScreens]( 4985): largeTitleFontWeight prop is not available on Android
+11-24 14:20:42.417 W/[RNScreens]( 4985): largeTitleHideShadow prop is not available on Android
+11-24 14:20:42.445 W/unknown:ReactNative( 4985): StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+11-24 14:20:42.979 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@cb2c803
+11-24 14:20:43.002 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@6624380
+11-24 14:20:43.017 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@e5834e9
+11-24 14:20:43.025 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@d6d11b8
+11-24 14:20:43.054 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@4f5d363
+11-24 14:20:43.055 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@4a55b60
+11-24 14:20:43.101 W/unknown:WrappingUtils( 4985): Don't know how to round that drawable: com.facebook.react.views.image.g$b@3662f16
+===== 041-catalogue =====
+11-24 14:20:49.804 W/System  ( 4985): A resource failed to call close. 
