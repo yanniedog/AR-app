@@ -72,6 +72,15 @@ function isoDate(value: string): string {
   return month ? `${named[3]}-${month}-${named[1].padStart(2, '0')}` : '';
 }
 
+/**
+ * Order two ISO dates (YYYY-MM-DD). A plain comparison gives the same order as
+ * localeCompare for fixed-width ISO strings, without the Intl call that is very slow on Hermes
+ * (thousands of cash rate rows spent seconds sorting).
+ */
+export function compareIsoDate(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 function finite(value: string): number | null {
   if (!value) return null;
   const n = Number(value.replace(/,/g, ''));
@@ -88,7 +97,7 @@ function finishSeries(
   parsedPoints: EconomicPoint[],
 ): ParsedSeries {
   const points = [...new Map(parsedPoints.map((point) => [point.date, point])).values()]
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort((a, b) => compareIsoDate(a.date, b.date));
   if (!points.length) throw new Error(`RBA series ${seriesId} has no observations`);
   return { publicationDate: isoDate(publication), points, sourceAgency: 'rba' };
 }
@@ -222,7 +231,7 @@ export function parseAbsCpiCsv(
     return date && value != null ? [{ date, value }] : [];
   });
   const points = [...new Map(parsedPoints.map((point) => [point.date, point])).values()]
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort((a, b) => compareIsoDate(a.date, b.date));
   if (!points.length) throw new Error('ABS CPI series has no observations');
   return {
     publicationDate: publicationDate || points.at(-1)!.date,
@@ -265,7 +274,7 @@ export function parseCashForecastCsv(text: string): CashRateForecast | null {
   const points = observations
     .filter((item) => item.surveyDate === surveyDate)
     .map((item) => ({ date: item.targetDate, value: item.value }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort((a, b) => compareIsoDate(a.date, b.date));
   return {
     surveyDate,
     publicationDate: isoDate(rowByLabel(rows, 'Publication date')?.[medianColumn] ?? ''),
@@ -279,7 +288,7 @@ export function parseCashForecastCsv(text: string): CashRateForecast | null {
  * Defensively sorts by date so equal values are consecutive.
  */
 export function cashRateTargetSteps(points: EconomicPoint[]): EconomicPoint[] {
-  const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date));
+  const sorted = [...points].sort((a, b) => compareIsoDate(a.date, b.date));
   const steps: EconomicPoint[] = [];
   for (const point of sorted) {
     const last = steps.at(-1);
