@@ -11,6 +11,8 @@ export const THRESHOLDS = {
   jankFailRatio: 0.95,
   jankRegressionDelta: 0.15,
   jankMinFrames: 20,
+  // A fail needs sustained jank, not a 20-frame blip on a step that settled in 20 ms.
+  jankFailMinFrames: 60,
   regressionFactor: 1.5,
   regressionMinMs: 1500,
   responseRegressionMinMs: 1000,
@@ -25,9 +27,9 @@ export function sessionSteps(report) {
   return tagged.length ? tagged : report.steps || [];
 }
 
-function jankRatio(s) {
+function jankRatio(s, minFrames = THRESHOLDS.jankMinFrames) {
   const f = s.frames || {};
-  return f.frames >= THRESHOLDS.jankMinFrames ? f.janky / f.frames : null;
+  return f.frames >= minFrames ? f.janky / f.frames : null;
 }
 
 /** Time the screen had changed but still showed no real content (blank or spinner only). */
@@ -73,7 +75,8 @@ export function computeVerdict(report, baseline) {
     const ratio = jankRatio(s);
     const base = baseByName.get(s.name);
     const baseRatio = base ? jankRatio(base) : null;
-    if (ratio != null && ratio >= t.jankFailRatio) add('fail', 'jank', s, `${Math.round(ratio * 100)}% dropped frames on "${s.name}"`);
+    const sustained = jankRatio(s, t.jankFailMinFrames);
+    if (sustained != null && sustained >= t.jankFailRatio) add('fail', 'jank', s, `${Math.round(ratio * 100)}% dropped frames on "${s.name}"`);
     else if (ratio != null && baseRatio != null && ratio - baseRatio >= t.jankRegressionDelta) add('regression', 'jank', s, `Dropped frames ${Math.round(baseRatio * 100)}% to ${Math.round(ratio * 100)}% on "${s.name}"`);
     if (base) {
       const now = contentMs(s);
