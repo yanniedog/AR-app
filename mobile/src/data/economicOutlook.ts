@@ -1,4 +1,6 @@
 import { cache } from './cache';
+import { debugLog } from '../lib/debugLog';
+import { yieldToUi } from '../lib/yieldToUi';
 import { logOfficialDataFailure, parseOfficialData } from './officialDataFailure';
 import { getLocalAppHealthAuditGeneration, isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import {
@@ -61,6 +63,34 @@ export { buildEconomicOutlookFromCsv, economicSignal } from './economicOutlookSi
 
 
 const SOURCE_KEYS = ECONOMIC_SOURCE_KEYS;
+
+const SLOW_FETCH_MS = 8_000;
+const SLOW_PARSE_MS = 400;
+
+/** Monotonic where available, so wall-clock changes cannot distort refresh timings. */
+function monotonicNow(): number {
+  return typeof performance !== 'undefined' && typeof performance.now === 'function'
+    ? performance.now()
+    : Date.now();
+}
+
+/** Warning text when a refresh phase is slow enough to explain a stalled Economy lens. */
+export function slowRefreshMessage(
+  fetchMs: number,
+  parseMs: number,
+  slowest?: { label: string; ms: number } | null,
+): string | null {
+  if (fetchMs <= SLOW_FETCH_MS && parseMs <= SLOW_PARSE_MS) return null;
+  const detail = slowest && parseMs > SLOW_PARSE_MS ? ` (slowest ${slowest.label} ${slowest.ms} ms)` : '';
+  return `slow refresh: fetch ${fetchMs} ms, parse ${parseMs} ms${detail}`;
+}
+
+/** Tables this large are parsed after handing the thread back, so one refresh does not hold it for seconds. */
+const LARGE_TABLE_CHARS = 50_000;
+
+function tableLabel(url: string): string {
+  return url.split('?')[0].split('/').pop() || url;
+}
 
 export class EconomicOutlookUnavailableError extends Error {
   constructor() {
@@ -196,7 +226,13 @@ async function commitEconomicResult(
       accepted = latestSuccessful.payload;
       return;
     }
-    if (persist) await cache.writeEconomicOutlook(payload);
+    if (persist) {
+      // Time only the write, not the wait behind an earlier commit.
+      const writeStartedAt = monotonicNow();
+      await cache.writeEconomicOutlook(payload);
+      const writeMs = Math.round(monotonicNow() - writeStartedAt);
+      if (writeMs > SLOW_PARSE_MS) debugLog.warn('economic-outlook', `slow save: ${writeMs} ms`);
+    }
     // A native write already started before audit entry cannot be cancelled,
     // but its completion must not publish online observations into the chart.
     if (isLocalAppHealthAudit() || auditGeneration !== getLocalAppHealthAuditGeneration()) {
@@ -251,6 +287,25 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
     }
 
     const checkedAt = new Date().toISOString();
+    const fetchStartedAt = monotonicNow();
+    let parseMs = 0;
+    let slowest: { label: string; ms: number } | null = null;
+    const timedParse = <T>(url: string, work: () => T): T => {
+      const startedAt = monotonicNow();
+      try {
+        return work();
+      } finally {
+        const elapsed = monotonicNow() - startedAt;
+        parseMs += elapsed;
+        if (!slowest || elapsed > slowest.ms) slowest = { label: tableLabel(url), ms: Math.round(elapsed) };
+      }
+    };
+    // An audit can start while the thread is yielded, so re-check before the parse begins.
+    const beforeLargeParse = async (text: string): Promise<void> => {
+      if (text.length <= LARGE_TABLE_CHARS) return;
+      await yieldToUi(0);
+      if (invalidatedByAudit()) throw new Error('Refresh cancelled by audit');
+    };
     const [sourceEntries, forecastSettled, cashRateSettled, absHeadlineSettled] = await Promise.all([
       Promise.all(
         SOURCE_KEYS.map(async (source) => {
@@ -269,7 +324,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
         try {
           const forecastText = await fetchText(URLS.cashForecast, 5_000);
           return {
-            forecast: parseOfficialData(URLS.cashForecast, () => parseCashForecastCsv(forecastText)),
+            forecast: timedParse(URLS.cashForecast, () => parseOfficialData(URLS.cashForecast, () => parseCashForecastCsv(forecastText))),
             error: null as string | null,
           };
         } catch (error) {
@@ -282,8 +337,10 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       (async () => {
         try {
           return {
-            history: await fetchText(URLS.cashRate).then(text =>
-              parseOfficialData(URLS.cashRate, () => parseCashRateTargetCsv(text))),
+            history: await fetchText(URLS.cashRate).then(async text => {
+              await beforeLargeParse(text);
+              return timedParse(URLS.cashRate, () => parseOfficialData(URLS.cashRate, () => parseCashRateTargetCsv(text)));
+            }),
             error: null as string | null,
           };
         } catch (error) {
@@ -299,7 +356,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
           const publicationDate = httpDateToIso(fetched.lastModified)
             || checkedAt.slice(0, 10);
           return {
-            series: parseOfficialData(ABS_HEADLINE_CPI_URL, () => parseAbsCpiCsv(fetched.text, publicationDate)),
+            series: timedParse(ABS_HEADLINE_CPI_URL, () => parseOfficialData(ABS_HEADLINE_CPI_URL, () => parseAbsCpiCsv(fetched.text, publicationDate))),
             error: null as string | null,
           };
         } catch (error) {
@@ -324,8 +381,24 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
         .map((entry) => [entry.source, entry.error!] as const),
     );
 
-    const indicatorEntries = INDICATOR_DEFINITIONS.map((definition) => {
+    const allSettledAt = monotonicNow();
+    // Parsing done while the requests were in flight; indicator parsing below is not part of the fetch phase.
+    const parseMsWhileFetching = parseMs;
+    const indicatorEntries: Array<{
+      definition: (typeof INDICATOR_DEFINITIONS)[number];
+      indicator: EconomicIndicator | null;
+      error: string | null;
+    }> = [];
+    for (const definition of INDICATOR_DEFINITIONS) {
       const text = textBySource.get(definition.source);
+      if (text) {
+        try {
+          await beforeLargeParse(text);
+        } catch {
+          return localEconomicOutlook(latestSuccessful?.payload ?? cached);
+        }
+      }
+      indicatorEntries.push((() => {
       if (!text) {
         return {
           definition,
@@ -334,7 +407,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
         };
       }
       try {
-        let parsed = parseOfficialData(URLS[definition.source], () => parseRbaSeriesCsv(text, definition.seriesId));
+        let parsed = timedParse(URLS[definition.source], () => parseOfficialData(URLS[definition.source], () => parseRbaSeriesCsv(text, definition.seriesId)));
         let sourceUrl: string = URLS[definition.source];
         let frequency = definition.frequency;
         let shortLabel = definition.shortLabel;
@@ -362,8 +435,13 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
           error: `${definition.label}: ${String((error as Error)?.message ?? error)}`,
         };
       }
-    });
+      })());
+    }
 
+    const fetchMs = Math.max(0, Math.round(allSettledAt - fetchStartedAt - parseMsWhileFetching));
+    parseMs = Math.round(parseMs);
+    const slowRefresh = slowRefreshMessage(fetchMs, parseMs, slowest);
+    if (slowRefresh) debugLog.warn('economic-outlook', slowRefresh);
     const forecastEntry = forecastSettled;
     const cashRateEntry = cashRateSettled;
 

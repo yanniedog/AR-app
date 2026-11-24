@@ -239,14 +239,19 @@ jobs:
           git push -q "$remote" "HEAD:refs/heads/$branch"
           echo "Results: branch $branch"
           tag=$(node -e 'try{console.log(require("./run.json").tag||"")}catch{console.log("")}')
-          # Mark a release audited only after a genuinely finished audit: the explore job succeeded,
-          # audit.json has a log URL and no failure outcome. The dispatcher's own run is recognised
-          # by the bot actor (users cannot spoof it) plus full/live mode, never by the nonce alone.
-          finished=$(node -e 'try{const a=require("./audit.json");console.log(a.url&&!a.outcome?"yes":"no")}catch{console.log("no")}')
+          # The marker records verified collection for this APK. Check failures are findings
+          # to investigate; only a collection failure should trigger a scheduled retry.
+          # Recognise the dispatcher by the bot actor plus full/live mode, never by nonce alone.
+          finished=$(node -e 'try{const a=require("./audit.json");console.log(a.url&&!a.outcome&&!a.logError&&a.completion?.collectionComplete===true?"yes":"no")}catch{console.log("no")}')
           auto=no
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$AUTO_NONCE" = auto ] && [ "$AUTO_ACTOR" = 'github-actions[bot]' ] && [ "$AUTO_MODE" = full ] && [ "$AUTO_KIND" = live ]; then auto=yes; fi
           if { [ "$GITHUB_EVENT_NAME" = schedule ] || [ "$GITHUB_EVENT_NAME" = workflow_run ] || [ "$auto" = yes ]; } && [ "$EXPLORE_RESULT" = success ] && [ "$finished" = yes ] && [ -n "$tag" ]; then
-            git push -q "$remote" "HEAD:refs/heads/explorer/tested/$tag"
+            marker="refs/heads/explorer/tested/$tag"
+            if ! git push -q "$remote" "HEAD:$marker"; then
+              # A concurrent audit can publish the marker first. Keep its marker and post this report.
+              git ls-remote --exit-code "$remote" "$marker" >/dev/null
+              echo "Audit marker already exists for $tag"
+            fi
           fi
           git ls-remote --heads "$remote" 'explorer/run-*' | awk '{print $2}' | sed 's#refs/heads/##' \
             | sort -t- -k2 -n | head -n -20 | while read -r b; do git push -q "$remote" --delete "$b" || true; done
