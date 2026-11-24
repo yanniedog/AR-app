@@ -11,6 +11,8 @@ export const THRESHOLDS = {
   jankFailRatio: 0.95,
   jankRegressionDelta: 0.15,
   jankMinFrames: 20,
+  // A fail needs sustained jank, not a 20-frame blip on a step that settled in 20 ms.
+  jankFailMinFrames: 60,
   regressionFactor: 1.5,
   regressionMinMs: 1500,
   responseRegressionMinMs: 1000,
@@ -25,9 +27,9 @@ export function sessionSteps(report) {
   return tagged.length ? tagged : report.steps || [];
 }
 
-function jankRatio(s) {
+function jankRatio(s, minFrames = THRESHOLDS.jankMinFrames) {
   const f = s.frames || {};
-  return f.frames >= THRESHOLDS.jankMinFrames ? f.janky / f.frames : null;
+  return f.frames >= minFrames ? f.janky / f.frames : null;
 }
 
 /** Time the screen had changed but still showed no real content (blank or spinner only). */
@@ -73,7 +75,8 @@ export function computeVerdict(report, baseline) {
     const ratio = jankRatio(s);
     const base = baseByName.get(s.name);
     const baseRatio = base ? jankRatio(base) : null;
-    if (ratio != null && ratio >= t.jankFailRatio) add('fail', 'jank', s, `${Math.round(ratio * 100)}% dropped frames on "${s.name}"`);
+    const sustained = jankRatio(s, t.jankFailMinFrames);
+    if (sustained != null && sustained >= t.jankFailRatio) add('fail', 'jank', s, `${Math.round(ratio * 100)}% dropped frames on "${s.name}"`);
     else if (ratio != null && baseRatio != null && ratio - baseRatio >= t.jankRegressionDelta) add('regression', 'jank', s, `Dropped frames ${Math.round(baseRatio * 100)}% to ${Math.round(ratio * 100)}% on "${s.name}"`);
     if (base) {
       const now = contentMs(s);
@@ -106,5 +109,35 @@ export function renderOutcome(verdict) {
     for (const f of verdict.findings.filter(x => x.severity === sev)) lines.push(`- ${word[sev]}: ${f.text}`);
   }
   if (verdict.findings.length) lines.push('');
+  return lines;
+}
+
+export function renderSessionCoverage(report) {
+  const lines = [];
+  const steps = report.steps || [];
+  const launch = steps.findIndex(step => step.session && step.name === 'open app');
+  if (launch >= 0) {
+    const nextLaunch = steps.findIndex((step, index) => index > launch && step.activityStartMs != null);
+    // Rates can finish after the launch screenshot. Attribute the trace to the same process launch.
+    const boot = steps.slice(launch, nextLaunch < 0 ? steps.length : nextLaunch).find(step => step.boot)?.boot;
+    const start = boot?.['js-start'];
+    const ready = boot?.['rates-ready'];
+    if (Number.isFinite(start) && Number.isFinite(ready) && ready >= start) {
+      const elapsed = ready - start;
+      const lastBlocker = Object.keys(boot).reverse().find(mark => mark.startsWith('last-'));
+      lines.push(`**Initial Rates readiness:** ${ms(elapsed)} from JS start (${elapsed < 3000 ? 'under' : 'at or above'} the 3 s target)${lastBlocker ? ` · last blocker: ${lastBlocker.slice(5)}` : ''}`);
+    } else {
+      lines.push('**Initial Rates readiness:** no complete boot trace captured');
+    }
+    lines.push('');
+  }
+  const journeys = Object.entries(report.journeyCoverage || {});
+  if (journeys.length) {
+    lines.push('**Extended journeys**', '');
+    for (const [name, counts] of journeys) {
+      lines.push(`- ${name}: ${counts.passed} passed, ${counts.failed} failed, ${counts.blocked} blocked`);
+    }
+    lines.push('');
+  }
   return lines;
 }

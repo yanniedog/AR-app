@@ -6,6 +6,7 @@ import type {
   EconomicPressure,
 } from './economicOutlook';
 import type { RbaEntry } from '../types';
+import { compareIsoDate } from './economicOutlookParse';
 
 export type EconomicWindow = '1Y' | '3Y' | '5Y' | 'All';
 
@@ -137,7 +138,7 @@ export function normalizeEconomicPoints(points: EconomicPoint[]): EconomicPoint[
     }
   }
   return [...byDate.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
+    .sort(([left], [right]) => compareIsoDate(left, right))
     .map(([date, value]) => ({ date, value }));
 }
 
@@ -461,9 +462,9 @@ export function economicReleasesModel(
       return row ? [row] : [];
     })
     .sort((left, right) => {
-      const update = right.updateDate.localeCompare(left.updateDate);
+      const update = compareIsoDate(right.updateDate, left.updateDate);
       if (update) return update;
-      return right.observationDate.localeCompare(left.observationDate);
+      return compareIsoDate(right.observationDate, left.observationDate);
     });
 }
 
