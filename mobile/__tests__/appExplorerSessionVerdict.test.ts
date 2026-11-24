@@ -100,6 +100,8 @@ describe('real-use session verdict', () => {
     expect(verdict(report([step(1, 'scroll', { frames: { frames: 100, janky: 97 } })]), null).outcome).toBe('fail');
     expect(verdict(report([step(1, 'scroll', { frames: { frames: 100, janky: 80 } })]), null).outcome).toBe('pass');
     expect(verdict(report([step(1, 'scroll', { frames: { frames: 5, janky: 5 } })]), null).outcome).toBe('pass');
+    // A short burst of dropped frames on a near-instant step is not sustained jank.
+    expect(verdict(report([step(1, 'discard draft', { frames: { frames: 21, janky: 20 } })]), null).outcome).toBe('pass');
   });
 });
 
