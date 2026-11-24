@@ -27,7 +27,7 @@ if (!process.argv.includes('--analyze-only')) {
     for (const [i, tap] of (s.taps || []).entries()) {
       script.push({ tap: { text: tap }, scroll: true, name: `${s.name}-tap-${i + 1}` });
     }
-    if (s.visibleAction) script.push({ waitFor: { label: s.visibleAction, clickable: true, enabled: true }, timeout: 8000, name: s.name });
+    if (s.visibleAction) script.push({ waitFor: { label: s.visibleAction }, timeout: 8000, name: s.name });
     else if (s.scroll) script.push({ scroll: 'down', times: s.scroll, name: s.name });
     else script.push({ wait: 600, name: s.name });
   }
@@ -72,6 +72,16 @@ for (const s of manifest) {
     const bad = (step.visible || []).find(v => FLAG_TEXT.test(v));
     if (bad) r.flags.push(`text: ${bad.slice(0, 50)}`);
     if (!(step.visible || []).length) r.flags.push('no visible text');
+    if (s.visibleAction) {
+      try {
+        const { nodes } = JSON.parse(fs.readFileSync(path.join(out, 'ui', `${step.slug}.nodes.json`), 'utf8'));
+        const reachable = nodes.some(({ text, desc, clickable, enabled, bounds: [left, top, right, bottom] }) =>
+          (text === s.visibleAction || desc === s.visibleAction) && clickable && enabled && right > left && bottom > top);
+        if (!reachable) r.flags.push(`action unavailable: ${s.visibleAction}`);
+      } catch {
+        r.flags.push('could not verify action from UI capture');
+      }
+    }
     const png = path.join(out, 'screens', `${step.slug}.png`);
     if (!fs.existsSync(png)) r.flags.push('no screenshot file');
     if (fs.existsSync(png)) {
