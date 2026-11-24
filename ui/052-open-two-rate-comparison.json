@@ -1,0 +1,173 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Compare",
+  "at": [
+   234,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   899
+  ]
+ },
+ {
+  "label": "Differences",
+  "at": [
+   360,
+   253
+  ]
+ },
+ {
+  "label": "Broken Hill Bank · Choice Home Loan · 1 / 2",
+  "at": [
+   360,
+   951
+  ]
+ },
+ {
+  "label": "Broken Hill Bank",
+  "at": [
+   68,
+   370
+  ]
+ },
+ {
+  "label": "Choice Home Loan",
+  "at": [
+   324,
+   358
+  ]
+ },
+ {
+  "label": "Lowest rate",
+  "at": [
+   616,
+   361
+  ]
+ },
+ {
+  "label": "Broken Hill Bank",
+  "at": [
+   324,
+   406
+  ]
+ },
+ {
+  "label": "Comparison rate",
+  "at": [
+   360,
+   474
+  ]
+ },
+ {
+  "label": "5.99%",
+  "at": [
+   360,
+   538
+  ]
+ },
+ {
+  "label": "Payable rate",
+  "at": [
+   360,
+   626
+  ]
+ },
+ {
+  "label": "5.94%",
+  "at": [
+   360,
+   666
+  ]
+ },
+ {
+  "label": "Listed LVR",
+  "at": [
+   360,
+   739
+  ]
+ },
+ {
+  "label": "≤80.0%",
+  "at": [
+   360,
+   779
+  ]
+ },
+ {
+  "label": "Fees",
+  "at": [
+   360,
+   852
+  ]
+ },
+ {
+  "label": "TRANSACTION: $35 · UPFRONT: $649.02 · UPFRONT: $19.95 · Loan Establishment Fee · EVENT: $655 · Loan Establishment Fee · ",
+  "at": [
+   360,
+   992
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   360,
+   1165
+  ]
+ },
+ {
+  "label": "Minimum age: 18 years · Other: Unknown · Residency status: Australian citizen or Permanent resident",
+  "at": [
+   360,
+   1225
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   360,
+   1318
+  ]
+ },
+ {
+  "label": "Digital banking: Unknown · Early / extra repayments · LOYALTY_PROGRAM: Unknown · Other: Unknown · Other: Unknown · Other",
+  "at": [
+   360,
+   1418
+  ]
+ },
+ {
+  "label": "Constraints",
+  "at": [
+   360,
+   1551
+  ]
+ },
+ {
+  "label": "2",
+  "at": [
+   360,
+   1586
+  ]
+ }
+]

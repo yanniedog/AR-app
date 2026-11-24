@@ -1,0 +1,214 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "App health audit",
+  "at": [
+   304,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Rejected addresses",
+  "at": [
+   360,
+   208
+  ]
+ },
+ {
+  "label": "6",
+  "at": [
+   360,
+   246
+  ]
+ },
+ {
+  "label": "HTTP not attempted",
+  "at": [
+   360,
+   326
+  ]
+ },
+ {
+  "label": "6",
+  "at": [
+   360,
+   374
+  ]
+ },
+ {
+  "label": "HTTP attempt evidence missing",
+  "at": [
+   360,
+   454
+  ]
+ },
+ {
+  "label": "0",
+  "at": [
+   360,
+   502
+  ]
+ },
+ {
+  "label": "Unverified links",
+  "at": [
+   360,
+   582
+  ]
+ },
+ {
+  "label": "711",
+  "at": [
+   360,
+   630
+  ]
+ },
+ {
+  "label": "Executed",
+  "at": [
+   360,
+   710
+  ]
+ },
+ {
+  "label": "2,886 / 2,888",
+  "at": [
+   360,
+   758
+  ]
+ },
+ {
+  "label": "Verified upload",
+  "at": [
+   360,
+   860
+  ]
+ },
+ {
+  "label": "Verified upload",
+  "at": [
+   186,
+   860
+  ]
+ },
+ {
+  "label": "Uploaded",
+  "at": [
+   360,
+   918
+  ]
+ },
+ {
+  "label": "https://paste.rs/x9mbu",
+  "at": [
+   360,
+   974
+  ]
+ },
+ {
+  "label": "https://paste.c-net.org/6c0f0856-06be-094e-a653-c156851729cb",
+  "at": [
+   360,
+   1050
+  ]
+ },
+ {
+  "label": "Copy paste.rs link",
+  "flags": "tap",
+  "at": [
+   360,
+   1156
+  ]
+ },
+ {
+  "label": "Copy paste.rs link",
+  "at": [
+   361,
+   1156
+  ]
+ },
+ {
+  "label": "Copy paste.c-net.org link",
+  "flags": "tap",
+  "at": [
+   360,
+   1271
+  ]
+ },
+ {
+  "label": "Copy paste.c-net.org link",
+  "at": [
+   361,
+   1271
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
