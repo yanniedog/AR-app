@@ -1,0 +1,236 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Save",
+  "flags": "tap",
+  "at": [
+   190,
+   292
+  ]
+ },
+ {
+  "label": "Save",
+  "at": [
+   217,
+   293
+  ]
+ },
+ {
+  "label": "Calculate",
+  "flags": "tap",
+  "at": [
+   530,
+   292
+  ]
+ },
+ {
+  "label": "Calculate",
+  "at": [
+   531,
+   292
+  ]
+ },
+ {
+  "label": "Hide Rate details",
+  "flags": "tap",
+  "at": [
+   360,
+   518
+  ]
+ },
+ {
+  "label": "Rate details",
+  "at": [
+   328,
+   518
+  ]
+ },
+ {
+  "label": "Rate type",
+  "at": [
+   297,
+   618
+  ]
+ },
+ {
+  "label": "Variable",
+  "at": [
+   637,
+   618
+  ]
+ },
+ {
+  "label": "Term",
+  "at": [
+   291,
+   670
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   670
+  ]
+ },
+ {
+  "label": "Rate structure",
+  "at": [
+   297,
+   722
+  ]
+ },
+ {
+  "label": "Variable",
+  "at": [
+   637,
+   722
+  ]
+ },
+ {
+  "label": "Repayment",
+  "at": [
+   232,
+   774
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "at": [
+   572,
+   774
+  ]
+ },
+ {
+  "label": "Loan purpose",
+  "at": [
+   248,
+   826
+  ]
+ },
+ {
+  "label": "Owner occupied",
+  "at": [
+   588,
+   826
+  ]
+ },
+ {
+  "label": "Listed LVR",
+  "at": [
+   256,
+   878
+  ]
+ },
+ {
+  "label": ">60.0%–80.0%",
+  "at": [
+   596,
+   878
+  ]
+ },
+ {
+  "label": "Annual fee",
+  "at": [
+   291,
+   930
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   930
+  ]
+ },
+ {
+  "label": "$0–$1k · Conditions: Unverified · $8.3–$42 · Conditions: Unverified · $129.2–$248.04 · Conditions: Unverified · $0–$0 · ",
+  "at": [
+   372,
+   1082
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

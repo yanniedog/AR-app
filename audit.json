@@ -1,0 +1,40 @@
+{
+  "kind": "live",
+  "url": "https://paste.rs/mddsu",
+  "outcome": null,
+  "elapsedMs": 897956,
+  "visibleOutcome": [
+    "Verified · 1.0.366",
+    "Install verified update",
+    "Install",
+    "Dismiss update banner",
+    "Back",
+    "App health audit",
+    "Account",
+    "Executed",
+    "2,884 / 2,886",
+    "Verified upload",
+    "Verified upload",
+    "Uploaded",
+    "https://paste.rs/mddsu",
+    "https://paste.c-net.org/0d9c5a21-8fcd-5f7d-38f0-fbaa55d2d8e1",
+    "Copy paste.rs link",
+    "Copy paste.rs link",
+    "Copy paste.c-net.org link",
+    "Copy paste.c-net.org link",
+    "Audit history",
+    "Retained runs"
+  ],
+  "logStatus": 200,
+  "logContentUrl": "https://paste.c-net.org/0d9c5a21-8fcd-5f7d-38f0-fbaa55d2d8e1",
+  "logBytes": 853613,
+  "completion": {
+    "outcome": "failed",
+    "collectionComplete": true,
+    "coverageComplete": false,
+    "detailsComplete": true
+  },
+  "debugLog": {
+    "error": "Upload and copy link not found"
+  }
+}
