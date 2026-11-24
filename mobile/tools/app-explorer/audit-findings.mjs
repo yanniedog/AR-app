@@ -14,7 +14,7 @@ export function failureCause(check) {
   // Only timings vary between otherwise identical failures; keep codes such as HTTP 404 and 500 apart.
   const message = text(check.error).replace(/\(\d+ms\)/g, '').replace(/\s+/g, ' ').trim();
   if (message) return message.slice(0, 120);
-  return check.failureCode || 'failed';
+  return check.timing === true ? 'Timing budget exceeded' : check.failureCode || 'failed';
 }
 
 /** Failed checks grouped by kind and cause, largest first, with example ids. */
