@@ -1,0 +1,40 @@
+{
+  "kind": "live",
+  "url": "https://paste.rs/gpSOP",
+  "outcome": null,
+  "elapsedMs": 962027,
+  "visibleOutcome": [
+    "Verified · 1.0.369",
+    "Install verified update",
+    "Install",
+    "Dismiss update banner",
+    "Back",
+    "App health audit",
+    "Account",
+    "2,884 / 2,886",
+    "Verified upload",
+    "Verified upload",
+    "Uploaded",
+    "https://paste.rs/gpSOP",
+    "https://paste.c-net.org/5b1dbad3-084a-9298-8325-943639c85a41",
+    "Copy paste.rs link",
+    "Copy paste.rs link",
+    "Copy paste.c-net.org link",
+    "Copy paste.c-net.org link",
+    "Audit history",
+    "Retained runs",
+    "1 / 120"
+  ],
+  "logStatus": 200,
+  "logContentUrl": "https://paste.c-net.org/5b1dbad3-084a-9298-8325-943639c85a41",
+  "logBytes": 856421,
+  "completion": {
+    "outcome": "failed",
+    "collectionComplete": true,
+    "coverageComplete": false,
+    "detailsComplete": true
+  },
+  "debugLog": {
+    "error": "Upload and copy link not found"
+  }
+}

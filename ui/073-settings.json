@@ -1,0 +1,216 @@
+[
+ {
+  "label": "Verified · 1.0.369",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Back",
+  "flags": "tap",
+  "at": [
+   70,
+   331
+  ]
+ },
+ {
+  "label": "Settings",
+  "at": [
+   228,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   672,
+   331
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   894
+  ]
+ },
+ {
+  "label": "App update",
+  "at": [
+   364,
+   463
+  ]
+ },
+ {
+  "label": "Automatic app updates",
+  "flags": "tap,on",
+  "at": [
+   360,
+   579
+  ]
+ },
+ {
+  "label": "Download APKs on Wi-Fi only",
+  "flags": "tap",
+  "at": [
+   360,
+   699
+  ]
+ },
+ {
+  "label": "Status",
+  "at": [
+   360,
+   803
+  ]
+ },
+ {
+  "label": "Ready",
+  "at": [
+   360,
+   851
+  ]
+ },
+ {
+  "label": "Version",
+  "at": [
+   360,
+   915
+  ]
+ },
+ {
+  "label": "1.0.369 (425)",
+  "at": [
+   360,
+   963
+  ]
+ },
+ {
+  "label": "Source",
+  "at": [
+   360,
+   1027
+  ]
+ },
+ {
+  "label": "GitHub",
+  "at": [
+   360,
+   1075
+  ]
+ },
+ {
+  "label": "APK",
+  "at": [
+   360,
+   1139
+  ]
+ },
+ {
+  "label": "Verified",
+  "at": [
+   360,
+   1187
+  ]
+ },
+ {
+  "label": "Consent",
+  "at": [
+   360,
+   1251
+  ]
+ },
+ {
+  "label": "Optional",
+  "at": [
+   360,
+   1299
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   360,
+   1363
+  ]
+ },
+ {
+  "label": "Android installation permission",
+  "at": [
+   360,
+   1392
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
