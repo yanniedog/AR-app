@@ -92,7 +92,7 @@
  {
   "name": "debug-log",
   "open": "/about",
-  "taps": ["Show Diagnostics", "Debug log"],
+  "taps": ["Diagnostics", "Debug log"],
   "visibleAction": "Upload and copy link",
   "why": "Debug log controls remain visible on the emulator viewport"
  },

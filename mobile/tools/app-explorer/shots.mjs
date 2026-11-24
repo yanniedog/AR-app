@@ -25,7 +25,7 @@ if (!process.argv.includes('--analyze-only')) {
   for (const s of manifest) {
     script.push({ open: s.open, name: `${s.name}-open` });
     for (const [i, tap] of (s.taps || []).entries()) {
-      script.push({ tap: { label: tap, clickable: true }, scroll: true, name: `${s.name}-tap-${i + 1}` });
+      script.push({ tap: { text: tap }, scroll: true, name: `${s.name}-tap-${i + 1}` });
     }
     if (s.visibleAction) script.push({ waitFor: { label: s.visibleAction, clickable: true, enabled: true }, timeout: 8000, name: s.name });
     else if (s.scroll) script.push({ scroll: 'down', times: s.scroll, name: s.name });
