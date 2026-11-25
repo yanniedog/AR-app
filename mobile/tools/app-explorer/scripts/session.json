@@ -12,7 +12,7 @@
   { "think": 1500, "tap": "Savings", "name": "switch to savings" },
   { "think": 1500, "tap": "Home loans", "name": "switch to home loans" },
   { "think": 1500, "tap": { "contains": "Temporary filters" }, "name": "open filters" },
-  { "think": 1500, "back": true, "then": { "contains": "Temporary filters" }, "name": "close filters" },
+  { "think": 1500, "back": true, "then": { "contains": "Temporary filters" }, "gone": { "label": "Close Temporary filters" }, "name": "close filters" },
   { "think": 1500, "tap": "Market", "then": { "text": "Cash rate" }, "name": "open market" },
   { "think": 2000, "tap": "RBA", "then": { "contains": "Last confirmed cash rate" }, "name": "open rba" },
   { "think": 2500, "scroll": "down", "name": "scroll rba" },
