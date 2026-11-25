@@ -140,11 +140,40 @@ jobs:
           test -s app.apk
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - name: Previous run baselines
+        env:
+          APK_TAG: ${{ steps.apk.outputs.tag }}
         run: |
           set -uo pipefail
-          # baseline.json: newest earlier run of any kind (step deltas).
-          # session-baseline.json: newest earlier run holding a real-use session verdict.
-          # Only run ids below this run, so a rerun or a faster newer run is never its own baseline.
+          trap 'rm -f candidate.json' EXIT
+          if [ "$MODE" = full ] && [ "$AUDIT" = live ]; then
+            # Tested markers retain verified full audits after the result branches are pruned.
+            marker_prefix=refs/heads/explorer/tested/
+            if ! markers=$(git ls-remote --heads origin "${marker_prefix}app-v*"); then
+              echo '::warning::Could not list verified release baselines'
+              exit 0
+            fi
+            current_marker="$marker_prefix$APK_TAG"
+            for prev in $(printf '%s\n' "$current_marker" "$markers" | awk -F '\t' 'NF { print $NF }' \
+              | sort -Vru | awk -v current="$current_marker" 'older; $0 == current { older = 1 }'); do
+              git fetch --depth 1 origin "$prev" 2>/dev/null || continue
+              facts=$(git show FETCH_HEAD:run.json 2>/dev/null) || continue
+              if ! jq -e --arg tag "${prev#"$marker_prefix"}" --argjson run "$GITHUB_RUN_ID" \
+                '.tag == $tag and .mode == "full" and (.runId | type == "number") and .runId < $run' \
+                <<< "$facts" >/dev/null; then continue; fi
+              git show FETCH_HEAD:report.json > candidate.json 2>/dev/null || continue
+              if ! jq -e --arg tag "${prev#"$marker_prefix"}" \
+                '.app.versionName == ($tag | ltrimstr("app-v")) and .session and .audit.kind == "live"
+                 and .audit.completion.collectionComplete == true' \
+                candidate.json >/dev/null; then continue; fi
+              cp candidate.json baseline.json
+              cp candidate.json session-baseline.json
+              jq -r '"Verified release baseline: \(.tag), explorer run \(.runId)"' <<< "$facts"
+              exit 0
+            done
+            echo "No verified prior release baseline for $APK_TAG"
+            exit 0
+          fi
+          # Other runs keep their existing baselines. Exclude this run and any newer run.
           have_any=""; have_session=""
           for prev in $(git ls-remote --heads origin 'explorer/run-*' | awk '{print $2}' | sed 's#refs/heads/##' | awk -F'run-' -v cur="$GITHUB_RUN_ID" '($2 + 0) < (cur + 0)' | sort -t- -k2 -n -r); do
             if [ -n "$have_any" ] && [ -n "$have_session" ]; then break; fi
@@ -153,7 +182,6 @@ jobs:
             if [ -z "$have_any" ]; then cp candidate.json baseline.json; have_any=1; fi
             if [ -z "$have_session" ] && jq -e '.session' candidate.json >/dev/null 2>&1; then mv candidate.json session-baseline.json; have_session=1; fi
           done
-          rm -f candidate.json
       - name: Payload reachability from runner
         run: |
           set -uo pipefail
