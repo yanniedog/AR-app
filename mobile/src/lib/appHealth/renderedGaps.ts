@@ -1,6 +1,7 @@
 import type { DetailItem, Manifest, ProductDetail } from '../../types';
 import { dedupeDetailItems, uiDetailItem, uiNormalizedProductFact } from '../productUiFacts';
-import { uiPublishedConciseName } from '../uiCopy';
+import { normalizedProductFacts } from '../../data/productFactsCore';
+import { uiPublishedFeeName } from '../uiCopy';
 
 type Group = 'Fees' | 'Eligibility' | 'Features' | 'Constraints';
 const GROUPS: readonly [Group, 'fees' | 'eligibility' | 'features' | 'constraints'][] = [
@@ -30,19 +31,17 @@ export function auditRenderedProductDetails(products: Record<string, ProductDeta
         if (RAW_CODE.test(fact.label)) rawCodes += 1;
         if (GENERIC_LABEL.test(fact.label)) genericLabels += 1;
         if ((item.label ?? '').toUpperCase() === 'OTHER' && /^Other /.test(fact.label)) otherLabels += 1;
-        if (group === 'Fees' && item.name?.trim() && !uiPublishedConciseName(item.name)) suppressedNames += 1;
+        if (group === 'Fees' && item.name?.trim() && uiPublishedFeeName(item) === 'Unknown') suppressedNames += 1;
       });
     }
-    for (const fact of detail.facts ?? []) {
+    for (const fact of normalizedProductFacts(detail)) {
       const rendered = uiNormalizedProductFact(fact);
       if (rendered.value.startsWith('Unknown')) factsUnknown += 1;
       if (RAW_CODE.test(rendered.label)) rawCodes += 1;
     }
     const fees = dedupeDetailItems(detail.fees);
     if (fees.length) {
-      const upfront = fees.some(fee => (fee.label ?? '').toUpperCase() === 'UPFRONT'
-        || /\b(?:establishment|application|settlement|documentation|setup|set-up)\b/i.test(fee.name ?? ''));
-      if (!upfront) withoutUpfrontFee += 1;
+      if (!fees.some(fee => (fee.label ?? '').toUpperCase() === 'UPFRONT')) withoutUpfrontFee += 1;
       if (!fees.some(fee => (fee.label ?? '').toUpperCase() === 'ANNUAL' || /annual/i.test(fee.name ?? ''))) withoutAnnualFee += 1;
     }
     if (!detail.features?.length && (detail.facts ?? []).some(fact => fact.kind === 'feature')) withoutDetailsFeatures += 1;

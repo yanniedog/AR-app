@@ -1,7 +1,7 @@
 import type { DetailItem, FeeDiscount, NormalizedProductFact } from '../types';
 import { humanizeEnum, toFraction } from '../data/format';
 import { descriptiveValue } from '../data/descriptiveValue';
-import { uiCount, uiDuration, uiExactFactDecimal, uiFeeTypeLabel, uiIdentifier, uiJoin, uiLabel, uiMoney, uiNumber, uiPublishedFeeName, uiPublishedText, uiRate, type UiCopy, type UiLabel, type UiText } from './uiCopy';
+import { uiCount, uiDuration, uiExactFactDecimal, uiFeeTypeLabel, uiIdentifier, uiJoin, uiLabel, uiMoney, uiNumber, uiPublishedFeeName, uiRate, type UiCopy, type UiLabel, type UiText } from './uiCopy';
 
 export interface ProductPresentationFact {
   sourceFact?: NormalizedProductFact;
@@ -102,8 +102,8 @@ function factValue(value: unknown, unit?: string): UiText {
   if (unit === 'boolean' || typeof value === 'boolean') return value === true ? uiLabel('Yes') : value === false ? uiLabel('No') : uiLabel('Unknown');
   if (unit === 'enum' && typeof value === 'string') return humanizeEnum(value);
   if ((unit === 'text' || !unit) && typeof value === 'string' && number(value) === null) {
-    const label = humanizeEnum(value);
-    return label !== 'Unknown' && label !== '' ? label : uiPublishedText(value) ?? uiLabel('Unknown');
+    // Only a recognised controlled value is shown; other source wording stays Unknown.
+    return humanizeEnum(value);
   }
   if (unit === 'duration' && typeof value === 'string') {
     const parts = /^P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)W)?(?:(\d+)D)?$/.exec(value);
@@ -122,7 +122,7 @@ export function uiNormalizedProductFact(fact: NormalizedProductFact): ProductPre
   const lower = fact.minValue, upper = fact.maxValue;
   const declaredWithoutValue = (fact.kind === 'feature' || fact.kind === 'bundle') && fact.value === undefined && lower === undefined
     && upper === undefined && !fact.cadence && fact.evidenceState !== 'unknown' && fact.evidenceState !== 'conflicting';
-  const conditionsUnverified = !declaredWithoutValue && Boolean(fact.condition?.trim() || fact.evidenceState && fact.evidenceState !== 'observed');
+  const conditionsUnverified = Boolean(fact.condition?.trim() || fact.evidenceState && fact.evidenceState !== 'observed');
   const render = (field: 'value' | 'minValue' | 'maxValue') => fact.valueType === 'decimal'
     ? uiExactFactDecimal(fact, field) : factValue(fact[field], fact.unit);
   const value = fact.evidenceState === 'unknown' ? uiLabel('Unknown') : fact.evidenceState === 'conflicting' ? uiLabel('Conflicting')

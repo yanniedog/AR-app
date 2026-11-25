@@ -2,7 +2,7 @@ import fixture from './fixtures/bankwest-easy-saver-eligibility-20260913.json';
 import siblings from './fixtures/suitability-conditional-siblings-20260913.json';
 import sample from '../assets/sample/details.json';
 import type { ProductDetail } from '../src/types';
-import { dedupeDetailItems, uiDetailItem } from '../src/lib/productUiFacts';
+import { dedupeDetailItems, uiDetailItem, uiNormalizedProductFact } from '../src/lib/productUiFacts';
 import { uiPublishedFeeName } from '../src/lib/uiCopy';
 
 const detail = fixture.detail as ProductDetail;
@@ -251,4 +251,11 @@ test('OTHER entries use the controlled generic label and never the source name',
 
 test('fee categories read as labels, not source codes', () => {
   expect(uiDetailItem({ label: 'EXIT', amount: '350' }, 0, 'Fees')).toMatchObject({ label: 'Exit fee', value: '$350' });
+});
+
+test('free-text fact values stay Unknown and valueless facts keep the unverified flag', () => {
+  const prose = uiNormalizedProductFact({ id: 'p', kind: 'attribute', canonicalKey: 'attribute.note', sourceType: 'NOTE', unit: 'text', value: 'Enjoy great benefits when you choose this account.' } as never);
+  expect(prose.value).toBe('Unknown');
+  const declared = uiNormalizedProductFact({ id: 'f', kind: 'feature', canonicalKey: 'feature.offset', sourceType: 'OFFSET', condition: 'Subject to approval' } as never);
+  expect(declared).toMatchObject({ value: 'Conditions apply', conditionsUnverified: true, conditions: 'source-review-required' });
 });

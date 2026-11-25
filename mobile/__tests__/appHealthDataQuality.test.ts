@@ -514,7 +514,8 @@ describe('app-health data quality', () => {
       renderedGapsAudited: true, renderedDuplicateItems: 1, renderedUnknownEligibilityValues: 1,
       renderedUnknownFeeValues: 0, renderedRawCodeLabels: 0, companionChannelsExpected: 3, companionChannelsAbsent: 3,
     });
-    expect(metrics.renderedSuppressedFeeNames).toBeGreaterThanOrEqual(0);
+    expect(metrics.renderedSuppressedFeeNames).toBe(1);
+    expect(metrics.feeListsWithoutUpfrontFee).toBe(1);
   });
 
   it('warns and records internal product detail gaps and unpublished fees', () => {

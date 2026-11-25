@@ -108,8 +108,7 @@ export function mortgageHeadlineFacts(detail: ProductDetailData | null, row?: Ra
   const fees = detail?.fees ?? [];
   const annual = fees.filter(fee => (fee.label ?? '').toUpperCase() === 'ANNUAL_FEE' || /\bannual\b/i.test(fee.name ?? '')
     || (fee.label ?? '').toUpperCase() === 'PERIODIC' && String(fee.additionalValue ?? fee.accrualFrequency ?? '') === 'P1Y');
-  const upfront = fees.filter(fee => (fee.label ?? '').toUpperCase() === 'UPFRONT'
-    || /\b(?:establishment|application|settlement|documentation|setup|set-up)\b/i.test(fee.name ?? ''));
+  const upfront = fees.filter(fee => (fee.label ?? '').toUpperCase() === 'UPFRONT');
   // A fee list that was read and holds no such charge is stated as such. Only a missing list is Unknown.
   const absent = (items: readonly DetailItem[]): UiText => items.length ? feeValues(items) : fees.length ? uiLabel('None published') : uiLabel('Unknown');
   return [{ label: 'Annual fee', value: absent(annual) }, { label: 'Upfront fee', value: absent(upfront) },
