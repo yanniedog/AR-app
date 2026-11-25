@@ -34,7 +34,8 @@ export function auditRenderedProductDetails(products: Record<string, ProductDeta
         if (group === 'Fees' && item.name?.trim() && uiPublishedFeeName(item) === 'Unknown') suppressedNames += 1;
       });
     }
-    const allFacts = normalizedProductFacts(detail), distinctFacts = dedupeFacts(allFacts);
+    // ProductFacts hides normalized fees when the legacy fee surface exists, so they are not audited.
+    const allFacts = normalizedProductFacts(detail).filter(fact => !detail.fees?.length || fact.kind !== 'fee'), distinctFacts = dedupeFacts(allFacts);
     duplicates += allFacts.length - distinctFacts.length;
     for (const fact of distinctFacts) {
       const rendered = uiNormalizedProductFact(fact);

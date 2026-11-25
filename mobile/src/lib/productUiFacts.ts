@@ -209,7 +209,7 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
   const residencyField = group === 'Eligibility' && item.label === 'RESIDENCY_STATUS';
   const residency = residencyField ? residencyValue(item) : null;
   const textLike = group === 'Eligibility' || group === 'Constraints';
-  const presenceOnly = textLike && PRESENCE_ONLY_CODES.has((item.label ?? '').toUpperCase()) && item.value == null;
+  const presenceOnly = textLike && PRESENCE_ONLY_CODES.has((item.label ?? '').toUpperCase()) && item.value == null && !item.info?.trim();
   const cashback = group === 'Features' ? cashbackRange(item) : null;
   // These published CDR constraint codes establish the unit. Older payloads
   // contain both ratios (0.8) and percentage numbers (98), like the rate DTO.

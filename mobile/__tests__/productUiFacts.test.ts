@@ -242,6 +242,8 @@ test('repeated source entries are one fact and presence-only criteria read as re
   expect(dedupeDetailItems([entry, { ...entry }, { label: 'STAFF' }])).toHaveLength(2);
   expect(uiDetailItem(entry, 0, 'Eligibility')).toMatchObject({ label: 'Individual applicants', value: 'Required' });
   expect(uiDetailItem({ label: 'OFFSET' }, 0, 'Features')).toMatchObject({ value: 'Included' });
+  // Unparsed wording on a presence-only criterion keeps it Unknown rather than an unconditional Required.
+  expect(uiDetailItem({ label: 'BUSINESS', info: 'Primary producers only' }, 0, 'Eligibility')).toMatchObject({ value: 'Unknown', conditions: 'source-review-required' });
 });
 
 test('OTHER entries use the controlled generic label and never the source name', () => {
@@ -272,6 +274,9 @@ test('annual fees and fee categories use controlled labels, never raw codes', ()
   expect(isAnnualFee({ label: 'PERIODIC', additionalValue: 'P1Y' })).toBe(true);
   expect(uiDetailItem({ label: 'ANNUAL_FEE', amount: '395' }, 0, 'Fees').label).toBe('Annual fee');
   expect(uiDetailItem({ label: 'SURCHARGE_FEE', amount: '5' }, 0, 'Fees').label).toBe('Other fee');
+  for (const [code, label] of [['CASH_ADVANCE', 'Cash advance fee'], ['DISHONOUR', 'Dishonour fee'], ['LATE_PAYMENT', 'Late payment fee'], ['ENQUIRY', 'Enquiry fee'], ['REPLACEMENT', 'Replacement fee'], ['UPFRONT_PER_PLAN', 'Upfront per plan fee']]) {
+    expect(uiDetailItem({ label: code, amount: '46' }, 0, 'Fees').label).toBe(label);
+  }
   expect(uiNormalizedProductFact({ id: 'f', kind: 'fee', canonicalKey: 'fee.annual_fee', value: 395 } as never).label).toBe('Annual fee');
 });
 

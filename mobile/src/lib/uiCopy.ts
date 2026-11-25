@@ -448,7 +448,7 @@ export const UI_LABELS = [
   'Carousel', 'List', 'Clear filters',
   'Keep current', 'Use saved', 'Choose saved value',
   'All product variants', 'Upfront fee', 'Best gap',
-  'Variation fee', 'Exit fee', 'Ongoing fee', 'Event fee', 'Transaction fee', 'Withdrawal fee', 'Deposit fee', 'Payment fee', 'Purchase fee', 'Variable fee', 'Other fee',
+  'Variation fee', 'Exit fee', 'Ongoing fee', 'Event fee', 'Transaction fee', 'Withdrawal fee', 'Deposit fee', 'Payment fee', 'Purchase fee', 'Variable fee', 'Other fee', 'Cash advance fee', 'Dishonour fee', 'Late payment fee', 'Enquiry fee', 'Replacement fee', 'Upfront per plan fee',
   'Other criterion', 'Other feature', 'None published', 'Bank updated', 'No published restriction', 'Not extracted', 'Overview', 'Fee schedule', 'Eligibility page', 'Official page',
   'Detail gaps', 'Rendered gaps', 'Raw codes', 'Duplicates', 'Suppressed names', 'Companion channels', 'Channel published', 'Channel absent', 'Browse rates', 'Trends', 'Decreases', 'Big four', 'All banks', 'Search banks', 'Full', 'Show fewer',
 ] as const;
@@ -721,6 +721,8 @@ const FEE_TYPE_LABELS: Readonly<Record<string, UiLabel>> = {
   PERIODIC: 'Ongoing fee', VARIATION: 'Variation fee', EXIT: 'Exit fee', UPFRONT: 'Upfront fee', EVENT: 'Event fee',
   TRANSACTION: 'Transaction fee', WITHDRAWAL: 'Withdrawal fee', DEPOSIT: 'Deposit fee', PAYMENT: 'Payment fee', PURCHASE: 'Purchase fee',
   VARIABLE: 'Variable fee', OTHER: 'Other fee', ANNUAL: 'Annual fee', ANNUAL_FEE: 'Annual fee',
+  CASH_ADVANCE: 'Cash advance fee', DISHONOUR: 'Dishonour fee', LATE_PAYMENT: 'Late payment fee', ENQUIRY: 'Enquiry fee', REPLACEMENT: 'Replacement fee',
+  UPFRONT_PER_PLAN: 'Upfront per plan fee',
 };
 /** Closed CDR fee-type codes only; anything else stays an Unknown identity. */
 export function uiFeeTypeLabel(code: string | undefined): UiText | null {
