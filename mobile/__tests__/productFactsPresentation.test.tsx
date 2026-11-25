@@ -47,7 +47,7 @@ test.each([
   </ProductPageLinks>) as Tree; });
   try {
     act(() => tree.root.findAllByType('Disclosure').find(node => node.props.title === 'Eligibility')!.props.onToggle());
-    expect(bodyText(tree)).toEqual(['Minimum age', '18 years', 'Residency status', 'Unknown', 'Other', 'Unknown']);
+    expect(bodyText(tree)).toEqual(['Minimum age', '18 years', 'Residency status', 'Unknown', 'Other criterion', 'Unknown']);
     if (!linked) {
       expect(() => tree.root.findByProps({ accessibilityRole: 'link' })).toThrow();
     } else {

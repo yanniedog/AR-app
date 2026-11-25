@@ -11,7 +11,7 @@ import { useStore } from '../../data/store';
 import { uiAccessBadge, uiConditionFact, uiListedLvrRange, uiLoanPurpose, uiRateStructure, uiRepayment, type FinancialFactRow } from '../../lib/financialUiCopy';
 import { scopedRateConditions } from '../../data/rateConditions';
 import { scopedFinancialConditionFacts } from '../../data/scopedFinancialConditionFacts';
-import { uiDetailItem, uiFeeCap, uiFeeDiscount, uiNormalizedProductFact, uiProductFactValue, type ProductPresentationFact } from '../../lib/productUiFacts';
+import { dedupeDetailItems, uiDetailItem, uiFeeCap, uiFeeDiscount, uiNormalizedProductFact, uiProductFactValue, type ProductPresentationFact } from '../../lib/productUiFacts';
 import { curatedFeatureIdentityKey, featureEvidenceScope, normalizedProductFacts } from '../../data/productFacts';
 import { uiCount, uiJoin, uiLabel, type UiCopy, type UiLabel, type UiText } from '../../lib/uiCopy';
 import type { DetailItem, NormalizedProductFact, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
@@ -43,8 +43,9 @@ function PublishedFacts({ facts, fees }: { facts: readonly ProductPresentationFa
     </ProductPageLink>;
   })}</View>;
 }
-export function DetailGroup({ title, items, loading }: { title: 'Fees' | 'Eligibility' | 'Features' | 'Constraints'; icon: keyof typeof Ionicons.glyphMap; items?: DetailItem[]; loading: boolean }) {
+export function DetailGroup({ title, items: published, loading }: { title: 'Fees' | 'Eligibility' | 'Features' | 'Constraints'; icon: keyof typeof Ionicons.glyphMap; items?: DetailItem[]; loading: boolean }) {
   const [open, setOpen] = useState(false);
+  const items = useMemo(() => published ? dedupeDetailItems(published) : published, [published]);
   if (!items?.length && !loading) return null;
   return <Disclosure title={title} open={open} onToggle={() => setOpen(v => !v)}>
     {loading && !items ? <DetailLoadingLines /> : <PublishedFacts
@@ -107,8 +108,11 @@ export function mortgageHeadlineFacts(detail: ProductDetailData | null, row?: Ra
   const fees = detail?.fees ?? [];
   const annual = fees.filter(fee => (fee.label ?? '').toUpperCase() === 'ANNUAL_FEE' || /\bannual\b/i.test(fee.name ?? '')
     || (fee.label ?? '').toUpperCase() === 'PERIODIC' && String(fee.additionalValue ?? fee.accrualFrequency ?? '') === 'P1Y');
-  const upfront = fees.filter(fee => (fee.label ?? '').toUpperCase() === 'UPFRONT');
-  return [{ label: 'Annual fee', value: feeValues(annual) }, { label: 'Upfront fee', value: feeValues(upfront) },
+  const upfront = fees.filter(fee => (fee.label ?? '').toUpperCase() === 'UPFRONT'
+    || /\b(?:establishment|application|settlement|documentation|setup|set-up)\b/i.test(fee.name ?? ''));
+  // A fee list that was read and holds no such charge is stated as such. Only a missing list is Unknown.
+  const absent = (items: readonly DetailItem[]): UiText => items.length ? feeValues(items) : fees.length ? uiLabel('None published') : uiLabel('Unknown');
+  return [{ label: 'Annual fee', value: absent(annual) }, { label: 'Upfront fee', value: absent(upfront) },
     { label: 'Offset account', value: offsetValue(detail, row) }];
 }
 export function ProductSpecs({ row, section, productDetails }: { row: RateRow; section: SectionKey; productDetails: ProductDetailData | null }) {
@@ -118,13 +122,19 @@ export function ProductSpecs({ row, section, productDetails }: { row: RateRow; s
   const sourceLvr = conditions.facts.filter(fact => fact.kind === 'published-lvr-range');
   const access = productDetails ? assessAccess(row.product_name, productDetails, row.provider) : null;
   const availability = access && accessExcludesFromStandard(access) ? uiJoin('Restricted', ' · ', uiAccessBadge(access))
-    : isNonStandard(row) ? uiJoin('Listed rate', ' · ', 'Unverified') : access ? uiLabel('Eligibility unverified') : uiLabel('Unverified');
+    : isNonStandard(row) ? uiJoin('Listed rate', ' · ', 'Unverified')
+      : access ? uiLabel('Eligibility unverified') : uiLabel('Unverified');
+  const criteria = dedupeDetailItems([...(productDetails?.eligibility ?? []), ...(productDetails?.constraints ?? [])]).length
+    + (productDetails?.facts ?? []).filter(fact => fact.kind === 'eligibility' || fact.kind === 'constraint').length;
+  const eligibility = productDetails ? criteria ? uiJoin('Published', ' · ', uiCount(criteria)) : uiLabel('Not published') : uiLabel('Unverified');
+  const structure = uiRateStructure(row), rateType = humanizeEnum(row.rate_type);
+  const variable = (row.rate_type ?? '').toUpperCase() === 'VARIABLE';
   return <Disclosure title="Rate details" open={open} onToggle={() => setOpen(v => !v)}>
-    <FinancialFactRows linkToProduct rows={[{ label: 'Rate type', value: humanizeEnum(row.rate_type) }, { label: 'Term', value: formatTerm(row) || uiLabel('Unknown') },
-      ...(section === 'Mortgage' ? [{ label: 'Rate structure' as const, value: uiRateStructure(row) }, { label: 'Repayment' as const, value: uiRepayment(row) },
+    <FinancialFactRows linkToProduct rows={[{ label: 'Rate type', value: rateType }, { label: 'Term', value: formatTerm(row) || uiLabel(variable ? 'Not applicable' : 'Unknown') },
+      ...(section === 'Mortgage' ? [...(structure === rateType ? [] : [{ label: 'Rate structure' as const, value: structure }]), { label: 'Repayment' as const, value: uiRepayment(row) },
         { label: 'Loan purpose' as const, value: uiLoanPurpose(row) }, ...(sourceLvr.length ? sourceLvr.map(uiConditionFact) : [{ label: 'Listed LVR' as const, value: uiListedLvrRange(row) }]),
         ...(productDetails ? mortgageHeadlineFacts(productDetails, row) : [])]
         : [{ label: 'Balance' as const, value: formatBalanceRange(row.balance_min, row.balance_max) || uiLabel('Unknown') }, { label: 'Interest paid' as const, value: humanizeEnum(row.interest_payment) || uiLabel('Unknown') }]),
-      { label: 'Availability', value: availability }, { label: 'Eligibility', value: uiLabel('Unverified') }]} />
+      { label: 'Availability', value: availability }, { label: 'Eligibility', value: eligibility }]} />
   </Disclosure>;
 }

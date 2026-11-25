@@ -29,8 +29,8 @@ function DocumentRow({ action }: { action: ProductDocumentAction }) {
     <AppText variant="small" weight="600">{uiDocumentFilename(doc)}</AppText>
     <AppText variant="small" weight="600">{uiJoin(SPECIFICITY[action.specificity], ' · ', RELEVANCE[action.relevance])}</AppText>
     <AppText variant="small">{uiJoin('Document type', ': ', uiIdentifier(doc.documentType || doc.relation))}</AppText>
-    <AppText variant="tiny">{uiJoin('Retrieval', ': ', doc.verification && RETRIEVAL[doc.verification] ? RETRIEVAL[doc.verification] : 'Unknown')}</AppText>
-    <AppText variant="tiny">{uiJoin('Checked', ': ', doc.checkedAt ? uiDate(doc.checkedAt) : uiLabel('Unknown'))}</AppText>
+    <AppText variant="tiny">{uiJoin('Retrieval', ': ', doc.verification && RETRIEVAL[doc.verification] ? RETRIEVAL[doc.verification] : 'Not extracted')}</AppText>
+    {doc.checkedAt ? <AppText variant="tiny">{uiJoin('Checked', ': ', uiDate(doc.checkedAt))}</AppText> : null}
     {doc.capturedAt ? <AppText variant="tiny">{uiJoin('Captured', ': ', uiDate(doc.capturedAt))}</AppText> : null}
     {doc.effectiveFrom || doc.effectiveTo ? <AppText variant="tiny">{uiJoin('Effective from', ': ', uiDate(doc.effectiveFrom), ' · ', 'Effective to', ': ', uiDate(doc.effectiveTo))}</AppText> : null}
     {locators.slice(selectedCitationPage * 8, (selectedCitationPage + 1) * 8).map((citation, index) => <AppText key={index} variant="tiny">{uiJoin(

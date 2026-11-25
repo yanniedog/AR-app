@@ -2,7 +2,7 @@ import fixture from './fixtures/bankwest-easy-saver-eligibility-20260913.json';
 import siblings from './fixtures/suitability-conditional-siblings-20260913.json';
 import sample from '../assets/sample/details.json';
 import type { ProductDetail } from '../src/types';
-import { uiDetailItem } from '../src/lib/productUiFacts';
+import { dedupeDetailItems, uiDetailItem } from '../src/lib/productUiFacts';
 import { uiPublishedFeeName } from '../src/lib/uiCopy';
 
 const detail = fixture.detail as ProductDetail;
@@ -39,8 +39,8 @@ test('cashback range admission is bounded numeric syntax in the exact feature fi
 test('the published Bankwest charge names, categories, amounts and conditions survive', () => {
   const facts = detail.fees!.map((item, index) => uiDetailItem(item, index, 'Fees'));
   expect(facts.map(fact => [fact.label, fact.value, fact.reference])).toEqual([
-    ['Maintenance Fee · PERIODIC', '$0 · per month', '1'],
-    ['Search Handling Fee · EVENT', '$40', '2'],
+    ['Maintenance Fee · Ongoing fee', '$0 · per month', '1'],
+    ['Search Handling Fee · Event fee', '$40', '2'],
   ]);
   expect(facts.every(fact => fact.conditions === 'source-review-required')).toBe(true);
   expect(JSON.stringify(facts)).not.toContain('No monthly maintenance fees');
@@ -50,14 +50,14 @@ test('the published Bankwest charge names, categories, amounts and conditions su
 test('same-name charges remain distinct by category, amount and condition reference', () => {
   const periodic = uiDetailItem({ name: 'Redraw Fee', label: 'PERIODIC', amount: '0', additionalValue: 'P1M' }, 0, 'Fees');
   const event = uiDetailItem({ name: 'Redraw Fee', label: 'EVENT', amount: '20', info: 'Only charged for an additional request.' }, 1, 'Fees');
-  expect(periodic).toMatchObject({ label: 'Redraw Fee · PERIODIC', value: '$0 · per month', reference: '1', conditions: 'none' });
-  expect(event).toMatchObject({ label: 'Redraw Fee · EVENT', value: '$20', reference: '2', conditions: 'source-review-required' });
+  expect(periodic).toMatchObject({ label: 'Redraw Fee · Ongoing fee', value: '$0 · per month', reference: '1', conditions: 'none' });
+  expect(event).toMatchObject({ label: 'Redraw Fee · Event fee', value: '$20', reference: '2', conditions: 'source-review-required' });
 });
 
 test('reviewed source identities retain publisher case and do not duplicate identical categories', () => {
   expect(uiPublishedFeeName({ name: ' AnNuAl FeE ' })).toBe('AnNuAl FeE');
   expect(uiDetailItem({ name: 'Annual fee', amount: '0' }, 0, 'Fees')).toMatchObject({ label: 'Annual fee', value: '$0', reference: '1', conditions: 'none' });
-  expect(uiDetailItem({ name: 'MONTHLY FEE', amount: '10', label: 'PERIODIC' }, 1, 'Fees')).toMatchObject({ label: 'MONTHLY FEE', value: '$10', reference: '2', conditions: 'none' });
+  expect(uiDetailItem({ name: 'MONTHLY FEE', amount: '10', label: 'PERIODIC' }, 1, 'Fees')).toMatchObject({ label: 'MONTHLY FEE · Ongoing fee', value: '$10', reference: '2', conditions: 'none' });
 });
 
 test('reviewed identities are bound to retained source fee names rather than descriptions', () => {
@@ -78,14 +78,14 @@ test('reviewed identities are bound to retained source fee names rather than des
 
 test.each(['Arbitrary promotional fee label.', 'Maintenance Fee. Conditions apply.', 'Annual fee | Great benefits', 'Service fee'])('unreviewed source fee name %j cannot become consumer or report copy', name => {
   expect(uiPublishedFeeName({ name, label: 'EVENT', info: 'Maintenance Fee' })).toBe('Unknown');
-  expect(uiDetailItem({ name, label: 'EVENT', amount: '40' }, 2, 'Fees')).toMatchObject({ label: 'EVENT', value: '$40', reference: '3', conditions: 'source-review-required' });
+  expect(uiDetailItem({ name, label: 'EVENT', amount: '40' }, 2, 'Fees')).toMatchObject({ label: 'Event fee', value: '$40', reference: '3', conditions: 'source-review-required' });
   expect(JSON.stringify(uiDetailItem({ name, amount: '0' }, 0, 'Fees'))).not.toContain(name);
 });
 
 test.each(['Fee\nDescription', 'Fee\tDescription', 'Fee\u0000Description', 'Fee\u2028Description', 'x'.repeat(161)])('invalid fee identity %j cannot admit a description', name => {
   expect(uiPublishedFeeName({ name, label: 'EVENT' })).toBe('Unknown');
   expect(uiDetailItem({ name, label: 'EVENT', amount: '40' }, 0, 'Fees')).toMatchObject({
-    label: 'EVENT', value: '$40', conditions: 'source-review-required',
+    label: 'Event fee', value: '$40', conditions: 'source-review-required',
   });
 });
 
@@ -155,11 +155,11 @@ test('all bundled AFG family fee identities retain amounts, cadence, unknowns an
   const basic = family.find(([key]) => key.startsWith('AFG Home Loans Alpha|') && key.endsWith('|AFG Alpha Basic Home Loan'))![1];
   const facts = basic.fees!.map((item, index) => uiDetailItem(item, index, 'Fees'));
   expect(facts.map(fact => [fact.label, fact.value, fact.reference])).toEqual([
-    ['Online Redraw Fee · EVENT', '$0', '1'], ['Manual Redraw Fee · EVENT', '$0', '2'],
-    ['Break Cost Fee · Variable', 'Unknown', '3'], ['Discharge Administration Fee · EXIT', '$350', '4'],
-    ['Security Processing Fee · UPFRONT', '$199', '5'], ['Variation Fee · EVENT', '$250', '6'],
-    ['Default Fee · EVENT', '$35', '7'], ['Duplicate Fee · EVENT', '$16.5', '8'],
-    ['Bank Cheque Fee · EVENT', '$10', '9'], ['Monthly Admin Fee · PERIODIC', 'Unknown · per month', '10'],
+    ['Online Redraw Fee · Event fee', '$0', '1'], ['Manual Redraw Fee · Event fee', '$0', '2'],
+    ['Break Cost Fee · Variable fee', 'Unknown', '3'], ['Discharge Administration Fee · Exit fee', '$350', '4'],
+    ['Security Processing Fee · Upfront fee', '$199', '5'], ['Variation Fee · Event fee', '$250', '6'],
+    ['Default Fee · Event fee', '$35', '7'], ['Duplicate Fee · Event fee', '$16.5', '8'],
+    ['Bank Cheque Fee · Event fee', '$10', '9'], ['Monthly Admin Fee · Ongoing fee', 'Unknown · per month', '10'],
   ]);
   expect(facts[0].conditions).toBe('source-review-required');
   expect(facts[1].conditions).toBe('source-review-required');
@@ -176,7 +176,7 @@ test('reviewed AFG names cannot admit source condition prose or malformed publis
     'Break Cost Fee is payable when breaking a fixed loan.', 'Monthly Admin Fee\n', 'Variation Fee\u0000']) {
     expect(uiPublishedFeeName({ name })).toBe('Unknown');
     expect(uiDetailItem({ name, label: 'EVENT', value: '0' }, 2, 'Fees')).toMatchObject({
-      label: 'EVENT', value: '$0', reference: '3', conditions: 'source-review-required',
+      label: 'Event fee', value: '$0', reference: '3', conditions: 'source-review-required',
     });
   }
 });
@@ -235,4 +235,20 @@ test('actual AMP country-unspecified alternatives preserve OR without inventing 
     expect(uiDetailItem({ label: 'RESIDENCY_STATUS', value }, 0, 'Eligibility')).toMatchObject({ value: 'Unknown', conditions: 'source-review-required' });
   }
   expect(uiDetailItem({ label: 'OTHER', value: 'Citizen or Permanent Resident' }, 0, 'Eligibility').value).toBe('Unknown');
+});
+
+test('repeated source entries are one fact and presence-only criteria read as required', () => {
+  const entry = { label: 'NATURAL_PERSON' };
+  expect(dedupeDetailItems([entry, { ...entry }, { label: 'STAFF' }])).toHaveLength(2);
+  expect(uiDetailItem(entry, 0, 'Eligibility')).toMatchObject({ label: 'Individual applicants', value: 'Required' });
+  expect(uiDetailItem({ label: 'OFFSET' }, 0, 'Features')).toMatchObject({ value: 'Included' });
+});
+
+test('OTHER entries use the controlled generic label and never the source name', () => {
+  expect(uiDetailItem({ label: 'OTHER', name: 'Arbitrary promotional wording.' }, 0, 'Eligibility')).toMatchObject({ label: 'Other criterion', value: 'Unknown' });
+  expect(uiDetailItem({ label: 'OTHER', name: 'Arbitrary promotional wording.' }, 0, 'Features').label).toBe('Other feature');
+});
+
+test('fee categories read as labels, not source codes', () => {
+  expect(uiDetailItem({ label: 'EXIT', amount: '350' }, 0, 'Fees')).toMatchObject({ label: 'Exit fee', value: '$350' });
 });

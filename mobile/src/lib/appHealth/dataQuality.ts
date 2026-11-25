@@ -834,6 +834,8 @@ function hasOfficialLink(detail: ProductDetail): boolean {
 const LVR_CONSTRAINT_CODES = new Set(['MIN_LVR', 'MAX_LVR']);
 const BALANCE_CONSTRAINT_CODES = new Set(['MIN_BALANCE', 'MAX_BALANCE']);
 
+import { auditRenderedProductDetails } from './renderedGaps';
+
 export function auditProductDetailGaps(snapshot: AppHealthDataSnapshot): {
   hasGaps: boolean;
   metrics: Record<string, number | boolean | null>;
@@ -897,7 +899,10 @@ export function auditProductDetailGaps(snapshot: AppHealthDataSnapshot): {
     if (!(typeof detail.last_updated === 'string' && detail.last_updated.trim().length > 0)) missingLastUpdated += 1;
   }
 
+  const rendered = auditRenderedProductDetails(products, snapshot.manifest);
   const hasGaps = missingDescription > 0
+    || rendered.renderedUnknownValues > 0 || rendered.renderedRawCodeLabels > 0 || rendered.renderedDuplicateItems > 0
+    || rendered.renderedGenericLabels > 0 || rendered.renderedSuppressedFeeNames > 0 || rendered.companionChannelsAbsent > 0
     || missingFees > 0
     || unpublishedFeeCount > 0
     || missingFeatures > 0
@@ -944,6 +949,8 @@ export function auditProductDetailGaps(snapshot: AppHealthDataSnapshot): {
       sourceDocumentsCoveragePercent: coveragePct(total - missingSourceDocuments, total),
       missingLastUpdatedProducts: missingLastUpdated,
       lastUpdatedCoveragePercent: coveragePct(total - missingLastUpdated, total),
+      renderedGapsAudited: true,
+      ...rendered,
     },
   };
 }

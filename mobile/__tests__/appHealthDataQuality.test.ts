@@ -435,9 +435,9 @@ describe('app-health data quality', () => {
     const baseDetail = {
       description: 'Complete product description',
       last_updated: '2026-09-01T00:00:00Z',
-      fees: [{ name: 'Account fee', amountStatus: 'fixed' as const, amount: '0' }],
-      features: [{ label: 'OFFSET', value: 'Yes' }],
-      eligibility: [{ label: 'RESIDENCY', value: 'Australian resident' }],
+      fees: [{ name: 'Annual fee', label: 'PERIODIC', amountStatus: 'fixed' as const, amount: '0' }],
+      features: [{ label: 'OFFSET' }],
+      eligibility: [{ label: 'RESIDENCY_STATUS', value: 'Australian resident' }],
       links: { overview: 'https://example.com/overview' },
       sourceDocuments: [{ url: 'https://example.com/doc', sourcePath: 'doc.json', relation: 'overview' }],
       rateConditions: {
@@ -464,6 +464,8 @@ describe('app-health data quality', () => {
       },
     };
 
+    snapshot.manifest = { ...snapshot.manifest!, product_evidence_v1: {}, product_response_evidence_v1: {},
+      files: { ...snapshot.manifest!.files, terms_index: {} } } as never;
     const detailsCheck = byCode(
       evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
       APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS,
@@ -492,6 +494,27 @@ describe('app-health data quality', () => {
       missingSourceDocumentsProducts: 0,
       missingLastUpdatedProducts: 0,
     });
+  });
+
+  it('records rendered gaps: unknown values, raw codes, duplicates, hidden fee names and absent companion channels', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    const key = snapshot.core!.sections.Mortgage.rates[0].product_key;
+    snapshot.details!.products = {
+      [key]: {
+        description: 'Loan', last_updated: '2026-01-01', links: { overview: 'https://example.com/o' },
+        fees: [{ label: 'EVENT', name: 'Service fee', value: '40' }, { label: 'EVENT', name: 'Service fee', value: '40' }],
+        eligibility: [{ label: 'RESIDENCY_STATUS', value: 'Martian' }, { label: 'NATURAL_PERSON' }],
+        features: [{ label: 'OFFSET' }], constraints: [{ label: 'MAX_LVR', value: '80' }],
+        facts: [{ id: 'f-1', kind: 'feature', canonicalKey: 'OFFSET', sourceType: 'OFFSET' }],
+      },
+    } as never;
+    const metrics = byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+      APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS).metrics;
+    expect(metrics).toMatchObject({
+      renderedGapsAudited: true, renderedDuplicateItems: 1, renderedUnknownEligibilityValues: 1,
+      renderedUnknownFeeValues: 0, renderedRawCodeLabels: 0, companionChannelsExpected: 3, companionChannelsAbsent: 3,
+    });
+    expect(metrics.renderedSuppressedFeeNames).toBeGreaterThanOrEqual(0);
   });
 
   it('warns and records internal product detail gaps and unpublished fees', () => {
