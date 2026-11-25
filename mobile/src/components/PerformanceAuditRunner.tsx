@@ -1245,7 +1245,9 @@ async function runDeepAuditStepBody(
     maxEventLoopLagMs: responsiveness.maxEventLoopLagMs,
     maxFrameGapMs: responsiveness.maxFrameGapMs,
   });
-  const diagnostic = captureAuditDiagnostic(visibleReady.stepExpired ? readiness : performanceAuditReadinessRegistry.snapshot(), 'complete');
+  const diagnostic = visibleReady.stepExpired
+    ? captureAuditDiagnostic(readiness, 'readiness')
+    : captureAuditDiagnostic(performanceAuditReadinessRegistry.snapshot(), 'complete');
   const status = visibleReady.stepExpired || errors.journey.length ? 'fail'
     : worstStatus(latency, scoreAuditTargetProbeEvidence(diagnostic, step.expectedSurface));
   return {
@@ -2612,7 +2614,7 @@ export async function runJourney(
         signal: destinationReadinessAbort.signal,
       });
       forwardWindow = { start: forwardResponsivenessAt, end: monitor.snapshot() };
-      destinationDiagnostic = captureAuditDiagnostic(visibleReady.snapshot, 'complete');
+      destinationDiagnostic = captureAuditDiagnostic(visibleReady.snapshot, visibleReady.stepExpired ? 'readiness' : 'complete');
       readinessStepExpired = visibleReady.stepExpired;
       backgroundUnsettled = visibleReady.settled === false;
     } finally {
