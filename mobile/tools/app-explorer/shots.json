@@ -86,8 +86,8 @@
  {
   "name": "settings",
   "open": "/settings",
-  "scroll": 0,
-  "why": "settings"
+  "scroll": 4,
+  "why": "lower settings: Data section and App update status after the Wi-Fi-only and automatic-update switches were removed"
  },
  {
   "name": "debug-log",

@@ -21,7 +21,7 @@ import type { DeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
 
 jest.mock('expo-device', () => ({ supportedCpuArchitectures: ['x86_64'] }));
 jest.mock('../src/data/store', () => ({ useStore: (select: (state: unknown) => unknown) => select({
-  prefs: { apkUpdatesWifiOnly: true, apkUpdatesAutoDownload: true }, setPref: jest.fn(),
+  prefs: {}, setPref: jest.fn(),
 }) }));
 jest.mock('../src/lib/appUpdate', () => ({
   checkForAppUpdate: jest.fn(), ensureApkBackgroundDownload: jest.fn(), upgradeFromBackgroundDownload: jest.fn(),

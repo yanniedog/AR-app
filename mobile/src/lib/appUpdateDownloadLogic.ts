@@ -20,7 +20,6 @@ export interface ApkDownloadSnapshot {
   localUri: string | null;
   bytesWritten: number;
   totalBytes: number | null;
-  wifiOnly: boolean | null;
   startedAt: string | null;
   lastProgressAt: string | null;
   retryCount: number;
@@ -45,7 +44,6 @@ export const IDLE_APK_DOWNLOAD: ApkDownloadSnapshot = {
   localUri: null,
   bytesWritten: 0,
   totalBytes: null,
-  wifiOnly: null,
   startedAt: null,
   lastProgressAt: null,
   retryCount: 0,
@@ -178,7 +176,6 @@ export function invalidCachedApkRecoverySnapshot(
     sha256?: string;
     bytes?: number;
   },
-  wifiOnly: boolean,
 ): ApkDownloadSnapshot {
   return {
     phase: 'error',
@@ -189,8 +186,7 @@ export function invalidCachedApkRecoverySnapshot(
     localUri: null,
     bytesWritten: 0,
     totalBytes: manifest.bytes ?? snapshot.totalBytes,
-    wifiOnly,
-    startedAt: null,
+      startedAt: null,
     lastProgressAt: null,
     retryCount: snapshot.retryCount,
     nativeState: null,
@@ -247,7 +243,7 @@ export function updateBannerCopy(
   }
   if (phase === 'waiting') {
     return {
-      title: 'Waiting for Wi-Fi',
+      title: 'Waiting for network',
       actionLabel: 'Retry',
       actionEnabled: true,
     };

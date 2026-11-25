@@ -41,8 +41,6 @@ describe('maximum performance audit profile', () => {
       sessionReplayEnabled: false,
       privacyChoiceVersion: 2,
       appLockEnabled: true,
-      wifiOnly: true,
-      apkUpdatesWifiOnly: false,
     };
     const profile = maximumPerformanceAuditPrefs(original);
     expect(profile).toMatchObject({
@@ -51,8 +49,6 @@ describe('maximum performance audit profile', () => {
       sessionReplayEnabled: original.sessionReplayEnabled,
       privacyChoiceVersion: original.privacyChoiceVersion,
       appLockEnabled: original.appLockEnabled,
-      wifiOnly: original.wifiOnly,
-      apkUpdatesWifiOnly: original.apkUpdatesWifiOnly,
     });
   });
 
