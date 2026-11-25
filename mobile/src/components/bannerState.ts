@@ -2,7 +2,7 @@ import type { PayloadProgressSnapshot } from '../data/downloadProgress';
 import { pendingIngestBannerMessage } from '../data/ingestFinalized';
 
 /** Transient refresh feedback shown after pull-to-refresh, manual refresh, or background sync. */
-export type RefreshOutcomeKind = 'success' | 'failure' | 'wifi-skip';
+export type RefreshOutcomeKind = 'success' | 'failure';
 
 export interface RefreshOutcomeViewModel {
   kind: RefreshOutcomeKind;
@@ -97,13 +97,6 @@ export function resolveRefreshOutcomeSnackbar(
         message: 'Couldn\u2019t update rates. Showing your saved copy.',
         actionLabel: 'Retry',
         action: 'retry',
-      };
-    case 'wifi-skip':
-      return {
-        kind,
-        message: 'Skipped update \u2014 Wi\u2011Fi only is on',
-        actionLabel: 'Settings',
-        action: 'settings',
       };
   }
 }

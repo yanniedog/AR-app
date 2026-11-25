@@ -29,8 +29,6 @@ const mockSetPref = jest.fn();
 let mockDimensions = { width: 411, height: 914, scale: 1, fontScale: 1 };
 let mockPrefs = {
   dismissedUpdateBuild: null as string | null,
-  apkUpdatesWifiOnly: true,
-  apkUpdatesAutoDownload: false,
 };
 
 jest.mock('../src/data/store', () => ({
@@ -98,8 +96,6 @@ describe('AppUpdateBanner download consent', () => {
     appStateListener = null;
     mockPrefs = {
       dismissedUpdateBuild: null,
-      apkUpdatesWifiOnly: true,
-      apkUpdatesAutoDownload: false,
     };
     jest.clearAllMocks();
     platformDescriptor = Object.getOwnPropertyDescriptor(Platform, 'OS');
@@ -123,7 +119,7 @@ describe('AppUpdateBanner download consent', () => {
     if (appStateDescriptor) Object.defineProperty(AppState, 'currentState', appStateDescriptor);
   });
 
-  it('keeps automatic checks but does not download without standing consent', async () => {
+  it('checks on launch and on resume and downloads every available release automatically', async () => {
     let tree!: InspectableRenderer;
     await act(async () => {
       tree = TestRenderer.create(<HookProbe />) as InspectableRenderer;
@@ -131,7 +127,7 @@ describe('AppUpdateBanner download consent', () => {
       await Promise.resolve();
     });
     expect(checkForAppUpdate).toHaveBeenCalledTimes(1);
-    expect(ensureApkBackgroundDownload).not.toHaveBeenCalled();
+    expect(ensureApkBackgroundDownload).toHaveBeenCalledWith(remote);
 
     await act(async () => {
       appStateListener?.('active');
@@ -139,19 +135,7 @@ describe('AppUpdateBanner download consent', () => {
       await Promise.resolve();
     });
     expect(checkForAppUpdate).toHaveBeenCalledTimes(2);
-    expect(ensureApkBackgroundDownload).not.toHaveBeenCalled();
-    act(() => tree.unmount());
-  });
-
-  it('downloads after an explicitly enabled standing preference', async () => {
-    mockPrefs.apkUpdatesAutoDownload = true;
-    let tree!: InspectableRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<HookProbe />) as InspectableRenderer;
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(ensureApkBackgroundDownload).toHaveBeenCalledWith(remote, { wifiOnly: true });
+    expect(ensureApkBackgroundDownload).toHaveBeenCalledTimes(2);
     act(() => tree.unmount());
   });
 
@@ -169,7 +153,6 @@ describe('AppUpdateBanner download consent', () => {
   });
 
   it('does not start an automatic download when an audit begins during the banner check', async () => {
-    mockPrefs.apkUpdatesAutoDownload = true;
     let resolveCheck!: (value: typeof availableResult) => void;
     jest.mocked(checkForAppUpdate).mockReturnValue(new Promise((resolve) => {
       resolveCheck = resolve;
@@ -192,7 +175,7 @@ describe('AppUpdateBanner download consent', () => {
     act(() => tree.unmount());
   });
 
-  it('requires per-download approval but installs an already verified APK directly', async () => {
+  it('downloads and installs without a confirmation prompt, including an already verified APK', async () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     let tree!: InspectableRenderer;
     await act(async () => {
@@ -208,12 +191,8 @@ describe('AppUpdateBanner download consent', () => {
     act(() => {
       (tree.root.findByProps({ accessibilityLabel: 'Download & install' }).props.onPress as () => void)();
     });
-    expect(upgradeFromBackgroundDownload).not.toHaveBeenCalled();
-    const buttons = alert.mock.calls[0][2] ?? [];
-    await act(async () => {
-      buttons.find((button) => button.text === 'Download')?.onPress?.();
-      await Promise.resolve();
-    });
+    await act(async () => { await Promise.resolve(); });
+    expect(alert).not.toHaveBeenCalled();
     expect(upgradeFromBackgroundDownload).toHaveBeenCalledTimes(1);
 
     await act(async () => {
@@ -234,7 +213,7 @@ describe('AppUpdateBanner download consent', () => {
       (tree.root.findByProps({ accessibilityLabel: 'Install verified update' }).props.onPress as () => void)();
       await Promise.resolve();
     });
-    expect(alert).toHaveBeenCalledTimes(1);
+    expect(alert).not.toHaveBeenCalled();
     expect(upgradeFromBackgroundDownload).toHaveBeenCalledTimes(2);
     act(() => tree.unmount());
   });

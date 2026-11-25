@@ -241,8 +241,6 @@ export default function Settings() {
     prefs.includeNonStandard,
     prefs.enableDeepSearch,
     prefs.showHistoryRibbon,
-    prefs.wifiOnly,
-    prefs.apkUpdatesWifiOnly,
     prefs.rateMoveThresholdBps,
     prefs.notificationsEnabled,
     prefs.crashReportsEnabled,
@@ -286,9 +284,6 @@ export default function Settings() {
       toggleAuditPreference('enableDeepSearch', !prefs.enableDeepSearch),
     'settings.history-explorer.toggle': () =>
       toggleAuditPreference('showHistoryRibbon', !prefs.showHistoryRibbon),
-    'settings.wifi-only.toggle': () => toggleAuditPreference('wifiOnly', !prefs.wifiOnly),
-    'settings.apk-wifi-only.toggle': () =>
-      toggleAuditPreference('apkUpdatesWifiOnly', !prefs.apkUpdatesWifiOnly),
     'settings.alert-threshold.next': () => {
       const index = Math.max(0, THRESHOLDS.indexOf(prefs.rateMoveThresholdBps));
       toggleAuditPreference(
@@ -541,13 +536,6 @@ export default function Settings() {
       </Section>
 
       <Section title="Data">
-        <ToggleRow
-          icon="wifi-outline"
-          label="Refresh on Wi-Fi only"
-          value={prefs.wifiOnly}
-          onChange={(v) => setPref('wifiOnly', v)}
-        />
-        <SettingsGap size={10} />
         <Row gap={12} style={{ flexDirection: stackDataActions ? 'column' : 'row', alignItems: 'stretch' }}>
           <Button
             title="Refresh now"

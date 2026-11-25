@@ -1,15 +1,9 @@
-import { DEFAULT_PREFS, useStore } from '../src/data/store';
+import { DEFAULT_PREFS } from '../src/data/store';
 
 describe('APK update preferences', () => {
-  beforeEach(() => {
-    useStore.setState({ prefs: { ...DEFAULT_PREFS }, hydrated: true });
-  });
-
-  it('defaults to automatic updates over cellular and permits opting out', () => {
-    expect(useStore.getState().prefs.apkUpdatesAutoDownload).toBe(true);
-    expect(useStore.getState().prefs.apkUpdatesWifiOnly).toBe(false);
-
-    useStore.getState().setPref('apkUpdatesAutoDownload', false);
-    expect(useStore.getState().prefs.apkUpdatesAutoDownload).toBe(false);
+  it('has no network or automatic-update switches', () => {
+    expect(DEFAULT_PREFS).not.toHaveProperty('wifiOnly');
+    expect(DEFAULT_PREFS).not.toHaveProperty('apkUpdatesWifiOnly');
+    expect(DEFAULT_PREFS).not.toHaveProperty('apkUpdatesAutoDownload');
   });
 });

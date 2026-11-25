@@ -50,7 +50,6 @@ let hydrated = false;
 let hydratePromise: Promise<void> | null = null;
 let activeTask: DownloadTask | null = null;
 let activeTaskGeneration = 0;
-let activeDownloadWifiOnly: boolean | null = null;
 let currentProcessVerificationTaskId: string | null = null;
 let ensureInFlight: Promise<void> | null = null;
 let ensureKey: string | null = null;
@@ -82,15 +81,15 @@ async function persist(next: ApkDownloadSnapshot): Promise<void> {
   }
 }
 
-function ensureConfig(wifiOnly: boolean): void {
+function ensureConfig(): void {
   if (configReady) {
-    setConfig({ allowsCellularAccess: !wifiOnly });
+    setConfig({ allowsCellularAccess: true });
     return;
   }
   setConfig({
     progressInterval: 1000,
     progressMinBytes: 256 * 1024,
-    allowsCellularAccess: !wifiOnly,
+    allowsCellularAccess: true,
     showNotificationsEnabled: true,
     showCancelAction: true,
     showCompletionNotification: true,
@@ -246,7 +245,6 @@ async function stopMatchingTask(manifest: ApkManifest): Promise<void> {
   } catch {
     // Best-effort only.
   }
-  activeDownloadWifiOnly = null;
 }
 
 function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
@@ -327,7 +325,6 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
             localUri,
             bytesWritten: bytesDownloaded,
             totalBytes: bytesTotal || manifest.bytes || null,
-            wifiOnly: activeDownloadWifiOnly,
             startedAt: snapshot.startedAt,
             lastProgressAt: new Date().toISOString(),
             retryCount: snapshot.retryCount,
@@ -361,7 +358,6 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
           }
           if (isCurrent() && activeTask?.id === task.id) {
             activeTask = null;
-            activeDownloadWifiOnly = null;
           }
         }
       })();
@@ -378,7 +374,6 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
         localUri: null,
         bytesWritten: snapshot.bytesWritten,
         totalBytes: snapshot.totalBytes,
-        wifiOnly: activeDownloadWifiOnly ?? snapshot.wifiOnly,
         startedAt: snapshot.startedAt,
         lastProgressAt: snapshot.lastProgressAt,
         retryCount: snapshot.retryCount,
@@ -396,7 +391,6 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
       }
       if (activeTask?.id === task.id) {
         activeTask = null;
-        activeDownloadWifiOnly = null;
       }
     });
 }
@@ -426,9 +420,6 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
     'app-update',
     `reconcile build=${manifest.build_number} nativeState=${state || 'unknown'} bytes=${match.bytesDownloaded}/${match.bytesTotal || manifest.bytes || 'unknown'}`,
   );
-  const taskWifiOnly =
-    match.downloadParams?.isAllowedOverMetered === false &&
-    match.downloadParams?.isAllowedOverRoaming === false;
   const terminalFailed =
     state === 'FAILED' || state === 'STOPPED' || state === 'ERROR' || state === 'CANCELLED';
 
@@ -451,7 +442,6 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
           localUri,
           bytesWritten: match.bytesDownloaded,
           totalBytes: match.bytesTotal || manifest.bytes || null,
-          wifiOnly: taskWifiOnly,
           nativeState: state,
           error: null,
         });
@@ -465,7 +455,6 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
           localUri,
           bytesWritten: match.bytesDownloaded,
           totalBytes: match.bytesTotal || manifest.bytes || null,
-          wifiOnly: taskWifiOnly,
           startedAt: snapshot.startedAt,
           lastProgressAt: new Date().toISOString(),
           retryCount: snapshot.retryCount,
@@ -484,7 +473,6 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
         await persist({ ...snapshot, phase: 'error', error: message, localUri: null });
         await stopTaskQuietly(match);
         if (activeTask?.id === match.id) activeTask = null;
-        activeDownloadWifiOnly = null;
         return false;
       } finally {
         if (currentProcessVerificationTaskId === match.id) {
@@ -495,7 +483,6 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
     debugLog.warn('app-update', 'DONE task missing destination file; starting a new download');
     await stopTaskQuietly(match);
     if (activeTask?.id === match.id) activeTask = null;
-    activeDownloadWifiOnly = null;
     return false;
   }
 
@@ -503,7 +490,6 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
     debugLog.warn('app-update', `terminal task state=${state}; starting a new download`);
     await stopTaskQuietly(match);
     if (activeTask?.id === match.id) activeTask = null;
-    activeDownloadWifiOnly = null;
     return false;
   }
 
@@ -511,7 +497,6 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
   if (newlyAttached) {
     attachHandlers(match, manifest);
   }
-  activeDownloadWifiOnly = taskWifiOnly;
   if (state === 'PAUSED') {
     try {
       await match.resume();
@@ -519,7 +504,6 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
       debugLog.warn('app-update', `resume failed: ${String((err as Error)?.message ?? err)}`);
       await stopTaskQuietly(match);
       if (activeTask?.id === match.id) activeTask = null;
-      activeDownloadWifiOnly = null;
       return false;
     }
   }
@@ -533,7 +517,6 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
     localUri: null,
     bytesWritten: match.bytesDownloaded,
     totalBytes: match.bytesTotal || manifest.bytes || null,
-    wifiOnly: taskWifiOnly,
     startedAt: snapshot.startedAt ?? new Date().toISOString(),
     lastProgressAt:
       newlyAttached || match.bytesDownloaded > snapshot.bytesWritten
@@ -552,7 +535,6 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
 
 async function startNewDownload(
   manifest: ApkManifest,
-  wifiOnly: boolean,
   retryCount = 0,
 ): Promise<void> {
   const destination = apkDestinationPath(directories.documents, manifest.build_number, manifest.sha256);
@@ -583,11 +565,10 @@ async function startNewDownload(
       version: manifest.version,
       buildNumber: manifest.build_number,
     },
-    isAllowedOverRoaming: !wifiOnly,
-    isAllowedOverMetered: !wifiOnly,
+    isAllowedOverRoaming: true,
+    isAllowedOverMetered: true,
     maxRedirects: 10,
   });
-  activeDownloadWifiOnly = wifiOnly;
   attachHandlers(task, manifest);
   const persistStarted = persist({
     phase: 'downloading',
@@ -598,7 +579,6 @@ async function startNewDownload(
     localUri: null,
     bytesWritten: 0,
     totalBytes: manifest.bytes ?? null,
-    wifiOnly,
     startedAt: new Date().toISOString(),
     lastProgressAt: new Date().toISOString(),
     retryCount,
@@ -616,7 +596,7 @@ async function startNewDownload(
   await persistStarted;
   debugLog.info(
     'app-update',
-    `background download started build=${manifest.build_number} wifiOnly=${wifiOnly}`,
+    `background download started build=${manifest.build_number}`,
   );
 }
 
@@ -626,7 +606,7 @@ async function startNewDownload(
  */
 export async function ensureApkBackgroundDownload(
   manifest: ApkManifest,
-  options?: { wifiOnly?: boolean; force?: boolean },
+  options?: { force?: boolean },
 ): Promise<ApkDownloadSnapshot> {
   if (Platform.OS !== 'android') return getApkDownloadSnapshot();
   assertUpdateDownloadAllowed();
@@ -637,11 +617,10 @@ export async function ensureApkBackgroundDownload(
   // again before any cached-file, native-task, or network work begins.
   assertUpdateDownloadAllowed();
 
-  const wifiOnly = Boolean(options?.wifiOnly);
   let force = Boolean(options?.force);
   let autoRetry = false;
   try {
-    ensureConfig(wifiOnly);
+    ensureConfig();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await persist({
@@ -654,27 +633,9 @@ export async function ensureApkBackgroundDownload(
       localUri: null,
       bytesWritten: snapshot.bytesWritten,
       totalBytes: snapshot.totalBytes ?? manifest.bytes ?? null,
-      wifiOnly: snapshot.wifiOnly,
       error: message,
     });
     throw err;
-  }
-
-  // Android DownloadManager cannot update network policy on an in-flight task.
-  // Restart only when the requested policy differs from the active/persisted one.
-  const currentWifiOnly = activeDownloadWifiOnly ?? snapshot.wifiOnly;
-  if (
-    !force &&
-    String(snapshot.buildNumber) === String(manifest.build_number) &&
-    (snapshot.phase === 'downloading' || snapshot.phase === 'waiting') &&
-    currentWifiOnly != null &&
-    currentWifiOnly !== wifiOnly
-  ) {
-    debugLog.info(
-      'app-update',
-      `network policy changed wifiOnly=${currentWifiOnly}->${wifiOnly}; restarting APK download`,
-    );
-    force = true;
   }
 
   if (!force) {
@@ -705,24 +666,6 @@ export async function ensureApkBackgroundDownload(
     // Native progress may have continued while JavaScript was suspended.
     // Refresh it before deciding that the transfer has stalled.
     if (reattached && isApkDownloadStalled(snapshot)) {
-      const network = await Network.getNetworkStateAsync().catch(() => null);
-      const waitingForWifi =
-        wifiOnly &&
-        (!network?.isConnected || network.type !== Network.NetworkStateType.WIFI);
-      if (waitingForWifi) {
-        debugLog.info(
-          'app-update',
-          `download waiting for Wi-Fi build=${manifest.build_number} bytes=${snapshot.bytesWritten}/${snapshot.totalBytes ?? 'unknown'}`,
-        );
-        await persist({
-          ...snapshot,
-          phase: 'waiting',
-          nativeState: snapshot.nativeState ?? 'PAUSED',
-          error: null,
-        });
-        return snapshot;
-      }
-
       if (canAutoRetryApkDownload(snapshot)) {
         const nextRetry = snapshot.retryCount + 1;
         debugLog.warn(
@@ -780,7 +723,6 @@ export async function ensureApkBackgroundDownload(
           localUri,
           bytesWritten: snapshot.bytesWritten,
           totalBytes: snapshot.totalBytes ?? manifest.bytes ?? null,
-          wifiOnly: snapshot.wifiOnly,
           error: null,
           verifiedSha256: manifest.sha256?.toLowerCase() ?? null,
           verifiedBytes: verification.size,
@@ -804,7 +746,7 @@ export async function ensureApkBackgroundDownload(
             `invalid cached APK cleanup failed: ${String((deleteErr as Error)?.message ?? deleteErr)}`,
           );
         }
-        await persist(invalidCachedApkRecoverySnapshot(snapshot, manifest, wifiOnly));
+        await persist(invalidCachedApkRecoverySnapshot(snapshot, manifest));
         force = true;
       } finally {
         if (currentProcessVerificationTaskId === verificationTaskId) {
@@ -834,7 +776,6 @@ export async function ensureApkBackgroundDownload(
       assertUpdateDownloadAllowed();
       await startNewDownload(
         manifest,
-        wifiOnly,
         autoRetry ? snapshot.retryCount : 0,
       );
     } catch (err) {
@@ -850,10 +791,8 @@ export async function ensureApkBackgroundDownload(
         localUri: null,
         bytesWritten: snapshot.bytesWritten,
         totalBytes: snapshot.totalBytes ?? manifest.bytes ?? null,
-        wifiOnly,
         error: message,
       });
-      activeDownloadWifiOnly = null;
       throw err;
     }
   })().finally(() => {
@@ -1011,27 +950,18 @@ export async function installReadyApkUpdate(manifest: ApkManifest, canAutoInstal
  */
 export async function upgradeFromBackgroundDownload(
   manifest: ApkManifest,
-  options?: { wifiOnly?: boolean },
 ): Promise<void> {
   const buildNumber = String(manifest.build_number);
   explicitUpgradeWaiters.set(buildNumber, (explicitUpgradeWaiters.get(buildNumber) ?? 0) + 1);
   try {
-    await ensureApkBackgroundDownload(manifest, options);
-    const network = options?.wifiOnly && snapshot.phase !== 'ready'
-      ? await Network.getNetworkStateAsync().catch(() => null)
-      : null;
-    const queuedForWifi = Boolean(
-      options?.wifiOnly &&
-      snapshot.phase !== 'ready' &&
-      (!network?.isConnected || network.type !== Network.NetworkStateType.WIFI),
-    );
+    await ensureApkBackgroundDownload(manifest);
     if (
       String(snapshot.buildNumber) === buildNumber &&
-      (snapshot.phase === 'waiting' || queuedForWifi)
+      snapshot.phase === 'waiting'
     ) {
       debugLog.info(
         'app-update',
-        `explicit upgrade remains queued for Wi-Fi build=${manifest.build_number}`,
+        `explicit upgrade remains queued for network build=${manifest.build_number}`,
       );
       return;
     }
@@ -1040,7 +970,7 @@ export async function upgradeFromBackgroundDownload(
       return;
     }
     if (snapshot.phase === 'error' || snapshot.phase === 'cancelled') {
-      await ensureApkBackgroundDownload(manifest, { ...options, force: true });
+      await ensureApkBackgroundDownload(manifest, { force: true });
     }
 
     await new Promise<void>((resolve, reject) => {
@@ -1125,7 +1055,6 @@ export async function resetApkDownloadStateForTests(): Promise<void> {
   hydratePromise = null;
   activeTask = null;
   activeTaskGeneration = 0;
-  activeDownloadWifiOnly = null;
   currentProcessVerificationTaskId = null;
   ensureInFlight = null;
   ensureKey = null;

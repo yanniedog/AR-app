@@ -1140,8 +1140,6 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 1, semanticActionId: 'settings.default-section.next', stateImpact: 'restorable' },
     { depth: 1, semanticActionId: 'settings.deep-search.toggle', stateImpact: 'restorable' },
     { depth: 1, semanticActionId: 'settings.history-explorer.toggle', stateImpact: 'restorable' },
-    { depth: 1, semanticActionId: 'settings.wifi-only.toggle', stateImpact: 'restorable' },
-    { depth: 1, semanticActionId: 'settings.apk-wifi-only.toggle', stateImpact: 'restorable' },
     { depth: 1, semanticActionId: 'settings.alert-threshold.next', stateImpact: 'restorable' },
     { depth: 1, semanticActionId: 'settings.preferences.restore', stateImpact: 'restorable' },
     { depth: 1, semanticActionId: 'settings.notifications.observe' },

@@ -49,6 +49,14 @@ export function computeVerdict(report, baseline) {
   const findings = [];
   const add = (severity, kind, step, text) => findings.push({ severity, kind, step: step.n, name: step.name, text });
 
+  // The app must always be showing the newest published payload, whatever the connection or settings.
+  const fresh = report.freshness;
+  if (fresh?.latest) {
+    const stage = { n: 0, name: 'Data freshness' };
+    if (!fresh.shown) add('fail', 'stale-data', stage, `The app never showed a run date; latest published is ${fresh.latest}`);
+    else if (fresh.shown < fresh.latest) add('fail', 'stale-data', stage, `The app shows rates from ${fresh.shown}; latest published is ${fresh.latest}`);
+  }
+
   // A scroll step can move the screen's one refresh action out of view; the user still has it.
   let actionOnScreen = false;
   for (const s of steps) {
