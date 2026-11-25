@@ -441,15 +441,18 @@ export function keyboardTop(nodes, size) {
 }
 
 /** Contrast findings for the text nodes of one screen. `png` is an image from decodePng. */
-export function contrastFindings({ screen, nodes, png, pkg, density = 320, limit = 40, size = [png.width, png.height] }) {
+export function contrastFindings({ screen, nodes, png, pkg, density = 320, limit = 40, size = [png.width, png.height], keyboardBounds }) {
   const dp = DP(density);
   const out = [];
   const app = appNodes(nodes, pkg);
   const barTop = bottomBarTop(app, size);
   // Text behind the keyboard is covered, so its pixels are the keyboard's, not the text's.
   const imeTop = keyboardTop(nodes, size);
+  const coveredByKeyboard = keyboardBounds === undefined
+    ? bounds => bounds[3] > imeTop + LIMITS.keyboardSlackPx
+    : bounds => keyboardBounds !== null && area(inter(bounds, keyboardBounds)) > 0;
   const scrollers = app.filter(n => n.scrollable && area(n.bounds) > 0);
-  const texts = app.filter(n => n.text && !/\n/.test(n.text) && n.cls !== 'EditText' && n.enabled && n.bounds[3] <= imeTop + LIMITS.keyboardSlackPx && !clippedByScroller(n, scrollers, app) && !app.some(d => !d.enabled && d !== n && contains(d.bounds, n.bounds)) && !(n.bounds[3] > barTop && n.bounds[1] > size[1] * 0.5 && !TAB_LABELS.test(n.text.trim())))
+  const texts = app.filter(n => n.text && !/\n/.test(n.text) && n.cls !== 'EditText' && n.enabled && !coveredByKeyboard(n.bounds) && !clippedByScroller(n, scrollers, app) && !app.some(d => !d.enabled && d !== n && contains(d.bounds, n.bounds)) && !(n.bounds[3] > barTop && n.bounds[1] > size[1] * 0.5 && !TAB_LABELS.test(n.text.trim())))
     .sort((a, b) => area(b.bounds) - area(a.bounds)).slice(0, limit);
   for (const n of texts) {
     if (n.text.trim().length < 2) continue;
