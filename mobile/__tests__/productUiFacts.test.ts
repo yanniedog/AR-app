@@ -2,8 +2,8 @@ import fixture from './fixtures/bankwest-easy-saver-eligibility-20260913.json';
 import siblings from './fixtures/suitability-conditional-siblings-20260913.json';
 import sample from '../assets/sample/details.json';
 import type { ProductDetail } from '../src/types';
-import { dedupeDetailItems, uiDetailItem, uiNormalizedProductFact } from '../src/lib/productUiFacts';
-import { uiPublishedFeeName } from '../src/lib/uiCopy';
+import { dedupeDetailItems, dedupeFacts, isAnnualFee, uiDetailItem, uiNormalizedProductFact } from '../src/lib/productUiFacts';
+import { uiPublishedFeeName, uiProductKeyLabel, uiPublishedText } from '../src/lib/uiCopy';
 
 const detail = fixture.detail as ProductDetail;
 
@@ -246,7 +246,9 @@ test('repeated source entries are one fact and presence-only criteria read as re
 
 test('OTHER entries use the controlled generic label and never the source name', () => {
   expect(uiDetailItem({ label: 'OTHER', name: 'Arbitrary promotional wording.' }, 0, 'Eligibility')).toMatchObject({ label: 'Other criterion', value: 'Unknown' });
-  expect(uiDetailItem({ label: 'OTHER', name: 'Arbitrary promotional wording.' }, 0, 'Features').label).toBe('Other feature');
+  const feature = uiDetailItem({ label: 'OTHER', name: 'Arbitrary promotional wording.' }, 0, 'Features');
+  expect(feature.label).toBe('Other feature');
+  expect(JSON.stringify(feature)).not.toContain('promotional');
 });
 
 test('fee categories read as labels, not source codes', () => {
@@ -258,4 +260,34 @@ test('free-text fact values stay Unknown and valueless facts keep the unverified
   expect(prose.value).toBe('Unknown');
   const declared = uiNormalizedProductFact({ id: 'f', kind: 'feature', canonicalKey: 'feature.offset', sourceType: 'OFFSET', condition: 'Subject to approval' } as never);
   expect(declared).toMatchObject({ value: 'Conditions apply', conditionsUnverified: true, conditions: 'source-review-required' });
+});
+
+test('valueless declared features read Included unless a condition is published', () => {
+  expect(uiNormalizedProductFact({ id: 'a', kind: 'feature', canonicalKey: 'feature.offset', sourceType: 'OFFSET' } as never).value).toBe('Included');
+  expect(uiDetailItem({ label: 'OFFSET', info: 'Subject to approval' }, 0, 'Features')).toMatchObject({ value: 'Conditions apply', conditionsUnverified: true });
+});
+
+test('annual fees and fee categories use controlled labels, never raw codes', () => {
+  expect(isAnnualFee({ label: 'ANNUAL_FEE' })).toBe(true);
+  expect(isAnnualFee({ label: 'PERIODIC', additionalValue: 'P1Y' })).toBe(true);
+  expect(uiDetailItem({ label: 'ANNUAL_FEE', amount: '395' }, 0, 'Fees').label).toBe('Annual fee');
+  expect(uiDetailItem({ label: 'SURCHARGE_FEE', amount: '5' }, 0, 'Fees').label).toBe('Other fee');
+  expect(uiNormalizedProductFact({ id: 'f', kind: 'fee', canonicalKey: 'fee.annual_fee', value: 395 } as never).label).toBe('Annual fee');
+});
+
+test('identical normalized facts are one fact', () => {
+  const fact = { id: 'x', kind: 'feature', canonicalKey: 'feature.offset' };
+  expect(dedupeFacts([fact, { ...fact }])).toHaveLength(1);
+});
+
+test('published text rejects control characters before whitespace is normalised', () => {
+  expect(uiPublishedText('Line one\nLine two')).toBeNull();
+  expect(uiPublishedText('Tab\tseparated')).toBeNull();
+  expect(uiPublishedText('Plain name')).toBe('Plain name');
+});
+
+test('opaque product keys are identifiers, not names', () => {
+  expect(uiProductKeyLabel('Bankwest|123|Savings|Easy Saver')).toBe('Bankwest · Easy Saver');
+  expect(uiProductKeyLabel('prod_8f3a2c')).toBe(uiProductKeyLabel('prod_8f3a2c'));
+  expect(uiProductKeyLabel('prod_8f3a2c')).not.toContain('·');
 });

@@ -85,7 +85,7 @@ test('legacy Fees retains conditions without an overview while Product facts omi
     expect(text.filter(value => value === '$100')).toHaveLength(1);
     expect(text.filter(value => value === '$0 · Conditions: Unverified')).toHaveLength(1);
     expect(text).toContain('Discount: $5 · Conditions: Unverified');
-    expect(text.filter(value => value === 'ANNUAL_FEE')).toHaveLength(2);
+    expect(text.filter(value => value === 'Annual fee')).toHaveLength(2);
     expect(text).not.toContain('Source review required');
     expect(text).toContain('Offset account');
     expect(text).not.toContain('With package');

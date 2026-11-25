@@ -1,5 +1,5 @@
 import type { DetailItem, Manifest, ProductDetail } from '../../types';
-import { dedupeDetailItems, uiDetailItem, uiNormalizedProductFact } from '../productUiFacts';
+import { dedupeDetailItems, dedupeFacts, isAnnualFee, isUpfrontFee, uiDetailItem, uiNormalizedProductFact } from '../productUiFacts';
 import { normalizedProductFacts } from '../../data/productFactsCore';
 import { uiPublishedFeeName } from '../uiCopy';
 
@@ -34,20 +34,25 @@ export function auditRenderedProductDetails(products: Record<string, ProductDeta
         if (group === 'Fees' && item.name?.trim() && uiPublishedFeeName(item) === 'Unknown') suppressedNames += 1;
       });
     }
-    for (const fact of normalizedProductFacts(detail)) {
+    const allFacts = normalizedProductFacts(detail), distinctFacts = dedupeFacts(allFacts);
+    duplicates += allFacts.length - distinctFacts.length;
+    for (const fact of distinctFacts) {
       const rendered = uiNormalizedProductFact(fact);
       if (rendered.value.startsWith('Unknown')) factsUnknown += 1;
       if (RAW_CODE.test(rendered.label)) rawCodes += 1;
     }
     const fees = dedupeDetailItems(detail.fees);
     if (fees.length) {
-      if (!fees.some(fee => (fee.label ?? '').toUpperCase() === 'UPFRONT')) withoutUpfrontFee += 1;
-      if (!fees.some(fee => (fee.label ?? '').toUpperCase() === 'ANNUAL' || /annual/i.test(fee.name ?? ''))) withoutAnnualFee += 1;
+      if (!fees.some(isUpfrontFee)) withoutUpfrontFee += 1;
+      if (!fees.some(isAnnualFee)) withoutAnnualFee += 1;
     }
     if (!detail.features?.length && (detail.facts ?? []).some(fact => fact.kind === 'feature')) withoutDetailsFeatures += 1;
   }
   const files = manifest?.files as Record<string, unknown> | undefined;
-  const channels = [Boolean(files?.terms_index), Boolean(manifest?.product_evidence_v1), Boolean(manifest?.product_response_evidence_v1)];
+  // A channel counts as published only when its descriptor carries a content hash or schema.
+  const declared = (value: unknown): boolean => typeof value === 'object' && value !== null
+    && ['sha256', 'schema'].some(key => typeof (value as Record<string, unknown>)[key] === 'string');
+  const channels = [declared(files?.terms_index), declared(manifest?.product_evidence_v1), declared(manifest?.product_response_evidence_v1)];
   const published = channels.filter(Boolean).length;
   return {
     renderedUnknownValues: unknownValues,

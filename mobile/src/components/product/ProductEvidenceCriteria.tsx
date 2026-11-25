@@ -10,7 +10,7 @@ import { uiCount, uiDate, uiIdentifier, uiJoin, uiLabel, uiProductKeyLabel, useE
 const KINDS: readonly [CriteriaKind, UiLabel][] = [['all', 'All'], ['fee', 'Fees'], ['eligibility', 'Eligibility'], ['constraint', 'Constraints'],
   ['feature', 'Features'], ['rate', 'Rates'], ['tier', 'Tiers'], ['condition', 'Conditions'], ['attribute', 'Attributes'], ['bundle', 'Bundles']];
 const STATUSES: Record<string, UiLabel> = { observed: 'Observed', conditional: 'Conditional', conflicting: 'Conflicting', ambiguous: 'Ambiguous', source_review: 'Unverified',
-  unknown: 'Unknown', disabled: 'Disabled', pending: 'Pending', failed: 'Failed', unavailable: 'Not published', unsupported: 'Unsupported' };
+  unknown: 'Unknown', disabled: 'Disabled', pending: 'Pending', failed: 'Failed', unavailable: 'Unavailable', unsupported: 'Unsupported' };
 function Column({ column, first }: { column: CriteriaColumn; first: boolean }) {
   return <View style={{ width: 300, gap: 8 }}>
     <AppText>{uiLabel(first ? 'Reference product' : 'Exact scope')}</AppText>

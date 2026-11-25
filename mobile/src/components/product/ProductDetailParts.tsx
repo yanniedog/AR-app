@@ -11,7 +11,7 @@ import { useStore } from '../../data/store';
 import { uiAccessBadge, uiConditionFact, uiListedLvrRange, uiLoanPurpose, uiRateStructure, uiRepayment, type FinancialFactRow } from '../../lib/financialUiCopy';
 import { scopedRateConditions } from '../../data/rateConditions';
 import { scopedFinancialConditionFacts } from '../../data/scopedFinancialConditionFacts';
-import { dedupeDetailItems, uiDetailItem, uiFeeCap, uiFeeDiscount, uiNormalizedProductFact, uiProductFactValue, type ProductPresentationFact } from '../../lib/productUiFacts';
+import { dedupeDetailItems, dedupeFacts, isAnnualFee, isUpfrontFee, uiDetailItem, uiFeeCap, uiFeeDiscount, uiNormalizedProductFact, uiProductFactValue, type ProductPresentationFact } from '../../lib/productUiFacts';
 import { curatedFeatureIdentityKey, featureEvidenceScope, normalizedProductFacts } from '../../data/productFacts';
 import { uiCount, uiJoin, uiLabel, type UiCopy, type UiLabel, type UiText } from '../../lib/uiCopy';
 import type { DetailItem, NormalizedProductFact, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
@@ -60,7 +60,7 @@ export function ProductFacts({ productDetails: detail }: { productDetails: Produ
   // not present the same charge a second time.
   const groups: readonly [NormalizedProductFact['kind'], UiLabel][] = [['rate', 'Rates'], ['tier', 'Tiers'], ['eligibility', 'Eligibility'],
     ['constraint', 'Constraints'], ['fee', 'Fees'], ['feature', 'Features'], ['condition', 'Conditions'], ['bundle', 'Bundles'], ['attribute', 'Attributes']];
-  const raw = normalizedProductFacts(detail).filter(fact => !detail?.fees?.length || fact.kind !== 'fee');
+  const raw = dedupeFacts(normalizedProductFacts(detail)).filter(fact => !detail?.fees?.length || fact.kind !== 'fee');
   const ordered = groups.flatMap(([kind]) => raw.filter(fact => fact.kind === kind));
   if (!ordered.length) return null;
   const at = Math.min(page, Math.max(0, Math.ceil(ordered.length / 24) - 1));
@@ -105,13 +105,9 @@ function offsetValue(detail: ProductDetailData | null, row?: RateRow): UiText {
 }
 /** Headline cost facts from the published fee and feature lists. An absent fee is Unknown, never zero. */
 export function mortgageHeadlineFacts(detail: ProductDetailData | null, row?: RateRow): FinancialFactRow[] {
-  const fees = detail?.fees ?? [];
-  const annual = fees.filter(fee => (fee.label ?? '').toUpperCase() === 'ANNUAL_FEE' || /\bannual\b/i.test(fee.name ?? '')
-    || (fee.label ?? '').toUpperCase() === 'PERIODIC' && String(fee.additionalValue ?? fee.accrualFrequency ?? '') === 'P1Y');
-  const upfront = fees.filter(fee => (fee.label ?? '').toUpperCase() === 'UPFRONT');
-  // A fee list that was read and holds no such charge is stated as such. Only a missing list is Unknown.
-  const absent = (items: readonly DetailItem[]): UiText => items.length ? feeValues(items) : fees.length ? uiLabel('None published') : uiLabel('Unknown');
-  return [{ label: 'Annual fee', value: absent(annual) }, { label: 'Upfront fee', value: absent(upfront) },
+  const fees = dedupeDetailItems(detail?.fees);
+  const annual = fees.filter(isAnnualFee), upfront = fees.filter(isUpfrontFee);
+  return [{ label: 'Annual fee', value: feeValues(annual) }, { label: 'Upfront fee', value: feeValues(upfront) },
     { label: 'Offset account', value: offsetValue(detail, row) }];
 }
 export function ProductSpecs({ row, section, productDetails }: { row: RateRow; section: SectionKey; productDetails: ProductDetailData | null }) {
@@ -123,8 +119,9 @@ export function ProductSpecs({ row, section, productDetails }: { row: RateRow; s
   const availability = access && accessExcludesFromStandard(access) ? uiJoin('Restricted', ' · ', uiAccessBadge(access))
     : isNonStandard(row) ? uiJoin('Listed rate', ' · ', 'Unverified')
       : access ? uiLabel('Eligibility unverified') : uiLabel('Unverified');
-  const criteria = dedupeDetailItems([...(productDetails?.eligibility ?? []), ...(productDetails?.constraints ?? [])]).length
-    + (productDetails?.facts ?? []).filter(fact => fact.kind === 'eligibility' || fact.kind === 'constraint').length;
+  // Legacy arrays and normalized facts can publish the same criterion; the larger list is the published count.
+  const criteria = Math.max(dedupeDetailItems([...(productDetails?.eligibility ?? []), ...(productDetails?.constraints ?? [])]).length,
+    normalizedProductFacts(productDetails).filter(fact => fact.kind === 'eligibility' || fact.kind === 'constraint').length);
   const eligibility = productDetails ? criteria ? uiJoin('Published', ' · ', uiCount(criteria)) : uiLabel('Not published') : uiLabel('Unverified');
   const structure = uiRateStructure(row), rateType = humanizeEnum(row.rate_type);
   const variable = (row.rate_type ?? '').toUpperCase() === 'VARIABLE';

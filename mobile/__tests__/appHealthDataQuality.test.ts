@@ -464,8 +464,8 @@ describe('app-health data quality', () => {
       },
     };
 
-    snapshot.manifest = { ...snapshot.manifest!, product_evidence_v1: {}, product_response_evidence_v1: {},
-      files: { ...snapshot.manifest!.files, terms_index: {} } } as never;
+    snapshot.manifest = { ...snapshot.manifest!, product_evidence_v1: { schema: 'ar-product-evidence-reference-v1' }, product_response_evidence_v1: { schema: 'ar-product-response-evidence-reference-v1' },
+      files: { ...snapshot.manifest!.files, terms_index: { sha256: 'a'.repeat(64) } } } as never;
     const detailsCheck = byCode(
       evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
       APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS,

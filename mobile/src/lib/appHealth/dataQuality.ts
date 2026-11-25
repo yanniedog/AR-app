@@ -899,9 +899,12 @@ export function auditProductDetailGaps(snapshot: AppHealthDataSnapshot): {
     if (!(typeof detail.last_updated === 'string' && detail.last_updated.trim().length > 0)) missingLastUpdated += 1;
   }
 
+  // Fee-list coverage and unverified conditions are reported as counts only: a bank that publishes no upfront
+  // charge, or a condition left for review, is a legitimate published state rather than a rendering gap.
   const rendered = auditRenderedProductDetails(products, snapshot.manifest);
   const hasGaps = missingDescription > 0
     || rendered.renderedUnknownValues > 0 || rendered.renderedRawCodeLabels > 0 || rendered.renderedDuplicateItems > 0
+    || rendered.renderedUnknownFactValues > 0 || rendered.renderedOtherLabels > 0 || rendered.featureFactsWithoutFeatureItems > 0
     || rendered.renderedGenericLabels > 0 || rendered.renderedSuppressedFeeNames > 0 || rendered.companionChannelsAbsent > 0
     || missingFees > 0
     || unpublishedFeeCount > 0

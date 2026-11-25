@@ -704,8 +704,10 @@ const PUBLISHED_TEXT_URL = /(?:https?:\/\/|www\.|:\/\/)/i;
 /** Bank-published text admitted as a fact value: bounded, single line, no links. Never a label for prose. */
 export function uiPublishedText(value: unknown, max = 160): UiText | null {
   if (typeof value !== 'string') return null;
+  // Control characters (including newlines and tabs) are rejected before whitespace is normalised.
+  if (PUBLISHED_TEXT_CONTROL.test(value)) return null;
   const text = value.replace(/\s+/g, ' ').trim();
-  if (!text || text.length > max || PUBLISHED_TEXT_CONTROL.test(text) || PUBLISHED_TEXT_URL.test(text)) return null;
+  if (!text || text.length > max || PUBLISHED_TEXT_URL.test(text)) return null;
   return known(text);
 }
 /** A concise charge, feature or criterion name; sentences and marketing paragraphs never qualify. */
@@ -718,7 +720,7 @@ export function uiPublishedConciseName(value: unknown): UiText | null {
 const FEE_TYPE_LABELS: Readonly<Record<string, UiLabel>> = {
   PERIODIC: 'Ongoing fee', VARIATION: 'Variation fee', EXIT: 'Exit fee', UPFRONT: 'Upfront fee', EVENT: 'Event fee',
   TRANSACTION: 'Transaction fee', WITHDRAWAL: 'Withdrawal fee', DEPOSIT: 'Deposit fee', PAYMENT: 'Payment fee', PURCHASE: 'Purchase fee',
-  VARIABLE: 'Variable fee', OTHER: 'Other fee',
+  VARIABLE: 'Variable fee', OTHER: 'Other fee', ANNUAL: 'Annual fee', ANNUAL_FEE: 'Annual fee',
 };
 /** Closed CDR fee-type codes only; anything else stays an Unknown identity. */
 export function uiFeeTypeLabel(code: string | undefined): UiText | null {
@@ -756,7 +758,10 @@ export function uiPublishedFeeName(item: DetailItem): UiText {
 export function uiProductName(row: Pick<RateRow, 'product_name'>): UiText { return identity(row.product_name); }
 /** Lender and product name from a canonical product key; the raw key is an identifier, not a label. */
 export function uiProductKeyLabel(productKey: string): UiText {
-  const [provider, , , ...nameParts] = productKey.split('|');
+  const segments = productKey.split('|');
+  // Canonical UIDs and other opaque keys carry no lender or product name.
+  if (segments.length < 4) return uiIdentifier(productKey);
+  const [provider, , , ...nameParts] = segments;
   const name = nameParts.join('|');
   const providerText = uiPublishedConciseName(provider), nameText = uiPublishedText(name, 160);
   return providerText && nameText ? known(`${providerText} · ${nameText}`) : nameText ?? providerText ?? uiLabel('Unknown');

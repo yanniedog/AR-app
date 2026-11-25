@@ -23,6 +23,23 @@ export function dedupeDetailItems(items: readonly DetailItem[] | undefined): Det
     return true;
   });
 }
+/** Identical normalized facts (same id, kind, values and wording) are one fact. */
+export function dedupeFacts<T extends object>(facts: readonly T[]): T[] {
+  const seen = new Set<string>();
+  return facts.filter(fact => {
+    const key = JSON.stringify(fact);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+/** Annual and upfront charges are recognised by published category or name, never by guesswork. */
+export function isAnnualFee(fee: DetailItem): boolean {
+  const label = (fee.label ?? '').toUpperCase();
+  return label === 'ANNUAL' || label === 'ANNUAL_FEE' || /\bannual\b/i.test(fee.name ?? '')
+    || label === 'PERIODIC' && String(fee.additionalValue ?? fee.accrualFrequency ?? '') === 'P1Y';
+}
+export function isUpfrontFee(fee: DetailItem): boolean { return (fee.label ?? '').toUpperCase() === 'UPFRONT'; }
 const PRESENCE_ONLY_CODES = new Set(['NATURAL_PERSON', 'BUSINESS', 'STAFF', 'STUDENT', 'PENSION_RECIPIENT', 'FIRST_HOME_BUYER', 'MIN_RESIDENCY']);
 
 export function uiProductFactValue(fact: ProductPresentationFact): UiText {
@@ -126,12 +143,12 @@ export function uiNormalizedProductFact(fact: NormalizedProductFact): ProductPre
   const render = (field: 'value' | 'minValue' | 'maxValue') => fact.valueType === 'decimal'
     ? uiExactFactDecimal(fact, field) : factValue(fact[field], fact.unit);
   const value = fact.evidenceState === 'unknown' ? uiLabel('Unknown') : fact.evidenceState === 'conflicting' ? uiLabel('Conflicting')
-    : declaredWithoutValue ? uiLabel('Conditions apply')
+    : declaredWithoutValue ? uiLabel(fact.condition?.trim() ? 'Conditions apply' : 'Included')
     : lower !== undefined && upper !== undefined ? uiJoin(render('minValue'), '–', render('maxValue'))
       : lower !== undefined ? uiJoin('≥', render('minValue')) : upper !== undefined ? uiJoin('≤', render('maxValue')) : render('value');
   const generic = humanizeEnum(fact.sourceType?.toUpperCase() !== 'OTHER' ? fact.sourceType ?? fact.canonicalKey.split(/[.:/]/).at(-1) : fact.canonicalKey.split(/[.:/]/).at(-1));
   const other = generic === 'Unknown' || fact.canonicalKey.split(/[.:/]/).at(-1)?.toLowerCase() === 'other';
-  const label = fact.kind === 'fee' ? uiFeeTypeLabel(fact.sourceType) ?? generic
+  const label = fact.kind === 'fee' ? uiFeeTypeLabel(fact.sourceType) ?? uiFeeTypeLabel(fact.canonicalKey.split(/[.:/]/).at(-1)?.toUpperCase()) ?? uiLabel('Other fee')
     : other ? uiLabel(fact.kind === 'feature' ? 'Other feature' : 'Other criterion') : generic;
   return { sourceFact: fact, label,
     value: uiJoin(value, fact.cadence ? uiJoin(' · ', uiCadence(fact.cadence)) : null), reference: uiIdentifier(fact.id),
@@ -177,12 +194,12 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
   const names: Readonly<Record<string, UiLabel>> = { 'minimum age': 'Minimum age', 'maximum age': 'Maximum age', 'annual fee': 'Annual fee', 'monthly fee': 'Monthly fee' };
   const isOther = (item.label ?? '').toUpperCase() === 'OTHER';
   const controlled = isOther ? undefined : codes[item.label ?? ''] ?? names[(item.name ?? '').toLowerCase()];
-  const category = group === 'Fees' && uiFeeTypeLabel(item.label) ? uiFeeTypeLabel(item.label)!
-    : isOther ? uiLabel(group === 'Features' ? 'Other feature' : group === 'Fees' ? 'Other fee' : 'Other criterion')
+  const category = group === 'Fees' ? uiFeeTypeLabel(item.label) ?? (item.label ? uiLabel('Other fee') : uiLabel('Unknown'))
+    : isOther ? uiLabel(group === 'Features' ? 'Other feature' : 'Other criterion')
       : controlled ? uiLabel(controlled) : humanizeEnum(item.label);
   const feeName = group === 'Fees' ? uiPublishedFeeName(item) : null;
   const label = feeName && feeName !== 'Unknown' ? uiJoin(feeName,
-    category && feeName.trim().toLowerCase() !== category.trim().toLowerCase() ? uiJoin(' · ', category) : null) : category;
+    category && category !== 'Unknown' && feeName.trim().toLowerCase() !== category.trim().toLowerCase() ? uiJoin(' · ', category) : null) : category;
   const info = /^(?:Australian resident|Permanent resident)\.?$/i.exec(item.info?.trim() ?? '');
   const knownInfo = info ? uiLabel(/^Australian/i.test(info[0]) ? 'Australian resident' : 'Permanent resident') : null;
   const rejectedCashback = group === 'Features' && item.label === 'CASHBACK_OFFER'
@@ -203,12 +220,12 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
     ? uiRate(toFraction(numeric), Math.max(2, Math.min(6, lvrDecimals - (numeric <= 1 ? 2 : 0)))) : uiLabel('Unknown');
   const value = group === 'Fees' ? uiFeeValue(item) : residencyField ? residency ?? uiLabel('Unknown') : lvr ? lvrValue : numeric !== null ? uiJoin(group === 'Constraints' && /^(?:MIN|MAX)_(?:LIMIT|BALANCE|AMOUNT)$/.test(item.label ?? '') ? uiMoney(numeric, Math.min(2, precision(numeric))) : uiNumber(numeric, precision(numeric)),
     ['Minimum age', 'Maximum age'].includes(controlled ?? '') ? uiJoin(' ', 'years') : null)
-    : residency ?? cashback ?? (scalar?.toLowerCase() === 'false' || scalar?.toLowerCase() === 'true' ? uiLabel(scalar.toLowerCase() === 'true' ? 'Yes' : 'No') : group === 'Features' && item.value == null ? uiLabel('Included') : presenceOnly ? uiLabel('Required') : scalar ? uiTextValue(scalar) : uiLabel('Unknown'));
+    : residency ?? cashback ?? (scalar?.toLowerCase() === 'false' || scalar?.toLowerCase() === 'true' ? uiLabel(scalar.toLowerCase() === 'true' ? 'Yes' : 'No') : group === 'Features' && item.value == null ? uiLabel(item.info?.trim() ? 'Conditions apply' : 'Included') : presenceOnly ? uiLabel('Required') : scalar ? uiTextValue(scalar) : uiLabel('Unknown'));
   const unresolvedInfo = Boolean(item.info?.trim() && !knownInfo);
   // Unclassified eligibility prose can describe the criterion itself, rather
   // than an extra condition on a published amount or limit.
   const conditionsUnverified = unresolvedInfo && (
-    group === 'Fees' || (group === 'Features' && item.label === 'CASHBACK_OFFER' && (cashback !== null || numeric !== null))
+    group === 'Fees' || group === 'Features' && item.value == null || (group === 'Features' && item.label === 'CASHBACK_OFFER' && (cashback !== null || numeric !== null))
     || (lvr && lvrValue !== 'Unknown')
   );
   return { label: label || uiJoin(group, ' ', uiCount(index + 1)), value: uiJoin(value || uiLabel('Unknown'), knownInfo && knownInfo !== residency ? uiJoin(' · ', knownInfo) : null),
