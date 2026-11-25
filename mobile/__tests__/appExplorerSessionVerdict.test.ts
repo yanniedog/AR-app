@@ -39,8 +39,10 @@ describe('real-use session verdict', () => {
     const stale = verdict({ ...base, freshness: { shown: '2026-11-22', latest: '2026-11-26' } }, null);
     expect(stale.outcome).toBe('fail');
     expect(stale.findings.map((f: { kind: string }) => f.kind)).toEqual(['stale-data']);
+    expect(stale.findings[0].text).toBe('Data date 2026-11-22 · Latest 2026-11-26');
     const none = verdict({ ...base, freshness: { shown: null, latest: '2026-11-26' } }, null);
-    expect(none.outcome).toBe('fail');
+    expect(none.outcome).toBe('attention');
+    expect(none.findings[0]).toMatchObject({ kind: 'stale-data', severity: 'friction' });
     const current = verdict({ ...base, freshness: { shown: '2026-11-26', latest: '2026-11-26' } }, null);
     expect(current.outcome).toBe('pass');
   });

@@ -338,6 +338,21 @@ describe('APK update state hydration', () => {
     expect(createDownloadTask).not.toHaveBeenCalled();
   });
 
+  it('replaces a download task left over from the retired Wi-Fi-only policy', async () => {
+    const legacy = createDownloadTask({
+      id: apkDownloadTaskId(remote.build_number, remote.sha256), url: remote.download_url, destination,
+      isAllowedOverMetered: false, isAllowedOverRoaming: false,
+    });
+    Object.assign(legacy, { state: 'PAUSED', bytesDownloaded: 10_100_032, bytesTotal: remote.bytes });
+    getExistingTasksMock.mockResolvedValue([legacy]);
+    jest.mocked(createDownloadTask).mockClear();
+    await ensureApkBackgroundDownload(remote);
+    expect(legacy.stop).toHaveBeenCalled();
+    expect(createDownloadTask).toHaveBeenCalledWith(expect.objectContaining({
+      isAllowedOverMetered: true, isAllowedOverRoaming: true,
+    }));
+  });
+
   it.each(['DOWNLOADING', 'PENDING', 'PAUSED'])('replaces a stalled %s task and ignores its late callback', async (state) => {
     const task = createDownloadTask({
       id: apkDownloadTaskId(remote.build_number, remote.sha256), url: remote.download_url, destination,

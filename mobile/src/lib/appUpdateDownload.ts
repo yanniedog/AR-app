@@ -416,6 +416,14 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
   if (!match) return false;
 
   const state = String(match.state || '').toUpperCase();
+  // A task created while a Wi-Fi-only policy existed keeps those native limits and cannot use mobile data.
+  if (state !== 'DONE' &&
+      (match.downloadParams?.isAllowedOverMetered === false || match.downloadParams?.isAllowedOverRoaming === false)) {
+    debugLog.info('app-update', `replacing network-restricted download build=${manifest.build_number}`);
+    await stopTaskQuietly(match);
+    if (activeTask?.id === match.id) activeTask = null;
+    return false;
+  }
   debugLog.info(
     'app-update',
     `reconcile build=${manifest.build_number} nativeState=${state || 'unknown'} bytes=${match.bytesDownloaded}/${match.bytesTotal || manifest.bytes || 'unknown'}`,
