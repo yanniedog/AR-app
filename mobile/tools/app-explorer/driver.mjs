@@ -205,7 +205,7 @@ function shiftedBetween(prevNodes, nodes) {
  * layout jumps after content showed, and whether the screen ended blank or in an error state.
  * Samples are one UI dump apart (dumpMs). Scroll steps skip the layout jump count.
  */
-async function settle(timeoutMs, since = Date.now(), before = null, { scrolling = false } = {}) {
+async function settle(timeoutMs, since = Date.now(), before = null, { scrolling = false, until } = {}) {
   const start = since;
   let prev = null;
   let last = { nodes: [] };
@@ -234,7 +234,7 @@ async function settle(timeoutMs, since = Date.now(), before = null, { scrolling 
   while (Date.now() - start < timeoutMs) {
     const dumpStarted = Date.now();
     const prevNodes = last.nodes;
-    last = await dumpUi();
+    last = await dumpUi(until ? start + timeoutMs : undefined);
     dumps += 1;
     dumpTotal += Date.now() - dumpStarted;
     if (dismissSystemDialog(last.nodes)) {
@@ -256,7 +256,7 @@ async function settle(timeoutMs, since = Date.now(), before = null, { scrolling 
     if (fp !== prev) firstSeen = dumpStarted;
     if (fp === prev && !loading && last.nodes.length > 0) {
       stableSince ??= Date.now();
-      if (Date.now() - stableSince >= 600) {
+      if (Date.now() - stableSince >= 600 && (!until || until(last.nodes))) {
         return { ...last, settleMs: Math.max(0, firstSeen - start), timedOut: false, ...metrics() };
       }
     } else {
@@ -287,6 +287,21 @@ function matches(node, sel) {
     if (norm(node.text) !== want && norm(node.desc) !== want) return false;
   }
   return true;
+}
+
+function uiConditions(nodes, required, forbidden) {
+  const app = nodes.filter(node => node.pkg === PKG);
+  const missing = required.filter(sel => !findNode(app, sel));
+  const present = forbidden.filter(sel => findNode(app, sel));
+  return { available: app.length > 0, matched: app.length > 0 && !missing.length && !present.length, missing, present };
+}
+
+export function backDestination(step, before) {
+  const required = [step.then ?? []].flat();
+  const forbidden = [step.gone ?? []].flat();
+  if (!required.length && !forbidden.length) return undefined;
+  const source = uiConditions(before, required, forbidden);
+  return nodes => source.available && !source.matched && uiConditions(nodes, required, forbidden).matched;
 }
 
 function normalizeSelector(sel) {
@@ -330,6 +345,27 @@ function screenSize() {
   const out = sh('wm size');
   const m = /Override size: (\d+)x(\d+)/.exec(out) || /Physical size: (\d+)x(\d+)/.exec(out);
   return m ? [Number(m[1]), Number(m[2])] : [720, 1600];
+}
+
+function visibleKeyboardBounds([width, height]) {
+  // UiAutomator may return only the app window even when the screenshot shows the IME.
+  let displays;
+  try {
+    displays = sh('dumpsys -t 2 window displays', { timeout: 2500 });
+  } catch {
+    return undefined;
+  }
+  const lines = displays.split('\n').filter(line => /\bInsetsSource id=\S+ type=ime /.test(line));
+  if (!lines.length) return undefined;
+  const visible = lines.find(line => /\bvisible=true\b/.test(line));
+  if (!visible) return lines.every(line => /\bvisible=false\b/.test(line)) ? null : undefined;
+  const frame = /\bvisibleFrame=(\[.*?\]\[.*?\])/.exec(visible)?.[1]
+    ?? /\bframe=(\[.*?\]\[.*?\])/.exec(visible)?.[1];
+  const match = /^\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]$/.exec(frame || '');
+  if (!match) return undefined;
+  const [left, top, right, bottom] = match.slice(1).map(Number);
+  const bounds = [Math.max(0, left), Math.max(0, top), Math.min(width, right), Math.min(height, bottom)];
+  return bounds[2] > bounds[0] && bounds[3] > bounds[1] ? bounds : undefined;
 }
 
 function appPid() {
@@ -400,16 +436,27 @@ class Explorer {
     this.current = { nodes: [] };
   }
 
-  async record(name, extra = {}, settleTimeout = this.args.settleTimeoutMs, since = Date.now()) {
+  captureScreen(slug) {
+    const before = visibleKeyboardBounds(this.size);
+    const png = adb(['exec-out', 'screencap', '-p'], { encoding: 'buffer', allowFail: true });
+    const after = visibleKeyboardBounds(this.size);
+    const file = path.join(this.out, 'screens', `${slug}.png`);
+    if (png?.length) fs.writeFileSync(file, png);
+    else fs.rmSync(file, { force: true });
+    if (before === undefined || after === undefined) return { keyboardMeasurement: 'unavailable' };
+    if (JSON.stringify(before) !== JSON.stringify(after)) return { keyboardMeasurement: 'unstable' };
+    return { keyboardBounds: after, keyboardMeasurement: 'measured' };
+  }
+
+  async record(name, extra = {}, settleTimeout = this.args.settleTimeoutMs, since = Date.now(), until) {
     const index = String(this.steps.length + 1).padStart(3, '0');
     const slug = `${index}-${String(name).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 50).toLowerCase()}`;
     const anrBefore = systemDialogs.filter(d => d.ours).length;
     const before = this.current.nodes.length ? fingerprint(this.current.nodes) : null;
-    const settled = await settle(settleTimeout, since, before, { scrolling: Boolean(this.scrollStep) });
+    const settled = await settle(settleTimeout, since, before, { scrolling: Boolean(this.scrollStep), until });
     const appAnr = systemDialogs.filter(d => d.ours).length > anrBefore;
     this.current = settled;
-    const png = adb(['exec-out', 'screencap', '-p'], { encoding: 'buffer', allowFail: true });
-    if (png && png.length) fs.writeFileSync(path.join(this.out, 'screens', `${slug}.png`), png);
+    const keyboard = this.captureScreen(slug);
     const screen = summarize(settled.nodes);
     fs.writeFileSync(path.join(this.out, 'ui', `${slug}.json`), JSON.stringify(screen, null, 1));
     fs.writeFileSync(path.join(this.out, 'ui', `${slug}.nodes.json`), JSON.stringify(rawNodes(settled.nodes, this.size)));
@@ -423,6 +470,7 @@ class Explorer {
       name,
       slug,
       settleMs: settled.settleMs,
+      ...keyboard,
       settleTimedOut: settled.timedOut,
       responseMs: settled.responseMs ?? undefined,
       firstContentMs: settled.firstContentMs ?? undefined,
@@ -537,14 +585,13 @@ class Explorer {
     const slug = `${index}-${String(name).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 50).toLowerCase()}`;
     const { nodes } = await dumpUi();
     dismissSystemDialog(nodes);
-    const png = adb(['exec-out', 'screencap', '-p'], { encoding: 'buffer', allowFail: true });
-    if (png && png.length) fs.writeFileSync(path.join(this.out, 'screens', `${slug}.png`), png);
+    const keyboard = this.captureScreen(slug);
     const screen = summarize(nodes);
     fs.writeFileSync(path.join(this.out, 'ui', `${slug}.json`), JSON.stringify(screen, null, 1));
     fs.writeFileSync(path.join(this.out, 'ui', `${slug}.nodes.json`), JSON.stringify(rawNodes(nodes, this.size)));
     const log = drainLogcat();
     this.logAll += `\n===== ${slug} =====\n${log}`;
-    const step = { n: this.steps.length + 1, name, slug, settleMs: 0, alive: Boolean(appPid()), frames: frameStats(), memKb: memoryKb(), log: classifyLog(log), visible: screen.slice(0, 40).map(i => i.label).filter(Boolean), ...extra };
+    const step = { n: this.steps.length + 1, name, slug, settleMs: 0, ...keyboard, alive: Boolean(appPid()), frames: frameStats(), memKb: memoryKb(), log: classifyLog(log), visible: screen.slice(0, 40).map(i => i.label).filter(Boolean), ...extra };
     sh(`dumpsys gfxinfo ${PKG} reset`, { allowFail: true });
     this.steps.push(step);
     console.log(`[${slug}] snapshot${step.alive ? '' : ' CRASHED'}`);
@@ -802,11 +849,14 @@ class Explorer {
       return rec;
     }
     if (step.back !== undefined) {
+      const until = backDestination(step, this.current.nodes);
       const t0 = Date.now();
       for (let i = 0; i < (step.times ?? 1); i += 1) sh('input keyevent 4');
-      const rec = await this.record(label, {}, undefined, t0);
+      const rec = await this.record(label, {}, undefined, t0, until);
+      if (rec.alive && until && !until(this.current.nodes)) {
+        rec.error = 'Back destination was not observed';
+      }
       if (step.session && rec.responseMs == null && rec.alive) rec.deadEnd = true;
-      await this.postconditions(step, rec);
       return rec;
     }
     if (step.key) {
@@ -849,13 +899,11 @@ class Explorer {
     const deadline = Date.now() + (step.thenTimeoutMs ?? 8000);
     let nodes = this.current.nodes;
     while (true) {
-      const appNodes = nodes.filter(node => node.pkg === PKG);
-      const missing = required.filter(sel => !findNode(appNodes, sel));
-      const present = forbidden.filter(sel => findNode(appNodes, sel));
-      if (!missing.length && !present.length && appNodes.length) return;
+      const { available, matched, missing, present } = uiConditions(nodes, required, forbidden);
+      if (matched) return;
       const remaining = deadline - Date.now();
       if (remaining <= 0) {
-        rec.error = appNodes.length
+        rec.error = available
           ? `UI assertion failed: missing ${JSON.stringify(missing)}, still visible ${JSON.stringify(present)}`
           : 'UI assertion failed: app hierarchy unavailable';
         return;
