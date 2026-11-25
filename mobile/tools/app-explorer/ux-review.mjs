@@ -162,6 +162,7 @@ export async function reviewRun(dir, { sample } = {}) {
     screens.push({ slug: step.slug, name: step.name || step.slug, nodes, step, size: (!Array.isArray(saved) && saved.size) || defaultSize });
   }
   let contrastMeasured = 0;
+  let keyboardMeasurementGaps = 0;
   const findings = [];
   const perScreen = [];
   for (const s of screens) {
@@ -170,7 +171,11 @@ export async function reviewRun(dir, { sample } = {}) {
     const r = checkScreen({ screen: s.name, nodes: s.nodes, size: s.size, density, pkg: PKG, settleTimedOut: !!s.step.settleTimedOut, allowProse: legal });
     const list = [...r.findings];
     const png = loadPng(path.join(dir, 'screens', `${s.slug}.png`));
-    if (png) { list.push(...contrastFindings({ screen: s.name, nodes: s.nodes, png, pkg: PKG, density, size: s.size })); contrastMeasured += 1; }
+    if (png && ['unavailable', 'unstable'].includes(s.step.keyboardMeasurement)) keyboardMeasurementGaps += 1;
+    if (png && s.step.keyboardMeasurement !== 'unstable') {
+      list.push(...contrastFindings({ screen: s.name, nodes: s.nodes, png, pkg: PKG, density, size: s.size, keyboardBounds: s.step.keyboardBounds }));
+      contrastMeasured += 1;
+    }
     const sortedBy = (s.nodes.map(n => /^Sort · (Comparison rate|Advertised rate|Ongoing rate|Rate)\b/.exec(n.text || n.desc || '')).find(Boolean) || [])[1] || null;
     const section = (s.nodes.map(n => n.selected && /^(Home loans|Savings|Term deposits)\b/.exec((n.text || n.desc || '').trim())).find(Boolean) || [])[1];
     const acc = accuracyFindings({ screen: s.name, nodes: s.nodes, sample, sortedBy, lowerIsBetter: section ? section === 'Home loans' : undefined });
@@ -216,6 +221,10 @@ export async function reviewRun(dir, { sample } = {}) {
     findings.push({ check: 'no-return-reason', severity: 'minor', screen: 'all', text: '', at: [0, 0], detail: 'no change or recency signal and no alerts' });
   }
   const reviewed = perScreen.length;
+  if (keyboardMeasurementGaps) {
+    findings.push({ check: 'contrast-not-measured', severity: 'minor', screen: 'all', text: '', at: [0, 0],
+      detail: `Android keyboard bounds unavailable or unstable on ${keyboardMeasurementGaps} captures`, fix: FIXES['contrast-not-measured'] });
+  }
   if (reviewed && !contrastMeasured) findings.push({ check: 'contrast-not-measured', severity: 'minor', screen: 'all', text: '', at: [0, 0], detail: 'no screenshot could be read, so contrast was not checked', fix: FIXES['contrast-not-measured'] });
   for (const f of findings) if (!f.fix) f.fix = FIXES[f.check] || '';
   const rubric = RUBRIC.map(([key, title, checks]) => {
