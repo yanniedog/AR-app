@@ -47,7 +47,31 @@ function parseArgs(argv) {
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const MAX_HOSTED_DEBUG_LOG_BYTES = 32 * 1024 * 1024;
-const SHARE_POINTER_BYTES = 300;
+const SHARE_POINTER_LIMIT = 300;
+
+function createSharePointerReader() {
+  const decoder = new TextDecoder();
+  let pointer = '';
+  let trailingWhitespace = false;
+  const append = text => {
+    const token = pointer ? text.trimEnd() : text.trim();
+    if ((trailingWhitespace && token) || /\s/.test(token) || pointer.length + token.length >= SHARE_POINTER_LIMIT) {
+      pointer = null;
+      return;
+    }
+    pointer += token;
+    if (pointer && /\s$/.test(text)) trailingWhitespace = true;
+  };
+  return {
+    write(chunk) {
+      if (pointer !== null) append(decoder.decode(chunk, { stream: true }));
+    },
+    finish() {
+      if (pointer !== null) append(decoder.decode());
+      return pointer ?? '';
+    },
+  };
+}
 
 /** Follow the share pointer and read the host. Debug checks count bytes without retaining the body. */
 export async function fetchUploadedLog(url, { debugLog = false } = {}) {
@@ -57,20 +81,22 @@ export async function fetchUploadedLog(url, { debugLog = false } = {}) {
     const res = await fetch(current, { signal: AbortSignal.timeout(60000) });
     if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
     const chunks = [];
+    const pointerReader = debugLog ? createSharePointerReader() : null;
     let bytes = 0;
     for await (const chunk of res.body ?? []) {
       bytes += chunk.byteLength;
       if (bytes > maxBytes) throw new Error('Hosted log exceeds the download byte limit');
-      if (!debugLog || bytes < SHARE_POINTER_BYTES) chunks.push(chunk);
+      if (pointerReader) pointerReader.write(chunk);
+      else chunks.push(chunk);
     }
-    const body = !debugLog || bytes < SHARE_POINTER_BYTES ? Buffer.concat(chunks, bytes).toString('utf8') : null;
-    const pointer = body?.trim() ?? '';
-    if (pointer.length < SHARE_POINTER_BYTES && /^https:\/\/paste\.(?:rs|c-net\.org)\/[A-Za-z0-9._~-]+$/.test(pointer)) {
+    const body = debugLog ? null : Buffer.concat(chunks, bytes).toString('utf8');
+    const pointer = pointerReader?.finish() ?? body?.trim() ?? '';
+    if (pointer.length < SHARE_POINTER_LIMIT && /^https:\/\/paste\.(?:rs|c-net\.org)\/[A-Za-z0-9._~-]+$/.test(pointer)) {
       current = pointer;
       continue;
     }
     if (!bytes) throw new Error('Hosted log is empty');
-    return { body: debugLog ? null : body, bytes, status: res.status, contentUrl: current };
+    return { body, bytes, status: res.status, contentUrl: current };
   }
   throw new Error('too many share-link hops');
 }
@@ -672,6 +698,7 @@ class Explorer {
         result.contentUrl = contentUrl;
         result.bytes = bytes;
       } catch (error) {
+        if (Number.isInteger(error?.status)) result.status = error.status;
         result.error = String(error.message || error);
       }
     }
@@ -945,7 +972,7 @@ function loadBaseline(file) {
 function renderMarkdown(report, baseline) {
   const debugLog = report.audit?.debugLog;
   const debugLogSummary = debugLog?.url && debugLog.bytes
-    ? `${debugLog.bytes} bytes read from host ${debugLog.url}`
+    ? `${debugLog.bytes} bytes read from host ${debugLog.contentUrl ?? debugLog.url}`
     : debugLog?.url ? `fetch failed (${debugLog.error ?? debugLog.status}) ${debugLog.url}`
     : debugLog?.error ?? 'none';
   const crashed = report.steps.filter(s => !s.alive);
