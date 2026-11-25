@@ -25,6 +25,7 @@ jest.mock('../src/components/ui', () => {
 });
 // eslint-disable-next-line import/first -- platform mocks above
 import { ComparisonDisclosures, PersonalCostComparisonDisclosure } from '../src/components/product/ComparisonDisclosures';
+import { dedupeDetailItems } from '../src/lib/productUiFacts';
 
 test('real Bankwest detail exposes every published fee and eligibility condition, including zero', () => {
   const detail = fixture.detail as ProductDetail;
@@ -73,7 +74,8 @@ test('original published descriptive placeholders are hidden while labels remain
     act(() => tree.root.findByType('Disclosure').props.onToggle());
     const textNodes = tree.root.findAllByType('AppText').map((n: any) => n.children.join(''));
     expect(textNodes.some((text: string) => /^(null|none)$/i.test(text.trim()))).toBe(false);
-    expect(textNodes.length).toBeGreaterThanOrEqual(items.length);
+    // Repeated source entries render once, so the floor is the distinct item count.
+    expect(textNodes.length).toBeGreaterThanOrEqual(dedupeDetailItems(items).length);
     act(() => tree.unmount());
   }
 });
