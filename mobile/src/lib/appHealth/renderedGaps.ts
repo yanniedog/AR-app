@@ -40,6 +40,7 @@ export function auditRenderedProductDetails(products: Record<string, ProductDeta
     for (const fact of distinctFacts) {
       const rendered = uiNormalizedProductFact(fact);
       if (rendered.value.startsWith('Unknown')) factsUnknown += 1;
+      if (rendered.conditionsUnverified) unverifiedConditions += 1;
       if (RAW_CODE.test(rendered.label)) rawCodes += 1;
     }
     const fees = dedupeDetailItems(detail.fees);

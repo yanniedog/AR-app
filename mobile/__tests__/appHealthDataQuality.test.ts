@@ -518,6 +518,20 @@ describe('app-health data quality', () => {
     expect(metrics.feeListsWithoutUpfrontFee).toBe(1);
   });
 
+  it('counts unverified conditions that appear only in normalized facts', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    const key = snapshot.core!.sections.Mortgage.rates[0].product_key;
+    snapshot.details!.products = {
+      [key]: {
+        description: 'Loan', last_updated: '2026-01-01', links: { overview: 'https://example.com/o' },
+        facts: [{ id: 'f-2', kind: 'feature', canonicalKey: 'feature.offset', sourceType: 'OFFSET', condition: 'Subject to approval' }],
+      },
+    } as never;
+    const metrics = byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+      APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS).metrics;
+    expect(metrics.renderedUnverifiedConditions).toBeGreaterThanOrEqual(1);
+  });
+
   it('warns and records internal product detail gaps and unpublished fees', () => {
     const { snapshot, contract } = makeHealthyDataFixture();
     const mortgageKey = snapshot.core!.sections.Mortgage.rates[0].product_key;
