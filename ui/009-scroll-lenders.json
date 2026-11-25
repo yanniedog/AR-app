@@ -1,0 +1,378 @@
+[
+ {
+  "label": "",
+  "flags": "tap",
+  "at": [
+   360,
+   800
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "at": [
+   300,
+   224
+  ]
+ },
+ {
+  "label": "Close Temporary filters",
+  "flags": "tap",
+  "at": [
+   640,
+   224
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   859
+  ]
+ },
+ {
+  "label": "AFG Commercial",
+  "flags": "tap",
+  "at": [
+   164,
+   160
+  ]
+ },
+ {
+  "label": "AFG Commercial",
+  "at": [
+   164,
+   146
+  ]
+ },
+ {
+  "label": "AFG Home Loans - Retro",
+  "flags": "tap",
+  "at": [
+   490,
+   160
+  ]
+ },
+ {
+  "label": "AFG Home Loans - Retro",
+  "at": [
+   490,
+   146
+  ]
+ },
+ {
+  "label": "AFG Home Loans Alpha",
+  "flags": "tap",
+  "at": [
+   206,
+   216
+  ]
+ },
+ {
+  "label": "AFG Home Loans Alpha",
+  "at": [
+   206,
+   202
+  ]
+ },
+ {
+  "label": "Alb'ay Ijarah Home Finance",
+  "flags": "tap",
+  "at": [
+   226,
+   272
+  ]
+ },
+ {
+  "label": "Alb'ay Ijarah Home Finance",
+  "at": [
+   226,
+   258
+  ]
+ },
+ {
+  "label": "AMP - My AMP",
+  "flags": "tap",
+  "at": [
+   555,
+   272
+  ]
+ },
+ {
+  "label": "AMP - My AMP",
+  "at": [
+   555,
+   258
+  ]
+ },
+ {
+  "label": "ANZ",
+  "flags": "tap",
+  "at": [
+   86,
+   328
+  ]
+ },
+ {
+  "label": "ANZ",
+  "at": [
+   86,
+   319
+  ]
+ },
+ {
+  "label": "Apollo",
+  "flags": "tap",
+  "at": [
+   221,
+   328
+  ]
+ },
+ {
+  "label": "Apollo",
+  "at": [
+   221,
+   319
+  ]
+ },
+ {
+  "label": "Arab Bank Australia Limited",
+  "flags": "tap",
+  "at": [
+   229,
+   431
+  ]
+ },
+ {
+  "label": "Arab Bank Australia Limited",
+  "at": [
+   229,
+   431
+  ]
+ },
+ {
+  "label": "Athena Home Loans",
+  "flags": "tap",
+  "at": [
+   184,
+   543
+  ]
+ },
+ {
+  "label": "Athena Home Loans",
+  "at": [
+   184,
+   543
+  ]
+ },
+ {
+  "label": "Aussie Activate",
+  "flags": "tap",
+  "at": [
+   474,
+   543
+  ]
+ },
+ {
+  "label": "Aussie Activate",
+  "at": [
+   474,
+   543
+  ]
+ },
+ {
+  "label": "Aussie Elevate",
+  "flags": "tap",
+  "at": [
+   149,
+   655
+  ]
+ },
+ {
+  "label": "Aussie Elevate",
+  "at": [
+   149,
+   655
+  ]
+ },
+ {
+  "label": "Aussie Select",
+  "flags": "tap",
+  "at": [
+   391,
+   655
+  ]
+ },
+ {
+  "label": "Aussie Select",
+  "at": [
+   391,
+   655
+  ]
+ },
+ {
+  "label": "Australian Military Bank",
+  "flags": "tap",
+  "at": [
+   203,
+   767
+  ]
+ },
+ {
+  "label": "Australian Military Bank",
+  "at": [
+   203,
+   767
+  ]
+ },
+ {
+  "label": "Australian Mutual Bank LTD",
+  "flags": "tap",
+  "at": [
+   227,
+   879
+  ]
+ },
+ {
+  "label": "Australian Mutual Bank LTD",
+  "at": [
+   227,
+   879
+  ]
+ },
+ {
+  "label": "Auswide Bank Ltd",
+  "flags": "tap",
+  "at": [
+   169,
+   991
+  ]
+ },
+ {
+  "label": "Auswide Bank Ltd",
+  "at": [
+   169,
+   991
+  ]
+ },
+ {
+  "label": "Bank Australia",
+  "flags": "tap",
+  "at": [
+   436,
+   991
+  ]
+ },
+ {
+  "label": "Bank Australia",
+  "at": [
+   436,
+   991
+  ]
+ },
+ {
+  "label": "Bank First",
+  "flags": "tap",
+  "at": [
+   119,
+   1103
+  ]
+ },
+ {
+  "label": "Bank First",
+  "at": [
+   119,
+   1103
+  ]
+ },
+ {
+  "label": "Bank of China",
+  "flags": "tap",
+  "at": [
+   334,
+   1103
+  ]
+ },
+ {
+  "label": "Bank of China",
+  "at": [
+   334,
+   1103
+  ]
+ },
+ {
+  "label": "Bank of Melbourne",
+  "flags": "tap",
+  "at": [
+   175,
+   1215
+  ]
+ },
+ {
+  "label": "Bank of Melbourne",
+  "at": [
+   175,
+   1215
+  ]
+ },
+ {
+  "label": "Bank of Queensland Limited",
+  "flags": "tap",
+  "at": [
+   232,
+   1327
+  ]
+ },
+ {
+  "label": "Bank of Queensland Limited",
+  "at": [
+   232,
+   1327
+  ]
+ },
+ {
+  "label": "Show All 139 Lenders",
+  "flags": "tap",
+  "at": [
+   187,
+   1406
+  ]
+ },
+ {
+  "label": "Show All 139 Lenders",
+  "at": [
+   187,
+   1420
+  ]
+ },
+ {
+  "label": "Reset",
+  "flags": "tap",
+  "at": [
+   154,
+   1502
+  ]
+ },
+ {
+  "label": "Reset",
+  "at": [
+   154,
+   1503
+  ]
+ },
+ {
+  "label": "Show 4,362 rates",
+  "flags": "tap",
+  "at": [
+   494,
+   1502
+  ]
+ },
+ {
+  "label": "Show 4,362 rates",
+  "at": [
+   494,
+   1503
+  ]
+ }
+]

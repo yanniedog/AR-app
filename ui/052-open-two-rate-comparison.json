@@ -1,0 +1,166 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Compare",
+  "at": [
+   234,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "Pending · Observed: 26 Nov 2026 · Pending: 26 Nov 2026",
+  "at": [
+   387,
+   281
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   984
+  ]
+ },
+ {
+  "label": "Differences",
+  "at": [
+   360,
+   423
+  ]
+ },
+ {
+  "label": "Broken Hill Bank · Choice Home Loan · 1 / 2",
+  "at": [
+   360,
+   1036
+  ]
+ },
+ {
+  "label": "Broken Hill Bank",
+  "at": [
+   68,
+   540
+  ]
+ },
+ {
+  "label": "Choice Home Loan",
+  "at": [
+   324,
+   528
+  ]
+ },
+ {
+  "label": "Lowest rate",
+  "at": [
+   616,
+   531
+  ]
+ },
+ {
+  "label": "Broken Hill Bank",
+  "at": [
+   324,
+   576
+  ]
+ },
+ {
+  "label": "Comparison rate",
+  "at": [
+   360,
+   644
+  ]
+ },
+ {
+  "label": "5.99%",
+  "at": [
+   360,
+   708
+  ]
+ },
+ {
+  "label": "Payable rate",
+  "at": [
+   360,
+   796
+  ]
+ },
+ {
+  "label": "5.94%",
+  "at": [
+   360,
+   836
+  ]
+ },
+ {
+  "label": "Listed LVR",
+  "at": [
+   360,
+   909
+  ]
+ },
+ {
+  "label": "≤80.0%",
+  "at": [
+   360,
+   949
+  ]
+ },
+ {
+  "label": "Fees",
+  "at": [
+   360,
+   1022
+  ]
+ },
+ {
+  "label": "TRANSACTION: $35 · UPFRONT: $649.02 · UPFRONT: $19.95 · Loan Establishment Fee · EVENT: $655 · Loan Establishment Fee · ",
+  "at": [
+   360,
+   1162
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   360,
+   1335
+  ]
+ },
+ {
+  "label": "Minimum age: 18 years · Other: Unknown · Residency status: Australian citizen or Permanent resident",
+  "at": [
+   360,
+   1395
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   360,
+   1488
+  ]
+ },
+ {
+  "label": "Digital banking: Unknown · Early / extra repayments · LOYALTY_PROGRAM: Unknown · Other: Unknown · Other: Unknown · Other",
+  "at": [
+   360,
+   1554
+  ]
+ }
+]

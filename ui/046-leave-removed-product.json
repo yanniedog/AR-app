@@ -1,0 +1,152 @@
+[
+ {
+  "label": "Saved",
+  "at": [
+   361,
+   149
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   673,
+   149
+  ]
+ },
+ {
+  "label": "Pending · Observed: 26 Nov 2026 · Pending: 26 Nov 2026",
+  "at": [
+   387,
+   297
+  ]
+ },
+ {
+  "label": "No saved rates",
+  "at": [
+   360,
+   764
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   144,
+   956
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   144,
+   954
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   956
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   954
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   576,
+   956
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   576,
+   954
+  ]
+ },
+ {
+  "label": "Add my rate",
+  "flags": "tap",
+  "at": [
+   360,
+   1068
+  ]
+ },
+ {
+  "label": "Add my rate",
+  "at": [
+   361,
+   1069
+  ]
+ },
+ {
+  "label": "Browse rates",
+  "flags": "tap",
+  "at": [
+   360,
+   1190
+  ]
+ },
+ {
+  "label": "Browse rates",
+  "at": [
+   361,
+   1190
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap,sel",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "sel",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

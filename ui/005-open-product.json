@@ -1,0 +1,251 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I No Offset Mortgage",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "MoveBank",
+  "at": [
+   72,
+   361
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I No Offset Mortgage",
+  "at": [
+   414,
+   293
+  ]
+ },
+ {
+  "label": "MoveBank",
+  "flags": "tap",
+  "at": [
+   205,
+   389
+  ]
+ },
+ {
+  "label": "MoveBank",
+  "at": [
+   205,
+   361
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   414,
+   457
+  ]
+ },
+ {
+  "label": "Comparison rate",
+  "at": [
+   360,
+   577
+  ]
+ },
+ {
+  "label": "6.39%",
+  "at": [
+   360,
+   645
+  ]
+ },
+ {
+  "label": "6.64% Advertised rate",
+  "at": [
+   360,
+   713
+  ]
+ },
+ {
+  "label": "Source date 25 Nov 2026",
+  "at": [
+   360,
+   773
+  ]
+ },
+ {
+  "label": "Save",
+  "flags": "tap",
+  "at": [
+   190,
+   923
+  ]
+ },
+ {
+  "label": "Save",
+  "at": [
+   217,
+   924
+  ]
+ },
+ {
+  "label": "Calculate",
+  "flags": "tap",
+  "at": [
+   530,
+   923
+  ]
+ },
+ {
+  "label": "Calculate",
+  "at": [
+   531,
+   923
+  ]
+ },
+ {
+  "label": "Hide Rate details",
+  "flags": "tap",
+  "at": [
+   360,
+   1149
+  ]
+ },
+ {
+  "label": "Rate details",
+  "at": [
+   328,
+   1149
+  ]
+ },
+ {
+  "label": "Rate type",
+  "at": [
+   315,
+   1249
+  ]
+ },
+ {
+  "label": "Fixed",
+  "at": [
+   655,
+   1249
+  ]
+ },
+ {
+  "label": "Term",
+  "at": [
+   319,
+   1301
+  ]
+ },
+ {
+  "label": "5 yrs",
+  "at": [
+   659,
+   1301
+  ]
+ },
+ {
+  "label": "Rate structure",
+  "at": [
+   315,
+   1353
+  ]
+ },
+ {
+  "label": "Fixed",
+  "at": [
+   655,
+   1353
+  ]
+ },
+ {
+  "label": "Repayment",
+  "at": [
+   232,
+   1389
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "at": [
+   572,
+   1389
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

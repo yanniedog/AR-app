@@ -1,0 +1,174 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "About",
+  "at": [
+   203,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Pending · Observed: 26 Nov 2026 · Pending: 26 Nov 2026",
+  "at": [
+   387,
+   305
+  ]
+ },
+ {
+  "label": "Australian Rates",
+  "at": [
+   364,
+   459
+  ]
+ },
+ {
+  "label": "Version",
+  "at": [
+   360,
+   559
+  ]
+ },
+ {
+  "label": "1.0.375 (431)",
+  "at": [
+   360,
+   607
+  ]
+ },
+ {
+  "label": "Share app",
+  "flags": "tap",
+  "at": [
+   360,
+   703
+  ]
+ },
+ {
+  "label": "Share app",
+  "at": [
+   362,
+   703
+  ]
+ },
+ {
+  "label": "Legal",
+  "at": [
+   364,
+   895
+  ]
+ },
+ {
+  "label": "Terms",
+  "flags": "tap",
+  "at": [
+   360,
+   1011
+  ]
+ },
+ {
+  "label": "Terms",
+  "at": [
+   362,
+   1011
+  ]
+ },
+ {
+  "label": "Open-source notices",
+  "flags": "tap",
+  "at": [
+   360,
+   1123
+  ]
+ },
+ {
+  "label": "Open-source notices",
+  "at": [
+   362,
+   1123
+  ]
+ },
+ {
+  "label": "Support",
+  "at": [
+   364,
+   1315
+  ]
+ },
+ {
+  "label": "Show Diagnostics",
+  "flags": "tap",
+  "at": [
+   360,
+   1388
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

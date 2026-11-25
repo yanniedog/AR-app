@@ -1,0 +1,332 @@
+[
+ {
+  "label": "Rates",
+  "at": [
+   361,
+   149
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   673,
+   149
+  ]
+ },
+ {
+  "label": "Pending · Observed: 26 Nov 2026 · Pending: 26 Nov 2026",
+  "at": [
+   387,
+   297
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   447
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   445
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   447
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   445
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   447
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   445
+  ]
+ },
+ {
+  "label": "Search",
+  "flags": "tap",
+  "at": [
+   386,
+   569
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "flags": "tap",
+  "at": [
+   80,
+   691
+  ]
+ },
+ {
+  "label": "Filter",
+  "at": [
+   80,
+   713
+  ]
+ },
+ {
+  "label": "Sort · Comparison rate",
+  "flags": "tap",
+  "at": [
+   234,
+   691
+  ]
+ },
+ {
+  "label": "Comparison",
+  "at": [
+   234,
+   713
+  ]
+ },
+ {
+  "label": "Done",
+  "flags": "tap,sel",
+  "at": [
+   386,
+   691
+  ]
+ },
+ {
+  "label": "Done",
+  "flags": "sel",
+  "at": [
+   386,
+   713
+  ]
+ },
+ {
+  "label": "Lenders",
+  "flags": "tap",
+  "at": [
+   514,
+   691
+  ]
+ },
+ {
+  "label": "Lenders",
+  "at": [
+   514,
+   713
+  ]
+ },
+ {
+  "label": "Search actions",
+  "flags": "tap",
+  "at": [
+   640,
+   691
+  ]
+ },
+ {
+  "label": "More",
+  "at": [
+   640,
+   713
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1074
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   807
+  ]
+ },
+ {
+  "label": "Edit",
+  "flags": "tap",
+  "at": [
+   121,
+   807
+  ]
+ },
+ {
+  "label": "Edit",
+  "at": [
+   147,
+   808
+  ]
+ },
+ {
+  "label": "Owner occupied",
+  "flags": "tap",
+  "at": [
+   349,
+   807
+  ]
+ },
+ {
+  "label": "Owner occupied",
+  "at": [
+   349,
+   807
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "flags": "tap",
+  "at": [
+   588,
+   807
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "at": [
+   601,
+   807
+  ]
+ },
+ {
+  "label": "Eligibility unverified · 862",
+  "at": [
+   360,
+   879
+  ]
+ },
+ {
+  "label": "Choice Home Loan, Broken Hill Bank, Comparison rate 5.99%, Advertised rate 5.94% · Variable · Principal & interest · Own",
+  "flags": "tap,sel",
+  "at": [
+   384,
+   971
+  ]
+ },
+ {
+  "label": "Broken Hill Bank · Choice Home Loan",
+  "id": "compact-product-name",
+  "flags": "sel",
+  "at": [
+   384,
+   930
+  ]
+ },
+ {
+  "label": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank, Comparison rate 6.00%, Advertised rate 6.54% · Variable · Principa",
+  "flags": "tap",
+  "at": [
+   384,
+   1115
+  ]
+ },
+ {
+  "label": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1074
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I No Offset Mortgage, MoveBank, Comparison rate 6.15%, Advertised rate 6.09% · Variable · Principal & i",
+  "flags": "tap",
+  "at": [
+   384,
+   1259
+  ]
+ },
+ {
+  "label": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1218
+  ]
+ },
+ {
+  "label": "Low Rate Home Loan Special Offer - Owner Occupied, Police Credit Union Ltd, Comparison rate 6.18%, Advertised rate 6.14%",
+  "flags": "tap",
+  "at": [
+   384,
+   1366
+  ]
+ },
+ {
+  "label": "Police Credit Union Ltd · Low Rate Home Loan Special Offer - Owner Occupied",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1362
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

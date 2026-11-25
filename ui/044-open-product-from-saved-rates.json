@@ -1,0 +1,210 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Pending · Observed: 26 Nov 2026 · Pending: 26 Nov 2026",
+  "at": [
+   387,
+   305
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan",
+  "at": [
+   414,
+   463
+  ]
+ },
+ {
+  "label": "Virgin Money",
+  "at": [
+   72,
+   531
+  ]
+ },
+ {
+  "label": "Virgin Money",
+  "flags": "tap",
+  "at": [
+   221,
+   535
+  ]
+ },
+ {
+  "label": "Virgin Money",
+  "at": [
+   221,
+   507
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   414,
+   603
+  ]
+ },
+ {
+  "label": "Comparison rate",
+  "at": [
+   360,
+   723
+  ]
+ },
+ {
+  "label": "6.36%",
+  "at": [
+   360,
+   791
+  ]
+ },
+ {
+  "label": "6.34% Advertised rate",
+  "at": [
+   360,
+   859
+  ]
+ },
+ {
+  "label": "Best advertised ↑ 25 bps · 8 Nov 2026 · 6.09% → 6.34%",
+  "at": [
+   360,
+   943
+  ]
+ },
+ {
+  "label": "Source date 5 Nov 2026",
+  "at": [
+   360,
+   1023
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap,sel",
+  "at": [
+   190,
+   1173
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   217,
+   1174
+  ]
+ },
+ {
+  "label": "Calculate",
+  "flags": "tap",
+  "at": [
+   530,
+   1173
+  ]
+ },
+ {
+  "label": "Calculate",
+  "at": [
+   531,
+   1173
+  ]
+ },
+ {
+  "label": "Hide Rate details",
+  "flags": "tap",
+  "at": [
+   360,
+   1364
+  ]
+ },
+ {
+  "label": "Rate details",
+  "at": [
+   328,
+   1384
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

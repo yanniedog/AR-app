@@ -1,0 +1,214 @@
+[
+ {
+  "label": "Saved",
+  "at": [
+   361,
+   149
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   673,
+   149
+  ]
+ },
+ {
+  "label": "Pending · Observed: 26 Nov 2026 · Pending: 26 Nov 2026",
+  "at": [
+   387,
+   297
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   888
+  ]
+ },
+ {
+  "label": "Your entered rates",
+  "at": [
+   360,
+   459
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   584
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   582
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   584
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   582
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   584
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   582
+  ]
+ },
+ {
+  "label": "Add my rate",
+  "flags": "tap",
+  "at": [
+   360,
+   696
+  ]
+ },
+ {
+  "label": "Add my rate",
+  "at": [
+   361,
+   697
+  ]
+ },
+ {
+  "label": "Entered rates",
+  "at": [
+   114,
+   812
+  ]
+ },
+ {
+  "label": "This device",
+  "at": [
+   617,
+   812
+  ]
+ },
+ {
+  "label": "Saved rates",
+  "at": [
+   360,
+   892
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   360,
+   972
+  ]
+ },
+ {
+  "label": "View Virgin Money · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1080
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.36%, Advertised rate 6.34% · Variable · Principal & interes",
+  "flags": "tap",
+  "at": [
+   328,
+   1080
+  ]
+ },
+ {
+  "label": "Virgin · Virgin Money Lite Home Loan",
+  "id": "compact-product-name",
+  "at": [
+   328,
+   1039
+  ]
+ },
+ {
+  "label": "Remove, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.36%, Listed LVR >70.0%–80.0%",
+  "id": "rate-save:Virgin%20Money%7C5bc12280-2272-ee11-8179-6045bd3d38f0%7CRESIDENTIAL_MORTGAGES%7CVirgin%20Money%20Lite%20Home%20Loan:151",
+  "flags": "tap,sel",
+  "at": [
+   528,
+   1080
+  ]
+ },
+ {
+  "label": "Enable alerts · Virgin Money · Virgin Money Lite Home Loan",
+  "flags": "tap",
+  "at": [
+   640,
+   1080
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap,sel",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "sel",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
