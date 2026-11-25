@@ -12,6 +12,7 @@ import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { rateConditionFixture } from '../testUtils/rateConditions';
 import { router } from 'expo-router';
+import * as searchPreparation from '../src/hooks/usePreparedSearchRows';
 const originalRatesSession = captureRatesSession();
 let mockParams: Record<string, string | string[]> = { section: 'TD' };
 
@@ -161,10 +162,16 @@ function chooseBankSort(tree: any) {
   act(() => option.props.onPress());
 }
 
-test('a closed suitability gate offers recovery instead of claiming no products match', () => {
+test('a closed suitability gate defers row preparation and offers recovery', () => {
+  const preparer = jest.spyOn(searchPreparation, 'usePreparedSearchRows');
   let tree: any;
   act(() => { tree = TestRenderer.create(<Search />); });
   try {
+    expect(preparer).toHaveBeenCalled();
+    for (const args of preparer.mock.calls) {
+      expect(args[0]).toHaveLength(0);
+      expect(args[9]).toBe(false);
+    }
     expect(tree.root.findByType('EmptyState' as any).props.title).toBe('Rates unavailable');
     expect(tree.root.findAllByProps({ title: 'Reset Rates view' })).toHaveLength(0);
     expect(tree.root.findByType('SearchReportExport' as any).props.disabled).toBe(true);
@@ -172,6 +179,8 @@ test('a closed suitability gate offers recovery instead of claiming no products 
     act(() => tree.root.findByProps({ title: 'Retry' }).props.onPress());
     expect(mockEnsureDetails).toHaveBeenCalledWith({ force: true, abandonInFlight: true });
     act(() => setSuitabilityAllowed(new Set([mockState.productKey])));
+    expect(preparer.mock.lastCall?.[0].length).toBeGreaterThan(0);
+    expect(preparer.mock.lastCall?.[9]).toBe(true);
     expect(tree.root.findByType('FlashList' as any).props.data.length).toBeGreaterThan(0);
     expect(tree.root.findAllByType('EmptyState' as any)).toHaveLength(0);
   } finally { act(() => tree.unmount()); }
