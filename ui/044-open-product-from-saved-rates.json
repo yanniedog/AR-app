@@ -1,0 +1,217 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Unity Bank",
+  "at": [
+   72,
+   385
+  ]
+ },
+ {
+  "label": "Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO",
+  "at": [
+   414,
+   317
+  ]
+ },
+ {
+  "label": "Unity Bank",
+  "flags": "tap",
+  "at": [
+   205,
+   437
+  ]
+ },
+ {
+  "label": "Unity Bank",
+  "at": [
+   205,
+   409
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   414,
+   505
+  ]
+ },
+ {
+  "label": "Comparison rate",
+  "at": [
+   360,
+   625
+  ]
+ },
+ {
+  "label": "6.39%",
+  "at": [
+   360,
+   693
+  ]
+ },
+ {
+  "label": "6.34% Advertised rate",
+  "at": [
+   360,
+   761
+  ]
+ },
+ {
+  "label": "Best advertised ↑ 25 bps · 11 Oct 2026 · 6.09% → 6.34%",
+  "at": [
+   360,
+   845
+  ]
+ },
+ {
+  "label": "Source date 6 Oct 2026",
+  "at": [
+   360,
+   925
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap,sel",
+  "at": [
+   190,
+   1075
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   217,
+   1076
+  ]
+ },
+ {
+  "label": "Calculate",
+  "flags": "tap",
+  "at": [
+   530,
+   1075
+  ]
+ },
+ {
+  "label": "Calculate",
+  "at": [
+   531,
+   1075
+  ]
+ },
+ {
+  "label": "Hide Rate details",
+  "flags": "tap",
+  "at": [
+   360,
+   1301
+  ]
+ },
+ {
+  "label": "Rate details",
+  "at": [
+   328,
+   1301
+  ]
+ },
+ {
+  "label": "Rate type",
+  "at": [
+   297,
+   1387
+  ]
+ },
+ {
+  "label": "Variable",
+  "at": [
+   637,
+   1387
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
