@@ -1,0 +1,216 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I No Offset Mortgage",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Hide Constraints",
+  "flags": "tap",
+  "at": [
+   360,
+   317
+  ]
+ },
+ {
+  "label": "Constraints",
+  "at": [
+   328,
+   317
+  ]
+ },
+ {
+  "label": "Other criterion",
+  "at": [
+   190,
+   417
+  ]
+ },
+ {
+  "label": "P1Y",
+  "at": [
+   530,
+   417
+  ]
+ },
+ {
+  "label": "Other criterion",
+  "at": [
+   190,
+   477
+  ]
+ },
+ {
+  "label": "P30Y",
+  "at": [
+   530,
+   477
+  ]
+ },
+ {
+  "label": "Maximum LVR",
+  "at": [
+   190,
+   537
+  ]
+ },
+ {
+  "label": "95.0% · Conditions: Unverified",
+  "at": [
+   530,
+   557
+  ]
+ },
+ {
+  "label": "Maximum limit",
+  "at": [
+   190,
+   637
+  ]
+ },
+ {
+  "label": "$3,000k",
+  "at": [
+   530,
+   637
+  ]
+ },
+ {
+  "label": "Minimum limit",
+  "at": [
+   190,
+   697
+  ]
+ },
+ {
+  "label": "$100k",
+  "at": [
+   530,
+   697
+  ]
+ },
+ {
+  "label": "Show Terms",
+  "flags": "tap",
+  "at": [
+   360,
+   926
+  ]
+ },
+ {
+  "label": "Terms",
+  "at": [
+   328,
+   926
+  ]
+ },
+ {
+  "label": "Show Source criteria",
+  "flags": "tap",
+  "at": [
+   360,
+   1167
+  ]
+ },
+ {
+  "label": "Source criteria",
+  "at": [
+   328,
+   1167
+  ]
+ },
+ {
+  "label": "Show Source evidence",
+  "flags": "tap",
+  "at": [
+   360,
+   1368
+  ]
+ },
+ {
+  "label": "Source evidence",
+  "at": [
+   328,
+   1388
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
