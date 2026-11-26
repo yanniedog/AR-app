@@ -781,7 +781,7 @@ export function uiProductKeyLabel(productKey: string): UiText {
   if (segments.length < 4) return uiIdentifier(productKey);
   const [provider, , , ...nameParts] = segments;
   const name = nameParts.join('|');
-  const providerText = uiPublishedConciseName(provider), nameText = uiPublishedText(name, 160);
+  const providerText = uiPublishedConciseName(displayProviderName(provider)), nameText = uiPublishedText(name, 160);
   return providerText && nameText ? known(`${providerText} · ${nameText}`) : nameText ?? providerText ?? uiLabel('Unknown');
 }
 export function uiProductReference(row: RateRow): UiText {

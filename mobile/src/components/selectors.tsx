@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { ScrollView, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { hapticSelection } from '../lib/haptics';
@@ -67,12 +67,14 @@ export function OptionStrip<T extends string>({
     scroll.current?.scrollTo({ x: Math.max(0, at.x - frame.width / 2 + at.width / 2), animated });
   }, [frame.offset, frame.width]);
   const revealed = useRef(false);
+  // Either the frame or the selected option may be measured last; both trigger this.
+  const [selectedMeasured, setSelectedMeasured] = useState(false);
   useEffect(() => {
-    if (!revealed.current && frame.width && first !== undefined && positions.current.has(first)) {
+    if (!revealed.current && frame.width && first !== undefined && selectedMeasured) {
       revealed.current = true;
       reveal(first, false);
     }
-  }, [first, frame.width, reveal]);
+  }, [first, frame.width, reveal, selectedMeasured]);
 
   const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offset = event.nativeEvent.contentOffset.x;
@@ -112,6 +114,7 @@ export function OptionStrip<T extends string>({
                 onLayout={(event: LayoutChangeEvent) => {
                   const { x, width } = event.nativeEvent.layout;
                   positions.current.set(option.value, { x, width });
+                  if (option.value === first) setSelectedMeasured(true);
                 }}
                 onPress={() => {
                   if (option.disabled) return;
@@ -120,30 +123,24 @@ export function OptionStrip<T extends string>({
                   reveal(option.value, true);
                 }}
                 disabled={option.disabled}
-                hitSlop={{ top: 6, bottom: 6 }}
                 accessibilityRole={multiple ? 'checkbox' : 'tab'}
                 accessibilityLabel={option.label}
                 accessibilityState={multiple ? { checked: active, disabled: !!option.disabled } : { selected: active, disabled: !!option.disabled }}
-                android_ripple={androidRipple(theme.colors.primaryMuted)}
-                style={{
-                  height: STRIP_HEIGHT - 4,
-                  minWidth: 40,
-                  paddingHorizontal: 12,
-                  borderRadius: 9,
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  backgroundColor: active ? theme.colors.primaryMuted : 'transparent',
-                  opacity: option.disabled ? 0.4 : 1,
-                  overflow: 'hidden',
-                }}
+                style={{ minWidth: 48, justifyContent: 'center', alignItems: 'stretch', opacity: option.disabled ? 0.4 : 1 }}
               >
-                <AppText
-                  variant="small"
-                  numberOfLines={1}
-                  style={{ color: active ? theme.colors.primary : theme.colors.textMuted, ...fontStyle(active ? '600' : '500') }}
-                >
-                  {option.label}
-                </AppText>
+                {/* The 48 dp touch target stays; only the visible lozenge is compact. */}
+                <View style={{
+                  height: STRIP_HEIGHT - 4, paddingHorizontal: 12, borderRadius: 9, justifyContent: 'center', alignItems: 'center',
+                  backgroundColor: active ? theme.colors.primaryMuted : 'transparent',
+                }}>
+                  <AppText
+                    variant="small"
+                    numberOfLines={1}
+                    style={{ color: active ? theme.colors.primary : theme.colors.textMuted, ...fontStyle(active ? '600' : '500') }}
+                  >
+                    {option.label}
+                  </AppText>
+                </View>
               </TouchTarget>
             );
           })}
@@ -186,6 +183,7 @@ export function OptionSelect<T extends string>({
   icon?: React.ComponentProps<typeof LedgerIcon>['name'];
 }) {
   const theme = useTheme();
+  const { height: windowHeight } = useWindowDimensions();
   const [open, setOpen] = useState(false);
   const selected = Array.isArray(value) ? value as readonly T[] : value == null ? [] : [value as T];
   const summary = selectionSummary(options, selected, emptyLabel);
@@ -197,14 +195,16 @@ export function OptionSelect<T extends string>({
       accessibilityRole="button"
       accessibilityLabel={uiJoin(label, ': ', summary)}
       android_ripple={androidRipple(theme.colors.primaryMuted)}
-      style={{
+      style={{ justifyContent: 'center', maxWidth: '100%' }}
+    >
+      <View style={{
         flexDirection: 'row', alignItems: 'center', gap: 6, height: 34, paddingLeft: 10, paddingRight: 8,
         borderRadius: 9, backgroundColor: theme.colors.surfaceAlt, overflow: 'hidden', maxWidth: '100%',
-      }}
-    >
-      {icon ? <LedgerIcon name={icon} size={16} color={theme.colors.primary} /> : null}
-      <AppText variant="small" numberOfLines={1} style={{ flexShrink: 1, color: theme.colors.text, ...fontStyle('600') }}>{summary}</AppText>
-      <LedgerIcon name="chevron-down" size={14} color={theme.colors.textMuted} />
+      }}>
+        {icon ? <LedgerIcon name={icon} size={16} color={theme.colors.primary} /> : null}
+        <AppText variant="small" numberOfLines={1} style={{ flexShrink: 1, color: theme.colors.text, ...fontStyle('600') }}>{summary}</AppText>
+        <LedgerIcon name="chevron-down" size={14} color={theme.colors.textMuted} />
+      </View>
     </TouchTarget>
   ) : null;
   return (
@@ -236,7 +236,8 @@ export function OptionSelect<T extends string>({
         onClose={() => setOpen(false)}
         footer={multiple ? <Button title="Done" onPress={() => setOpen(false)} /> : undefined}
       >
-        <View>
+        {/* Long lists, landscape and large text scroll inside the sheet; the footer stays reachable. */}
+        <ScrollView style={{ maxHeight: Math.max(160, windowHeight * 0.55) }} keyboardShouldPersistTaps="handled">
           {multiple && onClear ? (
             <SelectRow label={emptyLabel} checked={!active} multiple={false} onPress={() => { if (active) { hapticSelection(); onClear(); } }} />
           ) : null}
@@ -255,7 +256,7 @@ export function OptionSelect<T extends string>({
               }}
             />
           ))}
-        </View>
+        </ScrollView>
       </SheetSurface>
     </>
   );

@@ -384,8 +384,18 @@ export function ProjectionWorkspace() {
     ? PROJECTION_HORIZONS.find(option => Number.isInteger(tdTermMonths) && tdTermMonths > 0
       && termDepositRolloversFor(option.months, tdTermMonths) === tdRollovers && option.months >= tdTermMonths)?.value ?? null
     : projectionHorizonValue(projectionInputs.horizonYears, section === 'Mortgage' ? DEFAULT_MORTGAGE_HORIZON_YEARS : '1');
+  // A saved horizon outside the listed timeframes is shown as its own selected option.
+  const tdMonths = Number.isInteger(tdTermMonths) && tdTermMonths > 0 && Number.isInteger(tdRollovers) && tdRollovers >= 0 ? tdTermMonths * (tdRollovers + 1) : null;
+  const savedYears = Number(projectionInputs.horizonYears.trim() || (section === 'Mortgage' ? DEFAULT_MORTGAGE_HORIZON_YEARS : '1'));
+  const customTimeframe = timeframe != null ? null
+    : section === 'TD' ? tdMonths != null ? { value: `custom-${tdMonths}`, label: uiDuration(tdMonths, 'months') } : null
+      : Number.isFinite(savedYears) && savedYears > 0 && savedYears <= MAX_PROJECTION_YEARS
+        ? { value: `custom-${savedYears}`, label: Number.isInteger(savedYears) ? uiDuration(savedYears, 'years') : uiDuration(Math.round(savedYears * 12), 'months') }
+        : null;
+  const shownTimeframeOptions = useMemo(() => customTimeframe ? [customTimeframe, ...timeframeOptions] : timeframeOptions,
+    [customTimeframe?.value, timeframeOptions]); // eslint-disable-line react-hooks/exhaustive-deps
   const changeTimeframe = useCallback((next: string) => {
-    if (!inputsEditable) return;
+    if (!inputsEditable || next.startsWith('custom-')) return;
     if (section !== 'TD') { updateProjection({ horizonYears: next }); return; }
     const months = PROJECTION_HORIZONS.find(option => option.value === next)?.months ?? 0;
     const rollovers = termDepositRolloversFor(months, tdTermMonths);
@@ -428,7 +438,7 @@ export function ProjectionWorkspace() {
         || enteredNumber(projectionInputs.fixedPeriodMonths)! > (enteredNumber(scenario.mortgage.years) ?? 0) * 12)
       ? uiJoin('Fixed period',': ','>',0,'–','Remaining term')
       : undefined,
-    horizon: section === 'Savings' && projectionInputs.horizonYears.trim()
+    horizon: section !== 'TD' && projectionInputs.horizonYears.trim()
       && (!(enteredNumber(projectionInputs.horizonYears)! > 0) || enteredNumber(projectionInputs.horizonYears)! > MAX_PROJECTION_YEARS)
       ? uiJoin('Projection horizon',': ','>',0,'–',uiDuration(MAX_PROJECTION_YEARS,'years'))
       : undefined,
@@ -981,6 +991,17 @@ export function ProjectionWorkspace() {
           <Badge label="Illustrative" tone="primary" />
         </Row>
       </View>
+      {/* Always available, so a saved horizon outside the listed timeframes can be repaired. */}
+      <View style={{ gap: 2 }}>
+        <OptionStrip
+          label={uiLabel('Timeframe')}
+          auditId="projection-timeframe"
+          options={shownTimeframeOptions}
+          value={timeframe ?? customTimeframe?.value ?? null}
+          onChange={changeTimeframe}
+        />
+        {errors.horizon ? <AppText variant="tiny" color="danger">{errors.horizon}</AppText> : null}
+      </View>
       {!result.ready ? (
         <View style={{ gap: 12 }}>
           <AppText variant="body" color="textMuted">{uiLabel("Inputs incomplete")}</AppText>
@@ -993,14 +1014,6 @@ export function ProjectionWorkspace() {
       ) : (
         <>
           <View style={{ gap: 2 }}>
-            <OptionStrip
-              label={uiLabel('Timeframe')}
-              auditId="projection-timeframe"
-              options={timeframeOptions}
-              value={timeframe}
-              onChange={changeTimeframe}
-            />
-            {errors.horizon ? <AppText variant="tiny" color="danger">{errors.horizon}</AppText> : null}
             <Row gap={8} style={{ marginTop: 4 }}>
               {section === 'Mortgage' ? (
                 <OptionSelect

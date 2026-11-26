@@ -3,6 +3,7 @@ import { displayProviderName } from '../src/data/providerDisplayName';
 import { matchingLenders } from '../src/lib/filterOptions';
 import { orderProviders } from '../src/data/bankGroups';
 import { parseSearchQuery } from '../src/data/detailSearch';
+import { publicProductMatches } from '../src/data/publicProductSearch';
 
 test('capitalised provider names read in title case and keep acronyms', () => {
   expect(displayProviderName('NATIONAL AUSTRALIA BANK')).toBe('National Australia Bank');
@@ -33,4 +34,12 @@ test('tickers and short names scope product search to the lender', () => {
   expect(parseSearchQuery('BEN variable').lender).toBe('bendigo and adelaide bank');
   expect(parseSearchQuery('nab').lender).toBe('national australia bank');
   expect(providerMatchesSearch('Commonwealth Bank of Australia', 'NAB')).toBe(false);
+});
+
+test('public pricing search takes a lender term plus product words', () => {
+  const product = { name: 'Fixed Rate Home Loan', providerName: 'National Australia Bank', aliases: [] };
+  expect(publicProductMatches(product, 'nab fixed')).toBe(true);
+  expect(publicProductMatches(product, 'fixed nab')).toBe(true);
+  expect(publicProductMatches(product, 'nab variable')).toBe(false);
+  expect(publicProductMatches(product, 'cba fixed')).toBe(false);
 });
