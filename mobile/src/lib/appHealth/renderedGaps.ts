@@ -13,17 +13,18 @@ const GENERIC_LABEL = /^(?:Fees|Eligibility|Features|Constraints) \d+$/;
  * Counts what the product screen renders for each detail record, using the same
  * presentation functions as the screen. A published gap and a rendered gap differ:
  * the first is data the bank did not publish, the second is a placeholder shown
- * where the payload held something presentable.
+ * where the payload held something presentable. Removed source duplicates are
+ * counted separately from visible findings.
  */
 export function auditRenderedProductDetails(products: Record<string, ProductDetail>, manifest: Manifest | null | undefined): Record<string, number> {
-  let unknownValues = 0, unverifiedConditions = 0, rawCodes = 0, genericLabels = 0, duplicates = 0, suppressedNames = 0;
+  let unknownValues = 0, unverifiedConditions = 0, rawCodes = 0, genericLabels = 0, sourceDuplicatesRemoved = 0, suppressedNames = 0;
   let otherLabels = 0, withoutUpfrontFee = 0, withoutAnnualFee = 0, withoutDetailsFeatures = 0, factsUnknown = 0;
   const perGroup: Record<Group, number> = { Fees: 0, Eligibility: 0, Features: 0, Constraints: 0 };
   for (const detail of Object.values(products)) {
     for (const [group, field] of GROUPS) {
       const published: DetailItem[] = detail[field] ?? [];
       const items = dedupeDetailItems(published);
-      duplicates += published.length - items.length;
+      sourceDuplicatesRemoved += published.length - items.length;
       items.forEach((item, index) => {
         const fact = uiDetailItem(item, index, group);
         if (fact.value.startsWith('Unknown')) { unknownValues += 1; perGroup[group] += 1; }
@@ -36,7 +37,7 @@ export function auditRenderedProductDetails(products: Record<string, ProductDeta
     }
     // ProductFacts hides normalized fees when the legacy fee surface exists, so they are not audited.
     const allFacts = normalizedProductFacts(detail).filter(fact => !detail.fees?.length || fact.kind !== 'fee'), distinctFacts = dedupeFacts(allFacts);
-    duplicates += allFacts.length - distinctFacts.length;
+    sourceDuplicatesRemoved += allFacts.length - distinctFacts.length;
     for (const fact of distinctFacts) {
       const rendered = uiNormalizedProductFact(fact);
       if (rendered.value.startsWith('Unknown')) factsUnknown += 1;
@@ -67,7 +68,7 @@ export function auditRenderedProductDetails(products: Record<string, ProductDeta
     renderedRawCodeLabels: rawCodes,
     renderedGenericLabels: genericLabels,
     renderedOtherLabels: otherLabels,
-    renderedDuplicateItems: duplicates,
+    sourceDuplicateItemsRemoved: sourceDuplicatesRemoved,
     renderedSuppressedFeeNames: suppressedNames,
     feeListsWithoutUpfrontFee: withoutUpfrontFee,
     feeListsWithoutAnnualFee: withoutAnnualFee,
