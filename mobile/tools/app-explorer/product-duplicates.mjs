@@ -2,29 +2,32 @@
 // repeatedly while scrolling or opening the next disclosure.
 const DISCLOSURE = /^Hide (Fees|Eligibility|Features|Constraints|Product facts)$/;
 const FACT_KIND = /^(Rates|Tiers|Eligibility|Constraints|Fees|Features|Conditions|Bundles|Attributes)$/;
+const OFF_SCREEN = 'Heading off screen';
 const APP = 'com.eyex.australianrates';
 
 export function visibleProductDuplicates(screens) {
   const groups = new Map();
-  let captures = 0, rowsObserved = 0;
+  let captures = 0, rowsObserved = 0, visit = null;
   for (const { nodes, name, slug } of screens) {
-    if (!nodes.some(n => n.desc === 'Share' && n.pkg === APP)) continue;
+    if (!nodes.some(n => n.desc === 'Share' && n.pkg === APP)) { visit = null; continue; }
+    if (!visit || /^open product/i.test(name)) visit = slug;
     const viewport = nodes.find(n => n.pkg === APP && n.cls === 'ScrollView' && n.scrollable)?.bounds;
     const title = nodes.find(n => n.pkg === APP && n.text && viewport && n.bounds[3] <= viewport[1])?.text;
     if (!title || !viewport) continue;
     const visible = nodes.filter(n => n.pkg === APP && (n.text || n.desc) && n.bounds[1] >= viewport[1]
       && n.bounds[3] <= viewport[3] && n.bounds[2] > n.bounds[0] && n.bounds[3] > n.bounds[1]);
     // A scroll can start halfway through a group with its heading above the screen.
-    let section = /^scroll product\b/.test(name) ? 'Heading off screen' : '';
+    let section = /^scroll product\b/.test(name) ? OFF_SCREEN : '';
     let kind = '', pending = null, observed = 0;
     const counts = new Map();
     function finish() {
       if (!pending) return;
-      const key = JSON.stringify([title, ...pending]);
+      const rowKey = JSON.stringify([visit, title, ...pending]);
+      const key = JSON.stringify([rowKey, section, kind]);
       const count = (counts.get(key) ?? 0) + 1;
       counts.set(key, count);
       if (count > 1 && count > (groups.get(key)?.occurrences ?? 0)) {
-        groups.set(key, { product: title, section, kind, row: pending, occurrences: count, screen: name, slug });
+        groups.set(key, { rowKey, product: title, section, kind, row: pending, occurrences: count, screen: name, slug });
       }
       observed++;
       pending = null;
@@ -50,8 +53,17 @@ export function visibleProductDuplicates(screens) {
         i++;
       } else if (section === 'Product facts' && FACT_KIND.test(n.text)) {
         finish(); counts.clear(); kind = n.text;
+      } else if (n.clickable && / · Source · (Verified|Conditional|Supplementary|Unverified)$/.test(n.desc)) {
+        finish();
+        if (n.bounds[1] > viewport[1] && n.bounds[3] < viewport[3]) {
+          pending = [n.desc];
+          finish();
+        }
+        // The wrapper label contains the complete row, including source relevance.
+        while (i + 1 < visible.length && visible[i + 1].bounds[1] >= n.bounds[1]
+          && visible[i + 1].bounds[3] <= n.bounds[3]) i++;
       } else if (n.clickable || n.desc) {
-        // A linked row has its own accessibility wrapper. Withhold ambiguous evidence.
+        // Other controls end the group when its boundary is ambiguous.
         finish(); section = '';
       } else if (pending && n.cls === 'TextView' && n.text) {
         pending.push(n.text); // Include tiers, caps and discounts in row identity.
@@ -62,7 +74,16 @@ export function visibleProductDuplicates(screens) {
   }
   // Peak per product and complete row wording is a lower bound. A row seen again
   // in an overlapping capture or in a disclosure with a clipped heading counts once.
-  const evidence = [...groups.values()];
-  return { extraRows: captures ? evidence.reduce((n, group) => n + group.occurrences - 1, 0) : null,
+  const scopedExtras = new Map();
+  for (const g of groups.values()) {
+    if (g.section !== OFF_SCREEN) scopedExtras.set(g.rowKey, (scopedExtras.get(g.rowKey) ?? 0) + g.occurrences - 1);
+  }
+  const evidence = [];
+  for (const { rowKey, ...group } of groups.values()) {
+    const alreadyCounted = group.section === OFF_SCREEN ? scopedExtras.get(rowKey) ?? 0 : 0;
+    const extra = group.occurrences - 1 - alreadyCounted;
+    if (extra > 0) evidence.push({ ...group, extra });
+  }
+  return { extraRows: captures ? evidence.reduce((n, group) => n + group.extra, 0) : null,
     captures, rowObservations: rowsObserved, evidence };
 }

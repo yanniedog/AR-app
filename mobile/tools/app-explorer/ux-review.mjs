@@ -2,7 +2,6 @@
 // checks over every captured screen and writes ux-review.json and ux-review.md next to it.
 // Usage: node ux-review.mjs <explorer-out dir>
 import fs from 'node:fs';
-import { decodeAuditExport, MAX_ENVELOPE_BYTES } from './audit-export.mjs';
 import { visibleProductDuplicates } from './product-duplicates.mjs';
 import path from 'node:path';
 import { checkScreen, contrastFindings, decodePng, FIXES } from './ux-checks.mjs';
@@ -150,21 +149,6 @@ function taskMetrics(report, screens) {
   ];
 }
 
-function sourceDuplicateCount(dir, report) {
-  if (!report.audit?.logBytes) return null;
-  const file = path.join(dir, 'audit-log.txt');
-  try {
-    const size = fs.statSync(file).size;
-    if (size !== report.audit.logBytes || size > MAX_ENVELOPE_BYTES) return null;
-    const exported = decodeAuditExport(fs.readFileSync(file, 'utf8'));
-    const checks = exported.appHealth?.checks?.filter(check => check.metrics?.renderedGapsAudited === true);
-    const count = checks?.length === 1 ? checks[0].metrics.sourceDuplicateItemsRemoved : null;
-    return Number.isSafeInteger(count) && count >= 0 ? count : null;
-  } catch {
-    return null;
-  }
-}
-
 export async function reviewRun(dir, { sample } = {}) {
   const report = readJson(path.join(dir, 'report.json'), {});
   const defaultSize = (report.device && report.device.size) || [720, 1600];
@@ -243,13 +227,13 @@ export async function reviewRun(dir, { sample } = {}) {
       detail: `Android keyboard bounds unavailable or unstable on ${keyboardMeasurementGaps} captures`, fix: FIXES['contrast-not-measured'] });
   }
   if (reviewed && !contrastMeasured) findings.push({ check: 'contrast-not-measured', severity: 'minor', screen: 'all', text: '', at: [0, 0], detail: 'no screenshot could be read, so contrast was not checked', fix: FIXES['contrast-not-measured'] });
-  const productDuplicates = { sourceRecordsRemoved: sourceDuplicateCount(dir, report),
+  const productDuplicates = { sourceRecordsRemoved: report.audit?.sourceDuplicateItemsRemoved ?? null,
     visible: visibleProductDuplicates(screens) };
   for (const group of productDuplicates.visible.evidence) {
     const screen = perScreen.find(item => item.slug === group.slug);
     if (screen) screen.findings++;
     findings.push({ check: 'visible-duplicate-row', severity: 'minor', screen: group.screen,
-      text: group.row.join(' · '), at: [0, 0], detail: `${group.occurrences} matching visible rows on ${group.product}`,
+      text: '', at: [0, 0], detail: `${group.occurrences} matching visible product rows`,
       fix: 'Check the displayed values and qualifiers against the distinct source records.' });
   }
   for (const f of findings) if (!f.fix) f.fix = FIXES[f.check] || '';
