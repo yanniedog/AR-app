@@ -152,8 +152,11 @@ export function uiNormalizedProductFact(fact: NormalizedProductFact): ProductPre
   const declaredWithoutValue = (fact.kind === 'feature' || fact.kind === 'bundle') && fact.value === undefined && lower === undefined
     && upper === undefined && !fact.cadence && fact.evidenceState !== 'unknown' && fact.evidenceState !== 'conflicting';
   const conditionsUnverified = Boolean(fact.condition?.trim() || fact.evidenceState && fact.evidenceState !== 'observed');
-  const render = (field: 'value' | 'minValue' | 'maxValue') => fact.valueType === 'decimal'
-    ? uiExactFactDecimal(fact, field) : factValue(fact[field], fact.unit);
+  const render = (field: 'value' | 'minValue' | 'maxValue') => {
+    const raw = fact[field];
+    if (fact.valueType === 'decimal') return uiExactFactDecimal(fact, field);
+    return (fact.kind === 'feature' && typeof raw === 'string' ? reviewedFeatureValues(raw) : null) ?? factValue(raw, fact.unit);
+  };
   const value = fact.evidenceState === 'unknown' ? uiLabel('Unknown') : fact.evidenceState === 'conflicting' ? uiLabel('Conflicting')
     : declaredWithoutValue ? uiLabel(fact.condition?.trim() ? 'Conditions apply' : 'Included')
     : lower !== undefined && upper !== undefined ? uiJoin(render('minValue'), '–', render('maxValue'))
@@ -223,7 +226,7 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
   const textLike = group === 'Eligibility' || group === 'Constraints';
   // The criterion code itself establishes the restriction. Wording beside it may narrow it, so it reads
   // Required with conditions unverified, never an unconditional Required.
-  const presenceOnly = textLike && PRESENCE_ONLY_CODES.has((item.label ?? '').toUpperCase()) && item.value == null;
+  const presenceOnly = textLike && PRESENCE_ONLY_CODES.has((item.label ?? '').toUpperCase()) && !detailValuePresent(item.value);
   const cashback = group === 'Features' ? cashbackRange(item) : null;
   // These published CDR constraint codes establish the unit. Older payloads
   // contain both ratios (0.8) and percentage numbers (98), like the rate DTO.
@@ -239,7 +242,8 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
   // Unclassified eligibility prose can describe the criterion itself, rather
   // than an extra condition on a published amount or limit.
   const conditionsUnverified = unresolvedInfo && (
-    group === 'Fees' || group === 'Features' && item.value == null || (group === 'Features' && item.label === 'CASHBACK_OFFER' && (cashback !== null || numeric !== null))
+    // A feature value never stands as unconditional while its published wording is unreviewed.
+    group === 'Fees' || group === 'Features'
     || (lvr && lvrValue !== 'Unknown') || presenceOnly
   );
   return { label: label || uiJoin(group, ' ', uiCount(index + 1)), value: uiJoin(value || uiLabel('Unknown'), knownInfo && knownInfo !== residency ? uiJoin(' · ', knownInfo) : null),
@@ -257,16 +261,31 @@ const REVIEWED_FEATURE_VALUES: Readonly<Record<string, UiLabel>> = {
   'debit mastercard': 'Mastercard Debit card', 'debit card': 'Debit card', 'credit card': 'Credit card',
   'sms': 'SMS', 'email': 'Email', 'push notifications': 'Push notifications', 'alerts': 'Alerts',
 };
-/** A list of reviewed values reads as that list; one unreviewed token leaves the whole value unknown. */
+/**
+ * A list of reviewed values reads as that list; one unreviewed token leaves the whole value unknown.
+ * Values joined by "or" are alternatives and keep "or"; a value mixing "and" with "or" stays unknown.
+ */
 function reviewedFeatureValues(scalar: string): UiText | null {
   if (scalar.length > 120 || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(scalar)) return null;
-  const tokens = scalar.trim().replace(/\.$/, '').split(/\s*(?:,|&|\/|\band\b|\bor\b)\s*/i).map(token => token.trim().toLowerCase()).filter(Boolean);
-  const labels = tokens.map(token => REVIEWED_FEATURE_VALUES[token]);
+  const text = scalar.trim().replace(/\.$/, '');
+  const alternatives = /\bor\b/i.test(text);
+  if (alternatives && /\band\b|&/i.test(text)) return null;
+  const tokens = text.split(/\s*(?:,|&|\/|\band\b|\bor\b)\s*/i).map(token => token.trim().toLowerCase()).filter(Boolean);
+  const labels = tokens.map(token => Object.prototype.hasOwnProperty.call(REVIEWED_FEATURE_VALUES, token) ? REVIEWED_FEATURE_VALUES[token] : undefined);
   if (!labels.length || labels.some(label => !label)) return null;
   const distinct = [...new Set(labels as UiLabel[])];
-  return uiJoin(...distinct.flatMap((label, i) => i ? [uiLabel(', '), uiLabel(label)] : [uiLabel(label)]));
+  return uiJoin(...distinct.flatMap((label, i) => !i ? [uiLabel(label)]
+    : [alternatives && i === distinct.length - 1 ? uiJoin(' ', 'or', ' ') : uiLabel(', '), uiLabel(label)]));
+}
+/** A published detail value is present unless it is empty or a "null"/"none" placeholder. */
+export function detailValuePresent(value: unknown): boolean {
+  if (value == null) return false;
+  const text = String(value).trim().toLowerCase();
+  return text !== '' && text !== 'null' && text !== 'none';
 }
 function uiTextValue(scalar: string): UiText {
   const label = humanizeEnum(scalar);
-  return label !== 'Unknown' && label !== '' ? label : uiLabel('Unknown');
+  // A code-like value with no reviewed label would otherwise render as the raw source token.
+  const unreviewedCode = label === scalar.trim() && /^[A-Z][A-Z0-9_]*$/.test(label);
+  return label !== 'Unknown' && label !== '' && !unreviewedCode ? label : uiLabel('Unknown');
 }

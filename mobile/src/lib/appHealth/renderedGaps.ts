@@ -1,7 +1,8 @@
 import type { DetailItem, Manifest, ProductDetail } from '../../types';
-import { dedupeDetailItems, dedupeFacts, isAnnualFee, isUpfrontFee, uiDetailItem, uiNormalizedProductFact } from '../productUiFacts';
+import { dedupeDetailItems, dedupeFacts, detailValuePresent, isAnnualFee, isUpfrontFee, uiDetailItem, uiNormalizedProductFact } from '../productUiFacts';
 import { normalizedProductFacts } from '../../data/productFactsCore';
-import { uiPublishedFeeName } from '../uiCopy';
+import { uiFeeTypeLabel, uiPublishedFeeName } from '../uiCopy';
+import { humanizeEnum } from '../../data/format';
 
 type Group = 'Fees' | 'Eligibility' | 'Features' | 'Constraints';
 const GROUPS: readonly [Group, 'fees' | 'eligibility' | 'features' | 'constraints'][] = [
@@ -31,8 +32,9 @@ export function auditRenderedProductDetails(products: Record<string, ProductDeta
         const fact = uiDetailItem(item, index, group);
         if (fact.value.startsWith('Unknown')) {
           unknownValues += 1; perGroup[group] += 1;
-          const hasValue = item.value != null && String(item.value).trim() !== '', hasInfo = Boolean(item.info?.trim());
-          if (!hasValue && !hasInfo) sourceAbsent += 1;
+          const hasValue = detailValuePresent(item.value), hasInfo = detailValuePresent(item.info);
+          // A fee the bank names, without an amount, still published something.
+          if (!hasValue && !hasInfo && !(group === 'Fees' && detailValuePresent(item.name))) sourceAbsent += 1;
           const key = `${group}:${publicCode(item.label)}`, entry = unknownByCode.get(key) ?? [0, 0, 0];
           unknownByCode.set(key, [entry[0] + 1, entry[1] + (hasValue ? 1 : 0), entry[2] + (hasInfo ? 1 : 0)]);
         }
@@ -40,7 +42,7 @@ export function auditRenderedProductDetails(products: Record<string, ProductDeta
         if (RAW_CODE.test(fact.label)) rawCodes += 1;
         if (GENERIC_LABEL.test(fact.label)) genericLabels += 1;
         if ((item.label ?? '').toUpperCase() === 'OTHER' && /^Other /.test(fact.label)) otherLabels += 1;
-        if (group === 'Fees' && item.name?.trim() && uiPublishedFeeName(item) === 'Unknown') { suppressedNames += 1; hiddenNames.add(item.name.trim().toLowerCase()); }
+        if (group === 'Fees' && item.name?.trim() && uiPublishedFeeName(item) === 'Unknown') { suppressedNames += 1; if (hiddenNames.size < DISTINCT_NAME_LIMIT) hiddenNames.add(item.name.trim().toLowerCase()); }
       });
     }
     // ProductFacts hides normalized fees when the legacy fee surface exists, so they are not audited.
@@ -48,7 +50,11 @@ export function auditRenderedProductDetails(products: Record<string, ProductDeta
     duplicates += allFacts.length - distinctFacts.length;
     for (const fact of distinctFacts) {
       const rendered = uiNormalizedProductFact(fact);
-      if (rendered.value.startsWith('Unknown')) factsUnknown += 1;
+      if (rendered.value.startsWith('Unknown')) {
+        factsUnknown += 1;
+        const key = `Facts:${publicCode(fact.sourceType)}`, entry = unknownByCode.get(key) ?? [0, 0, 0];
+        unknownByCode.set(key, [entry[0] + 1, entry[1] + (fact.value !== undefined ? 1 : 0), entry[2] + (fact.condition?.trim() ? 1 : 0)]);
+      }
       if (rendered.conditionsUnverified) unverifiedConditions += 1;
       if (RAW_CODE.test(rendered.label)) rawCodes += 1;
     }
@@ -91,10 +97,14 @@ export function auditRenderedProductDetails(products: Record<string, ProductDeta
 }
 
 const BREAKDOWN_JSON_MAX = 4000;
-/** A published CDR enum code, or a fixed marker; free text never reaches the public report. */
+/** Distinct hidden fee names are counted up to this bound; the count is then a lower bound. */
+const DISTINCT_NAME_LIMIT = 50_000;
+/** A reviewed CDR code (one with a controlled label), or a fixed marker; nothing else reaches the public report. */
 function publicCode(value: string | undefined): string {
   const code = (value ?? '').trim();
-  return !code ? 'NONE' : /^[A-Z][A-Z0-9_]{0,40}$/.test(code) ? code : 'NONSTANDARD';
+  if (!code) return 'NONE';
+  const reviewed = code === 'OTHER' || uiFeeTypeLabel(code) != null || (/^[A-Z][A-Z0-9_]{0,40}$/.test(code) && humanizeEnum(code) !== code);
+  return reviewed ? code : 'NONSTANDARD';
 }
 /** Drops trailing entries until the JSON fits the public metric bound, so the export stays valid JSON. */
 function topJson(entries: unknown[]): string {
