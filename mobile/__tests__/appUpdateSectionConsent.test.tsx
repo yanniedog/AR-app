@@ -21,7 +21,7 @@ type TestNode = {
 type InspectableRenderer = ReactTestRenderer & { root: TestNode };
 
 const mockSetPref = jest.fn();
-let mockPrefs = { apkUpdatesWifiOnly: true, apkUpdatesAutoDownload: false };
+let mockPrefs = {};
 
 jest.mock('../src/data/store', () => ({
   useStore: (selector: (state: unknown) => unknown) => selector({
@@ -75,7 +75,6 @@ describe('AppUpdateSection consent and manual refresh', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockPrefs = { apkUpdatesWifiOnly: true, apkUpdatesAutoDownload: false };
     platformDescriptor = Object.getOwnPropertyDescriptor(Platform, 'OS');
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
     jest.mocked(checkForAppUpdate).mockResolvedValue(availableResult);
@@ -96,7 +95,7 @@ describe('AppUpdateSection consent and manual refresh', () => {
       await Promise.resolve();
     });
     expect(checkForAppUpdate).toHaveBeenNthCalledWith(1, { force: false });
-    expect(ensureApkBackgroundDownload).not.toHaveBeenCalled();
+    expect(ensureApkBackgroundDownload).toHaveBeenCalledWith(remote);
 
     await act(async () => {
       (tree.root.findByProps({ title: 'Check for update' }).props.onPress as () => void)();
@@ -104,11 +103,10 @@ describe('AppUpdateSection consent and manual refresh', () => {
       await Promise.resolve();
     });
     expect(checkForAppUpdate).toHaveBeenNthCalledWith(2, { force: true });
-    expect(ensureApkBackgroundDownload).not.toHaveBeenCalled();
     act(() => tree.unmount());
   });
 
-  it('asks before a per-release download when standing consent is off', async () => {
+  it('downloads and installs without a confirmation prompt', async () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     let tree!: InspectableRenderer;
     await act(async () => {
@@ -116,16 +114,12 @@ describe('AppUpdateSection consent and manual refresh', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    act(() => {
-      (tree.root.findByProps({ title: 'Download & install' }).props.onPress as () => void)();
-    });
-    expect(upgradeFromBackgroundDownload).not.toHaveBeenCalled();
-    const buttons = alert.mock.calls[0][2] ?? [];
     await act(async () => {
-      buttons.find((button) => button.text === 'Download')?.onPress?.();
+      (tree.root.findByProps({ title: 'Download & install' }).props.onPress as () => void)();
       await Promise.resolve();
     });
-    expect(upgradeFromBackgroundDownload).toHaveBeenCalledWith(remote, { wifiOnly: true });
+    expect(alert).not.toHaveBeenCalled();
+    expect(upgradeFromBackgroundDownload).toHaveBeenCalledWith(remote);
     act(() => tree.unmount());
   });
 
@@ -151,7 +145,6 @@ describe('AppUpdateSection consent and manual refresh', () => {
   });
 
   it('does not start an automatic download when an audit begins during the update check', async () => {
-    mockPrefs.apkUpdatesAutoDownload = true;
     let resolveCheck!: (value: typeof availableResult) => void;
     jest.mocked(checkForAppUpdate).mockReturnValue(new Promise((resolve) => {
       resolveCheck = resolve;

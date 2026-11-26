@@ -797,7 +797,7 @@ export default function ProductDetail() {
             current={{ date: core?.run_date, rate: currentBest }}
           />
           <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
-            {row.last_updated ? uiJoin('Source date', ' ', uiDate(row.last_updated)) : uiJoin('Checked', ' ', uiDate(core?.run_date))}
+            {row.last_updated ? uiJoin('Bank updated', ' ', uiDate(row.last_updated), ' · ', 'Checked', ' ', uiDate(core?.run_date)) : uiJoin('Checked', ' ', uiDate(core?.run_date))}
           </AppText>
           {isNonStandard(row) ? (
             <View

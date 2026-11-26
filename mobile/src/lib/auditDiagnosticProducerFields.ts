@@ -578,7 +578,6 @@ export const AUDIT_REGISTERED_ACTION_IDS = new Set<string>([
   "search.sort.next",
   "search.sort.open",
   "settings.alert-threshold.next",
-  "settings.apk-wifi-only.toggle",
   "settings.app-lock.observe",
   "settings.data-details.toggle",
   "settings.deep-search.toggle",
@@ -601,7 +600,6 @@ export const AUDIT_REGISTERED_ACTION_IDS = new Set<string>([
   "settings.theme.restore",
   "settings.update-status.observe",
   "settings.update.check",
-  "settings.wifi-only.toggle",
   "terms.open",
   "terms.scroll.end"
 ]);

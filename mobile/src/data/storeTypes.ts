@@ -39,11 +39,6 @@ export interface Prefs {
   privacyChoiceVersion: number;
   /** @deprecated Legacy combined toggle, retained only so old persisted state can be migrated. */
   diagnosticsEnabled?: boolean;
-  wifiOnly: boolean;
-  /** APK network policy is independent of daily rates refreshes. */
-  apkUpdatesWifiOnly: boolean;
-  /** Automatically download verified updates and open Android's installer. */
-  apkUpdatesAutoDownload: boolean;
   includeNonStandard: boolean;
   /** Rates pagination only; does not truncate filtering, sorting or comparisons. */
   ratesPageSize: 10 | 20;
@@ -102,9 +97,6 @@ export const DEFAULT_PREFS: Prefs = {
   sessionReplayEnabled: false,
   privacyChoiceVersion: 0,
   diagnosticsEnabled: false,
-  wifiOnly: false,
-  apkUpdatesWifiOnly: false,
-  apkUpdatesAutoDownload: true,
   includeNonStandard: false,
   ratesPageSize: 20,
   depositRankMetric: 'base',

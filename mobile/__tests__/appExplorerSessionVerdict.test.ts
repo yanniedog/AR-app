@@ -34,6 +34,19 @@ describe('real-use session verdict', () => {
     expect(v.findings.map((f: { kind: string }) => f.kind).sort()).toEqual(['anr', 'blank-screen', 'crash', 'dead-end', 'journey', 'stuck-spinner']);
   });
 
+  it('fails when the app shows rates older than the newest published payload', () => {
+    const base = report([step(1, 'open app')]);
+    const stale = verdict({ ...base, freshness: { shown: '2026-11-22', latest: '2026-11-26' } }, null);
+    expect(stale.outcome).toBe('fail');
+    expect(stale.findings.map((f: { kind: string }) => f.kind)).toEqual(['stale-data']);
+    expect(stale.findings[0].text).toBe('Data date 2026-11-22 · Latest 2026-11-26');
+    const none = verdict({ ...base, freshness: { shown: null, latest: '2026-11-26' } }, null);
+    expect(none.outcome).toBe('attention');
+    expect(none.findings[0]).toMatchObject({ kind: 'stale-data', severity: 'friction' });
+    const current = verdict({ ...base, freshness: { shown: '2026-11-26', latest: '2026-11-26' } }, null);
+    expect(current.outcome).toBe('pass');
+  });
+
   it('does not fail on slow absolute timings alone', () => {
     const v = verdict(report([step(1, 'open app', { settleMs: 9000, firstContentMs: 8500, responseMs: 8000, activityStartMs: 900 })]), null);
     expect(v.outcome).toBe('pass');

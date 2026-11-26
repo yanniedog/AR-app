@@ -3,7 +3,7 @@
   "name": "browse",
   "open": "/browse",
   "scroll": 0,
-  "why": "home rates list, incl. early first page with Updating then the settled page (rows must not shift); stacked product rows sit 8 dp apart"
+  "why": "home rates list, incl. early first page after eligibility is ready, then the settled page (rows must not shift); stacked product rows sit 8 dp apart"
  },
  {
   "name": "watchlist",
@@ -86,14 +86,15 @@
  {
   "name": "settings",
   "open": "/settings",
-  "scroll": 0,
-  "why": "settings"
+  "scroll": 4,
+  "why": "lower settings: Data section and App update status after the Wi-Fi-only and automatic-update switches were removed"
  },
  {
-  "name": "about",
+  "name": "debug-log",
   "open": "/about",
-  "scroll": 0,
-  "why": "about"
+  "taps": ["Diagnostics", "Debug log"],
+  "visibleAction": "Upload and copy link",
+  "why": "Debug log controls remain visible on the emulator viewport"
  },
  {
   "name": "profile",
