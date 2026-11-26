@@ -918,6 +918,8 @@ export default function ProductDetail() {
                 </AppText>
                 <ChartErrorBoundary name="ProductHistoryChart">
                   <BankHistoryChart
+                    // Each product opens on its own defaults (1 year, benchmarks shown).
+                    key={productKey}
                     auditActionsRef={historyAuditActionsRef}
                     contentRevision={historyContentRevision}
                     dates={historyModel.dates}
