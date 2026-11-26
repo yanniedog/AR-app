@@ -304,4 +304,12 @@ test('ISO duration values on published criteria read as plain durations', () => 
   expect(read('P6M')).toBe('6 months');
   expect(read('P1Y6M')).toBe('1 year, 6 months');
   expect(read('P')).not.toMatch(/year|month|day|week/);
+  expect(read('P1.5Y')).toBe('1.5 years');
+  expect(read('PT12H')).toBe('12 hours');
+  expect(read('P1DT2H')).toBe('1 day, 2 hours');
+  expect(read('PT1M')).toBe('1 minute');
+  expect(read('P2W')).toBe('2 weeks');
+  expect(read('P1W2D')).toBe('P1W2D');
+  expect(read('P1.5Y2M')).not.toMatch(/year|month/);
+  expect(read('P1YT')).not.toMatch(/year/);
 });
