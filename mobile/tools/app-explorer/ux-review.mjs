@@ -2,6 +2,7 @@
 // checks over every captured screen and writes ux-review.json and ux-review.md next to it.
 // Usage: node ux-review.mjs <explorer-out dir>
 import fs from 'node:fs';
+import { visibleProductDuplicates } from './product-duplicates.mjs';
 import path from 'node:path';
 import { checkScreen, contrastFindings, decodePng, FIXES } from './ux-checks.mjs';
 
@@ -17,7 +18,7 @@ const RUBRIC = [
   ['easeOfUse', 'Ease of use', ['tap-target', 'dead-end']],
   ['comfort', 'Comfort', ['tap-target', 'spinner-no-result', 'slow']],
   ['helpfulness', 'Helpfulness', ['dead-end-state', 'spinner-no-result', 'dead-end']],
-  ['appropriateness', 'Appropriateness', ['prose', 'accuracy']],
+  ['appropriateness', 'Appropriateness', ['prose', 'accuracy', 'visible-duplicate-row']],
   ['onboarding', 'Onboarding ease', ['slow-first-value', 'no-first-value', 'first-run-gate']],
   ['barriers', 'Barriers to entry and use', ['slow-first-value', 'slow-relaunch', 'no-first-value', 'first-run-gate', 'dead-end-state']],
   ['engagement', 'Engagement hooks', ['no-engagement-hook', 'no-return-reason']],
@@ -226,6 +227,15 @@ export async function reviewRun(dir, { sample } = {}) {
       detail: `Android keyboard bounds unavailable or unstable on ${keyboardMeasurementGaps} captures`, fix: FIXES['contrast-not-measured'] });
   }
   if (reviewed && !contrastMeasured) findings.push({ check: 'contrast-not-measured', severity: 'minor', screen: 'all', text: '', at: [0, 0], detail: 'no screenshot could be read, so contrast was not checked', fix: FIXES['contrast-not-measured'] });
+  const productDuplicates = { sourceRecordsRemoved: report.audit?.sourceDuplicateItemsRemoved ?? null,
+    visible: visibleProductDuplicates(screens) };
+  for (const group of productDuplicates.visible.evidence) {
+    const screen = perScreen.find(item => item.slug === group.slug);
+    if (screen) screen.findings++;
+    findings.push({ check: 'visible-duplicate-row', severity: 'minor', screen: group.screen,
+      text: '', at: [0, 0], detail: `${group.occurrences} matching visible product rows`,
+      fix: 'Check the displayed values and qualifiers against the distinct source records.' });
+  }
   for (const f of findings) if (!f.fix) f.fix = FIXES[f.check] || '';
   const rubric = RUBRIC.map(([key, title, checks]) => {
     const mine = findings.filter(f => checks.includes(f.check));
@@ -236,7 +246,7 @@ export async function reviewRun(dir, { sample } = {}) {
   const tasks = taskMetrics(report, screens);
   const counts = {};
   for (const f of findings) counts[f.check] = (counts[f.check] || 0) + 1;
-  const result = { schemaVersion: 1, screens: reviewed, findingsTotal: findings.length, major: findings.filter(f => f.severity === 'major').length, counts, rubric, tasks, firstRun, hooks, perScreen, findings, sampleChecked: !!sample, contrastMeasured: contrastMeasured > 0 };
+  const result = { schemaVersion: 1, productDuplicates, screens: reviewed, findingsTotal: findings.length, major: findings.filter(f => f.severity === 'major').length, counts, rubric, tasks, firstRun, hooks, perScreen, findings, sampleChecked: !!sample, contrastMeasured: contrastMeasured > 0 };
   result.summaryLines = summaryLines(result);
   return result;
 }
@@ -245,9 +255,12 @@ const sec = ms => (ms == null ? 'unknown' : `${(ms / 1000).toFixed(1)} s`);
 
 /** Outcome first, short enough for the results issue. */
 export function summaryLines(r) {
-  if (!r.screens) return ['UX review: no raw screen data in this run'];
+  const duplicates = r.productDuplicates;
+  const duplicateLine = duplicates && `Product details: duplicate source records removed across audited payload: ${duplicates.sourceRecordsRemoved ?? 'unmeasured'}; confirmed extra rows visible in captured disclosures: ${duplicates.visible.extraRows ?? 'unmeasured'} (${duplicates.visible.captures} measured captures).`;
+  if (!r.screens) return ['UX review: no raw screen data in this run', ...(duplicateLine ? [duplicateLine] : [])];
   const worst = [...r.rubric].filter(x => x.score != null).sort((a, b) => a.score - b.score).slice(0, 3);
   const lines = [`UX review: ${r.major} major, ${r.findingsTotal - r.major} minor across ${r.screens} screens. Weakest: ${worst.map(w => `${w.title} ${w.score}/5`).join(', ')}.`];
+  if (duplicateLine) lines.push(duplicateLine);
   if (!r.contrastMeasured) lines.push('Contrast not measured.');
   lines.push(`First value ${sec(r.firstRun.firstValueMs)}${r.firstRun.relaunchValueMs !== undefined ? `, relaunch ${sec(r.firstRun.relaunchValueMs)}` : ''}, ${r.firstRun.gates.length} gate taps. Taps: ${r.tasks.map(t => `${t.task.toLowerCase()} ${t.taps == null ? 'unknown' : t.taps}`).join(', ')}.`);
   const line = f => `- ${f.severity} | ${f.screen}: ${f.check}${f.text ? ` "${f.text.slice(0, 50)}"` : ''}, ${f.detail} | Fix: ${f.fix}`;
