@@ -263,6 +263,12 @@ export interface AppHealthNetworkDecision {
   reason: 'local-mode' | 'allowlisted' | 'not-allowlisted' | 'invalid-url' | 'inactive-session';
 }
 
+export interface AppHealthNetworkViolationCounts {
+  unattributedTransportViolations: number;
+  untrustedExternalLinkResponses: number;
+  untrustedNonLinkResponses: number;
+}
+
 export interface AppHealthNetworkSnapshot {
   mode: AppHealthAuditMode;
   authorizationAttempts: number;
@@ -270,6 +276,8 @@ export interface AppHealthNetworkSnapshot {
   blockedAttempts: number;
   transportCalls: number;
   policyViolations: number;
+  /** Aggregate causes without local destination or request details. */
+  violationCounts?: AppHealthNetworkViolationCounts;
   /** Bounded local evidence; never part of public diagnostics. */
   violations?: readonly AppHealthNetworkViolation[];
 }

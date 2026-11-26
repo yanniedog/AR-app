@@ -6,6 +6,7 @@ import {
   type AppHealthNetworkPurpose,
   type AppHealthNetworkSnapshot,
   type AppHealthNetworkViolation,
+  type AppHealthNetworkViolationCounts,
   type AppHealthSourceContract,
 } from './types';
 import { StandardUrl as URL } from '../standardUrl';
@@ -41,6 +42,7 @@ interface ActiveSession {
   blockedAttempts: number;
   transportCalls: number;
   policyViolations: number;
+  violationCounts: AppHealthNetworkViolationCounts;
   pendingAuthorizations: number;
   violations: AppHealthNetworkViolation[];
 }
@@ -65,6 +67,13 @@ function diagnosticHost(value?: string): string | null {
 
 function recordViolation(session: ActiveSession, violation: AppHealthNetworkViolation): void {
   session.policyViolations += 1;
+  if (violation.reason === 'unattributed-transport') {
+    session.violationCounts.unattributedTransportViolations += 1;
+  } else if (violation.purpose === 'external-link') {
+    session.violationCounts.untrustedExternalLinkResponses += 1;
+  } else {
+    session.violationCounts.untrustedNonLinkResponses += 1;
+  }
   if (session.violations.length < MAX_LOCAL_VIOLATIONS) session.violations.push(violation);
 }
 
@@ -130,6 +139,7 @@ function snapshotOf(session: ActiveSession): AppHealthNetworkSnapshot {
     blockedAttempts: session.blockedAttempts,
     transportCalls: session.transportCalls,
     policyViolations: session.policyViolations,
+    ...(session.policyViolations ? { violationCounts: { ...session.violationCounts } } : {}),
     ...(session.violations.length ? { violations: session.violations.map(item => ({ ...item })) } : {}),
   };
 }
@@ -189,6 +199,11 @@ export class AppHealthNetworkPolicy {
       blockedAttempts: 0,
       transportCalls: 0,
       policyViolations: 0,
+      violationCounts: {
+        unattributedTransportViolations: 0,
+        untrustedExternalLinkResponses: 0,
+        untrustedNonLinkResponses: 0,
+      },
       pendingAuthorizations: 0,
       violations: [],
     };
@@ -381,6 +396,11 @@ export function appHealthNetworkCheck(snapshot: AppHealthNetworkSnapshot): AppHe
       blockedAttempts: snapshot.blockedAttempts,
       transportCalls: snapshot.transportCalls,
       policyViolations: snapshot.policyViolations,
+      ...(snapshot.violationCounts ? {
+        unattributedTransportViolations: snapshot.violationCounts.unattributedTransportViolations,
+        untrustedExternalLinkResponses: snapshot.violationCounts.untrustedExternalLinkResponses,
+        untrustedNonLinkResponses: snapshot.violationCounts.untrustedNonLinkResponses,
+      } : {}),
     },
     ...(snapshot.violations?.length ? {
       localEvidence: { networkViolations: snapshot.violations.map(item => ({ ...item })) },
