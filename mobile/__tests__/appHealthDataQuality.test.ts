@@ -496,7 +496,28 @@ describe('app-health data quality', () => {
     });
   });
 
-  it('records rendered gaps: unknown values, raw codes, duplicates, hidden fee names and absent companion channels', () => {
+  it('a removed source duplicate alone does not change the details completeness status', () => {
+    const statusWith = (eligibility: object[]) => {
+      const { snapshot, contract } = makeHealthyDataFixture();
+      const key = snapshot.core!.sections.Mortgage.rates[0].product_key;
+      snapshot.details!.products = {
+        [key]: { description: 'Loan', last_updated: '2026-01-01', links: { overview: 'https://example.com/o' },
+          fees: [{ label: 'UPFRONT', name: 'Establishment Fee', value: '100' }], eligibility,
+          features: [{ label: 'OFFSET' }], constraints: [{ label: 'MAX_LVR', value: '80' }],
+          facts: [{ id: 'f-1', kind: 'feature', canonicalKey: 'feature.offset', sourceType: 'OFFSET' }],
+          rateConditions: { entries: [{}] }, sourceDocuments: [{ url: 'https://example.com/d' }] },
+      } as never;
+      return byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS), APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS);
+    };
+    const entry = { label: 'NATURAL_PERSON' };
+    const without = statusWith([entry]), withDuplicate = statusWith([entry, { ...entry }]);
+    expect(withDuplicate.metrics.sourceDuplicateItemsRemoved).toBe(1);
+    expect(without.metrics.sourceDuplicateItemsRemoved).toBe(0);
+    expect(without.status).toBe('pass');
+    expect(withDuplicate.status).toBe(without.status);
+  });
+
+  it('records rendered gaps and counts removed source duplicates separately', () => {
     const { snapshot, contract } = makeHealthyDataFixture();
     const key = snapshot.core!.sections.Mortgage.rates[0].product_key;
     snapshot.details!.products = {
@@ -511,7 +532,7 @@ describe('app-health data quality', () => {
     const metrics = byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
       APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS).metrics;
     expect(metrics).toMatchObject({
-      renderedGapsAudited: true, renderedDuplicateItems: 1, renderedUnknownEligibilityValues: 1,
+      renderedGapsAudited: true, sourceDuplicateItemsRemoved: 1, renderedUnknownEligibilityValues: 1,
       renderedUnknownFeeValues: 0, renderedRawCodeLabels: 0, companionChannelsExpected: 3, companionChannelsAbsent: 3,
     });
     expect(metrics.renderedSuppressedFeeNames).toBe(1);
