@@ -7,7 +7,6 @@ import { useTrustedExternalUrl } from '../ExternalLinkConfirmation';
 import { useAuditExternalLinks } from '../../hooks/useAuditExternalLinks';
 import { AppText, Button, Row } from '../ui';
 import { SELF_UPDATE_ENABLED } from '../../config';
-import { useStore } from '../../data/store';
 import {
   checkForAppUpdate,
   ensureApkBackgroundDownload,
@@ -26,7 +25,7 @@ import { readAppUpdateMetadata, type AppUpdateAuditRequest } from '../../lib/app
 import { OpaquePerformanceAuditRenderRevision } from '../../lib/performanceAuditReadiness';
 import { usePerformanceAuditSurface } from '../../hooks/usePerformanceAuditReadiness';
 import { ANDROID_UPDATE_READINESS_AUDIT } from '../../lib/performanceAuditCheckInventory';
-import { DisclosureGroup, InfoRow, Section, SettingsGap, ToggleRow } from './settingsUi';
+import { DisclosureGroup, InfoRow, Section, SettingsGap } from './settingsUi';
 import { uiJoin, uiIdentifier, uiPercentage, type UiCopy } from '../../lib/uiCopy';
 
 export interface AppUpdateSurfaceStatus {
@@ -41,9 +40,6 @@ export function AppUpdateSection({
   onStatusChange?: (status: AppUpdateSurfaceStatus) => void;
 } = {}) {
   const installed = getInstalledAppInfo();
-  const wifiOnly = useStore((s) => s.prefs.apkUpdatesWifiOnly);
-  const autoDownload = useStore((s) => s.prefs.apkUpdatesAutoDownload);
-  const setPref = useStore((s) => s.setPref);
   const auditState = useSyncExternalStore(
     subscribePerformanceAudit,
     getPerformanceAuditState,
@@ -161,11 +157,9 @@ export function AppUpdateSection({
       }
       if (result.status === 'available') {
         setChangelogs(result.changelogs);
-        if (autoDownload) {
-          void ensureApkBackgroundDownload(result.remote, { wifiOnly }).catch((err) => {
-            setError(err instanceof Error ? err.message : String(err));
-          });
-        }
+        void ensureApkBackgroundDownload(result.remote).catch((err) => {
+          setError(err instanceof Error ? err.message : String(err));
+        });
       }
       if (result.status === 'error') {
         setError(result.message);
@@ -178,7 +172,7 @@ export function AppUpdateSection({
     } finally {
       if (mounted.current && !auditPending.current) setChecking(false);
     }
-  }, [auditOwnsNetwork, autoDownload, runAuditCheck, wifiOnly]);
+  }, [auditOwnsNetwork, runAuditCheck]);
 
   const updateActions = useMemo<Record<typeof ANDROID_UPDATE_READINESS_AUDIT.semanticActionId,
     (request: unknown) => ReturnType<typeof runCheck>>>(() => ({
@@ -216,7 +210,7 @@ export function AppUpdateSection({
     setUpgrading(true);
     setError(null);
     try {
-      await upgradeFromBackgroundDownload(remote, { wifiOnly });
+      await upgradeFromBackgroundDownload(remote);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
@@ -224,7 +218,7 @@ export function AppUpdateSection({
     } finally {
       setUpgrading(false);
     }
-  }, [remote, wifiOnly]);
+  }, [remote]);
 
   const updateAvailable = checkResult?.status === 'available';
   const isCurrent = checkResult?.status === 'current';
@@ -250,7 +244,7 @@ export function AppUpdateSection({
         : phase === 'retrying'
           ? 'Retry'
           : phase === 'waiting'
-            ? 'Waiting for Wi-Fi'
+            ? 'Waiting for network'
           : phase === 'cancelled'
             ? 'Cancelled'
       : phase === 'downloading'
@@ -279,19 +273,8 @@ export function AppUpdateSection({
     const audit = getPerformanceAuditState();
     if (audit.status === 'queued' || audit.status === 'running') return;
     if (!remote) return;
-    if (phase === 'ready' || autoDownload) {
-      void performUpgrade();
-      return;
-    }
-    Alert.alert(
-      'Download update',
-      uiJoin('Version', ': ', uiIdentifier(remote.version), ' · ', 'Verified APK', ' · ', 'GitHub', ' · ', wifiOnly ? 'Wi-Fi only' : 'Current network', ' · ', 'Android installation permission'),
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Download', onPress: () => void performUpgrade() },
-      ],
-    );
-  }, [autoDownload, performUpgrade, phase, remote, wifiOnly]);
+    void performUpgrade();
+  }, [performUpgrade, remote]);
 
   useEffect(() => {
     onStatusChange?.({
@@ -321,20 +304,6 @@ export function AppUpdateSection({
 
   return (
     <Section title="App update">
-      <ToggleRow
-        icon="cloud-download-outline"
-        label="Automatic app updates"
-        value={autoDownload}
-        onChange={(value) => setPref('apkUpdatesAutoDownload', value)}
-      />
-      <SettingsGap size={8} />
-      <ToggleRow
-        icon="wifi-outline"
-        label="Download APKs on Wi-Fi only"
-        value={wifiOnly}
-        onChange={(value) => setPref('apkUpdatesWifiOnly', value)}
-      />
-      <SettingsGap size={8} />
       <View key={renderRevision} collapsable={false} onLayout={event => {
         if (!mounted.current || committedUpdateRevision.current !== renderRevision) return;
         setMeasuredUpdateRevision(event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0
@@ -344,7 +313,6 @@ export function AppUpdateSection({
       <InfoRow label="Version" value={latestLabel} />
       <InfoRow label="Source" value="GitHub" />
       <InfoRow label="APK" value="Verified" />
-      <InfoRow label="Consent" value="Optional" />
       <InfoRow label="Install" value="Android installation permission" />
       {downloadPct !== null && phase === 'downloading' ? (
         <InfoRow label="Download" value={uiPercentage(downloadPct)} />

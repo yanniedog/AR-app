@@ -280,7 +280,6 @@ async function downloadOnce(
 export async function downloadApkUpdate(
   manifest: ApkManifest,
   onProgress?: (progress: DownloadProgress) => void,
-  options?: { wifiOnly?: boolean },
 ): Promise<string> {
   if (Platform.OS !== 'android') {
     throw new Error('APK download is Android-only');
@@ -290,7 +289,7 @@ export async function downloadApkUpdate(
 
   let backgroundStarted = false;
   try {
-    await ensureApkBackgroundDownload(manifest, options);
+    await ensureApkBackgroundDownload(manifest);
     backgroundStarted = true;
     return await waitForBackgroundApkReady(manifest, onProgress);
   } catch (err) {
@@ -351,7 +350,6 @@ async function downloadApkUpdateForeground(
 export async function downloadAndInstallUpdate(
   manifest: ApkManifest,
   onProgress?: (progress: DownloadProgress) => void,
-  options?: { wifiOnly?: boolean },
 ): Promise<void> {
   // Upgrade path: install from the background-downloaded APK when ready.
   const snap = getApkDownloadSnapshot();
@@ -365,6 +363,6 @@ export async function downloadAndInstallUpdate(
     return;
   }
 
-  const localUri = await downloadApkUpdate(manifest, onProgress, options);
+  const localUri = await downloadApkUpdate(manifest, onProgress);
   await installDownloadedApk(localUri);
 }

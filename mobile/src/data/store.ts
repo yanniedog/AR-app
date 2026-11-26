@@ -23,7 +23,7 @@ import { SECTION_ORDER } from '../constants';
 import { normalizeSavedRates } from './savedRates';
 import { normalizeProductSubscriptionIds, refreshProductSubscriptionLabels } from './subscriptions';
 import { loadTrackedRatesSecureResult, normalizeTrackedRates } from './trackedRates';
-import { debugLog } from '../lib/debugLog';
+import { debugLog, PAYLOAD_RUN_DATE_TAG } from '../lib/debugLog';
 import { setCrashReportsEnabled } from '../lib/observability';
 import { recoverInterruptedPerformanceAudit } from '../lib/performanceAuditRollback';
 import { verifiedCatalogueDetails } from './detailsCatalogue';
@@ -78,7 +78,12 @@ export const useStore = create<AppState>()(
         const p = persisted as Partial<AppState> | undefined;
         const persistedPrefs = p?.prefs ? { ...p.prefs } as Partial<AppState['prefs']> : undefined;
         // Retire completion without changing any explicit preference or privacy choice.
-        if (persistedPrefs) delete (persistedPrefs as Record<string, unknown>).onboarded;
+        if (persistedPrefs) {
+          // Retired settings: rates and APK updates always use any available connection.
+          for (const key of ['onboarded', 'wifiOnly', 'apkUpdatesWifiOnly', 'apkUpdatesAutoDownload']) {
+            delete (persistedPrefs as Record<string, unknown>)[key];
+          }
+        }
         const hasCurrentPrivacyChoice =
           persistedPrefs?.privacyChoiceVersion === CURRENT_PRIVACY_CHOICE_VERSION;
         const hasPreviousPrivacyChoice =
@@ -110,10 +115,6 @@ export const useStore = create<AppState>()(
             ? CURRENT_PRIVACY_CHOICE_VERSION
             : 0,
           diagnosticsEnabled: false,
-          apkUpdatesWifiOnly: typeof persistedPrefs?.apkUpdatesWifiOnly === 'boolean'
-            ? persistedPrefs.apkUpdatesWifiOnly : DEFAULT_PREFS.apkUpdatesWifiOnly,
-          apkUpdatesAutoDownload: typeof persistedPrefs?.apkUpdatesAutoDownload === 'boolean'
-            ? persistedPrefs.apkUpdatesAutoDownload : DEFAULT_PREFS.apkUpdatesAutoDownload,
           ...migratedMortgageRatePreference(persistedPrefs),
           interests: normalizeInterests(persistedPrefs?.interests ?? DEFAULT_INTERESTS),
           profileFilters: normalizeProfileFilters(persistedPrefs?.profileFilters),
@@ -245,3 +246,11 @@ export async function runScheduledBackgroundRefresh(): Promise<BackgroundTask.Ba
     return BackgroundTask.BackgroundTaskResult.Failed;
   }
 }
+
+let lastShownRunDate: string | null = null;
+useStore.subscribe((state) => {
+  const runDate = state.core?.run_date ?? null;
+  if (!runDate || runDate === lastShownRunDate) return;
+  lastShownRunDate = runDate;
+  debugLog.info(PAYLOAD_RUN_DATE_TAG, `shown=${runDate}`);
+});

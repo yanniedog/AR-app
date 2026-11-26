@@ -830,7 +830,8 @@ class Explorer {
     if (step.tap || step.longPress) {
       const sel = step.tap || step.longPress;
       const node = (step.scroll ? await this.scrollUntil(sel) : null) || await this.find(sel, step.timeout ?? 8000);
-      if (!node) return this.record(label, { error: `not found: ${JSON.stringify(sel)}` });
+      // An optional step covers UI that only some products render, such as legacy disclosure groups.
+      if (!node) return this.record(label, step.optional ? { skipped: `absent: ${JSON.stringify(sel)}` } : { error: `not found: ${JSON.stringify(sel)}` });
       const [x, y] = centre(node);
       const t0 = Date.now();
       if (step.longPress) sh(`input swipe ${x} ${y} ${x} ${y} 900`);
@@ -948,6 +949,9 @@ class Explorer {
     fs.writeFileSync(path.join(this.out, 'logcat.txt'), this.logAll);
     const baseline = loadBaseline(this.args.baseline);
     const report = { schemaVersion: 1, ...meta, audit: this.audit, systemDialogs, finishedAt: new Date().toISOString(), steps: this.steps };
+    // The app logs the run date it is showing; it must match the newest published payload.
+    const shownDates = [...this.logAll.matchAll(/payload-run-date: shown=(\d{4}-\d{2}-\d{2})/g)].map(m => m[1]);
+    report.freshness = { shown: shownDates.at(-1) ?? null, latest: meta.network?.latestRunDate || null };
     if (this.steps.some(st => st.session)) {
       // Only an earlier real-use session is a fair baseline for the session verdict.
       const sessionBase = loadBaseline(this.args.sessionBaseline)?.raw;
@@ -986,7 +990,7 @@ function renderMarkdown(report, baseline) {
     ...(report.session ? renderOutcome(report.session) : []),
     ...renderSessionCoverage(report),
     unavailable.length ? `**Data unavailable on ${unavailable.length} of ${report.steps.length} steps**` : '',
-    report.network ? `Runner payload check: manifest HTTP ${report.network.manifestStatus}, ${report.network.manifestBytes} bytes, run_date ${report.network.runDate ?? '?'}` : '',
+    report.network ? `Runner payload check: manifest HTTP ${report.network.manifestStatus}, ${report.network.manifestBytes} bytes, latest published run date ${report.network.latestRunDate ?? '?'}` : '',
     '',
     `Mode ${report.mode} | ${report.steps.length} steps | crashes ${crashed.length} | step failures ${failed.length} | settle timeouts ${slow.length} | steps with JS/native errors ${withErrors.length}`,
     baseline ? `Baseline ${baseline.version}` : '',

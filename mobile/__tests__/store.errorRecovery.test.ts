@@ -87,7 +87,7 @@ function resetStore() {
     lastCheckedAt: null,
     payloadProgress: null,
     hydrated: true,
-    prefs: { ...useStore.getState().prefs, wifiOnly: false },
+    prefs: { ...useStore.getState().prefs },
     favorites: [],
   });
 }
@@ -195,32 +195,6 @@ describe('store error recovery', () => {
       expect(useStore.getState().core).toBeNull();
       expect(useStore.getState().status).toBe('error');
       expect(mockWriteBundle).not.toHaveBeenCalled();
-    } finally {
-      jest.useRealTimers();
-    }
-  });
-
-  it('leaves the splash for an error screen when Wi-Fi policy skips expired-sample refresh', async () => {
-    const observed = Date.parse(sampleManifest.generated_at);
-    jest.useFakeTimers().setSystemTime(
-      observed + (SAMPLE_MAX_AGE_DAYS + 1) * 86400000,
-    );
-    try {
-      useStore.setState({
-        status: 'idle',
-        core: null,
-        error: null,
-        prefs: { ...useStore.getState().prefs, wifiOnly: true },
-      });
-      mockReadBundle.mockResolvedValue(null);
-      (jest.requireMock('expo-network').getNetworkStateAsync as jest.Mock)
-        .mockResolvedValue({ type: 'CELLULAR' });
-
-      await useStore.getState().bootstrap();
-
-      expect(useStore.getState().refreshOutcome).toBe('wifi-skip');
-      expect(useStore.getState().status).toBe('error');
-      expect(useStore.getState().error).toContain('No verified rates');
     } finally {
       jest.useRealTimers();
     }

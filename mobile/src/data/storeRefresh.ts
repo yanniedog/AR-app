@@ -25,7 +25,6 @@ import { logStoreRefreshSkipped } from '../lib/degradationLog';
 import { hapticRefreshComplete } from '../lib/haptics';
 import { parseJsonHeavy, yieldToUi } from '../lib/yieldToUi';
 import type { AppState, StoreGet, StoreSet } from './storeTypes';
-import { onWifi } from './storeHelpers';
 import {
   closeSuitabilityGateUntilRebuild,
   getSuitabilityIndex,
@@ -300,13 +299,6 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
 
       if (get().refreshing) {
         logStoreRefreshSkipped('already_refreshing');
-        return false;
-      }
-      const prefs = get().prefs;
-      if (prefs.wifiOnly && !manual && !(await onWifi())) {
-        logStoreRefreshSkipped('wifi_only');
-        debugLog.debug('store', 'refresh skipped (wifi-only, not on Wi-Fi)');
-        set({ lastCheckedAt: new Date().toISOString(), refreshOutcome: 'wifi-skip' });
         return false;
       }
       debugLog.info(

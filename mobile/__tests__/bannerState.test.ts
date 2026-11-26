@@ -76,10 +76,4 @@ describe('resolveRefreshOutcomeSnackbar', () => {
     expect(view.message).toBe('Couldn\u2019t update rates. Showing your saved copy.');
   });
 
-  it('links to settings on wifi skip', () => {
-    const view = resolveRefreshOutcomeSnackbar('wifi-skip', null);
-    expect(view.kind).toBe('wifi-skip');
-    expect(view.action).toBe('settings');
-    expect(view.message).toContain('Wi');
-  });
 });
