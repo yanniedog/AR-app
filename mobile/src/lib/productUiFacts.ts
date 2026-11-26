@@ -40,6 +40,8 @@ export function isAnnualFee(fee: DetailItem): boolean {
     || label === 'PERIODIC' && String(fee.additionalValue ?? fee.accrualFrequency ?? '') === 'P1Y';
 }
 export function isUpfrontFee(fee: DetailItem): boolean { return (fee.label ?? '').toUpperCase() === 'UPFRONT'; }
+// A negative or boolean value never establishes a feature or criterion.
+const NON_ESTABLISHING_VALUE = /^(?:true|false|yes|no|n\/?a|nil|not (?:offered|available|applicable|included|required))\.?$/i;
 const PRESENCE_ONLY_CODES = new Set(['NATURAL_PERSON', 'BUSINESS', 'STAFF', 'STUDENT', 'PENSION_RECIPIENT', 'FIRST_HOME_BUYER', 'MIN_RESIDENCY']);
 
 export function uiProductFactValue(fact: ProductPresentationFact): UiText {
@@ -151,7 +153,6 @@ export function uiNormalizedProductFact(fact: NormalizedProductFact): ProductPre
   const lower = fact.minValue, upper = fact.maxValue;
   const declaredWithoutValue = (fact.kind === 'feature' || fact.kind === 'bundle') && fact.value === undefined && lower === undefined
     && upper === undefined && !fact.cadence && fact.evidenceState !== 'unknown' && fact.evidenceState !== 'conflicting';
-  const conditionsUnverified = Boolean(fact.condition?.trim() || fact.evidenceState && fact.evidenceState !== 'observed');
   const render = (field: 'value' | 'minValue' | 'maxValue') => {
     const raw = fact[field];
     if (fact.valueType === 'decimal') return uiExactFactDecimal(fact, field);
@@ -161,12 +162,19 @@ export function uiNormalizedProductFact(fact: NormalizedProductFact): ProductPre
     : declaredWithoutValue ? uiLabel(fact.condition?.trim() ? 'Conditions apply' : 'Included')
     : lower !== undefined && upper !== undefined ? uiJoin(render('minValue'), '–', render('maxValue'))
       : lower !== undefined ? uiJoin('≥', render('minValue')) : upper !== undefined ? uiJoin('≤', render('maxValue')) : render('value');
+  // Same rule as uiDetailItem: an unreviewed text value is never shown; the code still establishes the feature or criterion.
+  const code = (fact.sourceType ?? fact.canonicalKey.split(/[.:/]/).at(-1) ?? '').toUpperCase();
+  const unreviewedValue = value === 'Unknown' && fact.evidenceState !== 'unknown' && lower === undefined && upper === undefined
+    && typeof fact.value === 'string' && fact.value.trim() !== '' && !NON_ESTABLISHING_VALUE.test(fact.value.trim());
+  const shownValue = unreviewedValue && fact.kind === 'feature' && code !== 'CASHBACK_OFFER' ? uiLabel('Conditions apply')
+    : unreviewedValue && fact.kind === 'eligibility' && PRESENCE_ONLY_CODES.has(code) ? uiLabel('Required') : value;
+  const conditionsUnverified = Boolean(fact.condition?.trim() || fact.evidenceState && fact.evidenceState !== 'observed') || shownValue !== value;
   const generic = humanizeEnum(fact.sourceType?.toUpperCase() !== 'OTHER' ? fact.sourceType ?? fact.canonicalKey.split(/[.:/]/).at(-1) : fact.canonicalKey.split(/[.:/]/).at(-1));
   const other = generic === 'Unknown' || fact.canonicalKey.split(/[.:/]/).at(-1)?.toLowerCase() === 'other';
   const label = fact.kind === 'fee' ? uiFeeTypeLabel(fact.sourceType) ?? uiFeeTypeLabel(fact.canonicalKey.split(/[.:/]/).at(-1)?.toUpperCase()) ?? uiLabel('Other fee')
     : other ? uiLabel(fact.kind === 'feature' ? 'Other feature' : 'Other criterion') : generic;
   return { sourceFact: fact, label,
-    value: uiJoin(value, fact.cadence ? uiJoin(' · ', uiCadence(fact.cadence)) : null), reference: uiIdentifier(fact.id),
+    value: uiJoin(shownValue, fact.cadence ? uiJoin(' · ', uiCadence(fact.cadence)) : null), reference: uiIdentifier(fact.id),
     conditions: conditionsUnverified || declaredWithoutValue && fact.condition?.trim() ? 'source-review-required' : 'none', conditionsUnverified,
     scope: fact.appliesTo?.map(humanizeEnum) ?? [] };
 }
@@ -228,7 +236,13 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
   const textLike = group === 'Eligibility' || group === 'Constraints';
   // The criterion code itself establishes the restriction. Wording beside it may narrow it, so it reads
   // Required with conditions unverified, never an unconditional Required.
-  const presenceOnly = textLike && PRESENCE_ONLY_CODES.has((item.label ?? '').toUpperCase()) && !detailValuePresent(item.value);
+  const scalarText = scalar ? isoDurationText(scalar) ?? (group === 'Features' ? reviewedFeatureValues(scalar) : null) ?? uiTextValue(scalar) : null;
+  // A published value no reviewed rule can present. It is never shown, and never dropped silently either.
+  const unreviewedValue = scalarText === 'Unknown' && numeric === null && !NON_ESTABLISHING_VALUE.test((scalar ?? '').trim());
+  const presenceOnly = textLike && PRESENCE_ONLY_CODES.has((item.label ?? '').toUpperCase()) && (!detailValuePresent(item.value) || unreviewedValue);
+  // The feature code itself says the feature is offered; an unreviewed value describes it, so it reads Conditions apply.
+  // A monetary feature (cashback) never reads as an offer without a parsed amount.
+  const featureWithUnreviewedValue = group === 'Features' && unreviewedValue && item.label !== 'CASHBACK_OFFER';
   const cashback = group === 'Features' ? cashbackRange(item) : null;
   // These published CDR constraint codes establish the unit. Older payloads
   // contain both ratios (0.8) and percentage numbers (98), like the rate DTO.
@@ -239,7 +253,7 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
     ? uiRate(toFraction(numeric), Math.max(2, Math.min(6, lvrDecimals - (numeric <= 1 ? 2 : 0)))) : uiLabel('Unknown');
   const value = group === 'Fees' ? uiFeeValue(item) : residencyField ? residency ?? uiLabel('Unknown') : lvr ? lvrValue : numeric !== null ? uiJoin(group === 'Constraints' && /^(?:MIN|MAX)_(?:LIMIT|BALANCE|AMOUNT)$/.test(item.label ?? '') ? uiMoney(numeric, Math.min(2, precision(numeric))) : uiNumber(numeric, precision(numeric)),
     ['Minimum age', 'Maximum age'].includes(controlled ?? '') ? uiJoin(' ', 'years') : null)
-    : residency ?? cashback ?? (scalar?.toLowerCase() === 'false' || scalar?.toLowerCase() === 'true' ? uiLabel(scalar.toLowerCase() === 'true' ? 'Yes' : 'No') : group === 'Features' && item.value == null ? uiLabel(item.info?.trim() ? 'Conditions apply' : 'Included') : presenceOnly ? uiLabel('Required') : scalar ? isoDurationText(scalar) ?? (group === 'Features' ? reviewedFeatureValues(scalar) : null) ?? uiTextValue(scalar) : uiLabel('Unknown'));
+    : residency ?? cashback ?? (scalar?.toLowerCase() === 'false' || scalar?.toLowerCase() === 'true' ? uiLabel(scalar.toLowerCase() === 'true' ? 'Yes' : 'No') : group === 'Features' && item.value == null ? uiLabel(item.info?.trim() ? 'Conditions apply' : 'Included') : presenceOnly ? uiLabel('Required') : featureWithUnreviewedValue ? uiLabel('Conditions apply') : scalarText ?? uiLabel('Unknown'));
   const unresolvedInfo = Boolean(item.info?.trim() && !knownInfo);
   // Unclassified eligibility prose can describe the criterion itself, rather
   // than an extra condition on a published amount or limit.
@@ -247,7 +261,7 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
     // A feature value never stands as unconditional while its published wording is unreviewed.
     group === 'Fees' || group === 'Features'
     || (lvr && lvrValue !== 'Unknown') || presenceOnly
-  );
+  ) || unreviewedValue && (presenceOnly || featureWithUnreviewedValue);
   return { label: label || uiJoin(group, ' ', uiCount(index + 1)), value: uiJoin(value || uiLabel('Unknown'), knownInfo && knownInfo !== residency ? uiJoin(' · ', knownInfo) : null),
     reference: uiCount(index + 1),
     conditions: unresolvedInfo || feeName === 'Unknown' && !!item.name?.trim()
