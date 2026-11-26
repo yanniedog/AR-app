@@ -115,6 +115,24 @@ export function uiFeeDiscount(discount: FeeDiscount): UiText {
     discount.additionalInfo?.trim() || discount.description?.trim() || discount.eligibility?.length
       ? uiJoin(' · ', 'Conditions', ': ', 'Unverified') : null);
 }
+/**
+ * ISO 8601 durations such as P1Y, P30Y or PT12H read as "1 year", "30 years" or "12 hours". Week form stands alone, only the last
+ * component may be fractional, and anything else is not a duration, so the published text is left as it is.
+ */
+function isoDurationText(value: string): UiText | null {
+  const n = '(\\d+(?:[.,]\\d+)?)';
+  const parts = new RegExp(`^P(?:${n}Y)?(?:${n}M)?(?:${n}W)?(?:${n}D)?(?:T(?:${n}H)?(?:${n}M)?(?:${n}S)?)?$`).exec(value.trim());
+  if (!parts || /T$/.test(value.trim())) return null;
+  const present = parts.slice(1).flatMap((raw, index) => raw ? [{ raw, index }] : []);
+  if (!present.length || parts[3] && present.length > 1) return null;
+  if (present.slice(0, -1).some(({ raw }) => /[.,]/.test(raw))) return null;
+  const units: readonly (readonly [UiLabel, UiLabel])[] = [['year', 'years'], ['month', 'months'], ['week', 'weeks'], ['day', 'days'], ['hour', 'hours'], ['minute', 'minutes'], ['second', 'seconds']];
+  const values = present.map(({ raw, index }) => {
+    const amount = Number(raw.replace(',', '.'));
+    return uiJoin(/[.,]/.test(raw) ? uiNumber(amount, raw.split(/[.,]/)[1].length) : uiCount(amount), ' ', units[index][amount === 1 ? 0 : 1]);
+  });
+  return uiJoin(...values.flatMap((part, i) => i ? [uiLabel(', '), part] : [part]));
+}
 function factValue(value: unknown, unit?: string): UiText {
   if (unit === 'boolean' || typeof value === 'boolean') return value === true ? uiLabel('Yes') : value === false ? uiLabel('No') : uiLabel('Unknown');
   if (unit === 'enum' && typeof value === 'string') return humanizeEnum(value);
@@ -122,13 +140,7 @@ function factValue(value: unknown, unit?: string): UiText {
     // Only a recognised controlled value is shown; other source wording stays Unknown.
     return humanizeEnum(value);
   }
-  if (unit === 'duration' && typeof value === 'string') {
-    const parts = /^P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)W)?(?:(\d+)D)?$/.exec(value);
-    if (!parts || !parts.slice(1).some(Boolean)) return uiLabel('Unknown');
-    const units: readonly (readonly [UiLabel, UiLabel])[] = [['year', 'years'], ['month', 'months'], ['week', 'weeks'], ['day', 'days']];
-    const values = parts.slice(1).flatMap((raw, index) => raw ? [uiJoin(uiCount(Number(raw)), ' ', units[index][Number(raw) === 1 ? 0 : 1])] : []);
-    return uiJoin(...values.flatMap((part, i) => i ? [uiLabel(', '), part] : [part]));
-  }
+  if (unit === 'duration' && typeof value === 'string') return isoDurationText(value) ?? uiLabel('Unknown');
   const n = number(value); if (n === null) return uiLabel('Unknown');
   if (unit === 'fraction') return uiRate(toFraction(n));
   if (unit === 'AUD' || unit && /^[A-Z]{3}$/.test(unit)) return money(n, unit);
@@ -220,7 +232,7 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
     ? uiRate(toFraction(numeric), Math.max(2, Math.min(6, lvrDecimals - (numeric <= 1 ? 2 : 0)))) : uiLabel('Unknown');
   const value = group === 'Fees' ? uiFeeValue(item) : residencyField ? residency ?? uiLabel('Unknown') : lvr ? lvrValue : numeric !== null ? uiJoin(group === 'Constraints' && /^(?:MIN|MAX)_(?:LIMIT|BALANCE|AMOUNT)$/.test(item.label ?? '') ? uiMoney(numeric, Math.min(2, precision(numeric))) : uiNumber(numeric, precision(numeric)),
     ['Minimum age', 'Maximum age'].includes(controlled ?? '') ? uiJoin(' ', 'years') : null)
-    : residency ?? cashback ?? (scalar?.toLowerCase() === 'false' || scalar?.toLowerCase() === 'true' ? uiLabel(scalar.toLowerCase() === 'true' ? 'Yes' : 'No') : group === 'Features' && item.value == null ? uiLabel(item.info?.trim() ? 'Conditions apply' : 'Included') : presenceOnly ? uiLabel('Required') : scalar ? uiTextValue(scalar) : uiLabel('Unknown'));
+    : residency ?? cashback ?? (scalar?.toLowerCase() === 'false' || scalar?.toLowerCase() === 'true' ? uiLabel(scalar.toLowerCase() === 'true' ? 'Yes' : 'No') : group === 'Features' && item.value == null ? uiLabel(item.info?.trim() ? 'Conditions apply' : 'Included') : presenceOnly ? uiLabel('Required') : scalar ? isoDurationText(scalar) ?? uiTextValue(scalar) : uiLabel('Unknown'));
   const unresolvedInfo = Boolean(item.info?.trim() && !knownInfo);
   // Unclassified eligibility prose can describe the criterion itself, rather
   // than an extra condition on a published amount or limit.
