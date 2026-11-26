@@ -386,7 +386,8 @@ export const APP_HEALTH_PUBLIC_METRIC_ALLOWLIST: Readonly<
     'renderedRawCodeLabels',
     'renderedGenericLabels',
     'renderedOtherLabels',
-    'renderedDuplicateItems',
+    'renderedDuplicateItems', // Retained for re-exporting older audit records.
+    'sourceDuplicateItemsRemoved',
     'renderedSuppressedFeeNames',
     'feeListsWithoutUpfrontFee',
     'feeListsWithoutAnnualFee',
