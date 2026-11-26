@@ -1,0 +1,179 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Offset account",
+  "at": [
+   291,
+   522
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   522
+  ]
+ },
+ {
+  "label": "Availability",
+  "at": [
+   228,
+   574
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   568,
+   574
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   268,
+   626
+  ]
+ },
+ {
+  "label": "Published · 8",
+  "at": [
+   608,
+   626
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   360,
+   778
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "flags": "tap",
+  "at": [
+   360,
+   896
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "at": [
+   386,
+   896
+  ]
+ },
+ {
+  "label": "Show Fees",
+  "flags": "tap",
+  "at": [
+   360,
+   1122
+  ]
+ },
+ {
+  "label": "Fees",
+  "at": [
+   328,
+   1122
+  ]
+ },
+ {
+  "label": "Published product history",
+  "at": [
+   360,
+   1286
+  ]
+ },
+ {
+  "label": "Leading advertised · All tiers · Conditional rate / Restricted",
+  "at": [
+   360,
+   1389
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
