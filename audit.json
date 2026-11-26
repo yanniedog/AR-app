@@ -1,0 +1,42 @@
+{
+  "kind": "live",
+  "url": "https://paste.rs/Bt7Cw",
+  "outcome": null,
+  "elapsedMs": 986211,
+  "visibleOutcome": [
+    "Verified · 1.0.381",
+    "Install verified update",
+    "Install",
+    "Dismiss update banner",
+    "Back",
+    "App health audit",
+    "Account",
+    "2,846 / 2,846",
+    "Verified upload",
+    "Verified upload",
+    "Uploaded",
+    "https://paste.rs/Bt7Cw",
+    "https://paste.c-net.org/bec9a409-1ef1-dc3c-4868-ab4bf33103b9",
+    "Copy paste.rs link",
+    "Copy paste.rs link",
+    "Copy paste.c-net.org link",
+    "Copy paste.c-net.org link",
+    "Audit history",
+    "Retained runs",
+    "1 / 120"
+  ],
+  "logStatus": 200,
+  "logContentUrl": "https://paste.c-net.org/bec9a409-1ef1-dc3c-4868-ab4bf33103b9",
+  "logBytes": 848085,
+  "completion": {
+    "outcome": "failed",
+    "collectionComplete": true,
+    "coverageComplete": false,
+    "detailsComplete": true
+  },
+  "debugLog": {
+    "url": "https://paste.rs/yFMXO",
+    "uploadMs": 24066,
+    "error": "Hosted log exceeds the upload byte limit"
+  }
+}

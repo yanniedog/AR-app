@@ -1,0 +1,182 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Premium Smart Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Hide Constraints",
+  "flags": "tap",
+  "at": [
+   360,
+   317
+  ]
+ },
+ {
+  "label": "Constraints",
+  "at": [
+   328,
+   317
+  ]
+ },
+ {
+  "label": "Minimum balance",
+  "at": [
+   190,
+   417
+  ]
+ },
+ {
+  "label": "$150k",
+  "at": [
+   530,
+   417
+  ]
+ },
+ {
+  "label": "Maximum LVR",
+  "at": [
+   190,
+   477
+  ]
+ },
+ {
+  "label": "80.0% · Conditions: Unverified",
+  "at": [
+   530,
+   497
+  ]
+ },
+ {
+  "label": "Show Terms",
+  "flags": "tap",
+  "at": [
+   360,
+   746
+  ]
+ },
+ {
+  "label": "Terms",
+  "at": [
+   328,
+   746
+  ]
+ },
+ {
+  "label": "Show Source criteria",
+  "flags": "tap",
+  "at": [
+   360,
+   987
+  ]
+ },
+ {
+  "label": "Source criteria",
+  "at": [
+   328,
+   987
+  ]
+ },
+ {
+  "label": "Show Source evidence",
+  "flags": "tap",
+  "at": [
+   360,
+   1228
+  ]
+ },
+ {
+  "label": "Source evidence",
+  "at": [
+   328,
+   1228
+  ]
+ },
+ {
+  "label": "Save all rates",
+  "flags": "tap",
+  "at": [
+   360,
+   1382
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
