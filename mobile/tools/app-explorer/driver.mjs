@@ -46,28 +46,57 @@ function parseArgs(argv) {
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-/** Fetch an uploaded log, following paste.rs share pointers whose body is only the canonical URL. */
-async function fetchUploadedLog(url) {
+const MAX_HOSTED_DEBUG_LOG_BYTES = 32 * 1024 * 1024;
+const SHARE_POINTER_LIMIT = 300;
+
+function createSharePointerReader() {
+  const decoder = new TextDecoder();
+  let pointer = '';
+  let trailingWhitespace = false;
+  const append = text => {
+    const token = pointer ? text.trimEnd() : text.trim();
+    if ((trailingWhitespace && token) || /\s/.test(token) || pointer.length + token.length >= SHARE_POINTER_LIMIT) {
+      pointer = null;
+      return;
+    }
+    pointer += token;
+    if (pointer && /\s$/.test(text)) trailingWhitespace = true;
+  };
+  return {
+    write(chunk) {
+      if (pointer !== null) append(decoder.decode(chunk, { stream: true }));
+    },
+    finish() {
+      if (pointer !== null) append(decoder.decode());
+      return pointer ?? '';
+    },
+  };
+}
+
+/** Follow the share pointer and read the host. Debug checks count bytes without retaining the body. */
+export async function fetchUploadedLog(url, { debugLog = false } = {}) {
+  const maxBytes = debugLog ? MAX_HOSTED_DEBUG_LOG_BYTES : MAX_ENVELOPE_BYTES;
   let current = url;
-  const hops = [];
   for (let i = 0; i < 3; i += 1) {
     const res = await fetch(current, { signal: AbortSignal.timeout(60000) });
     if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
     const chunks = [];
+    const pointerReader = debugLog ? createSharePointerReader() : null;
     let bytes = 0;
     for await (const chunk of res.body ?? []) {
       bytes += chunk.byteLength;
-      if (bytes > MAX_ENVELOPE_BYTES) throw new Error('Hosted log exceeds the upload byte limit');
-      chunks.push(chunk);
+      if (bytes > maxBytes) throw new Error('Hosted log exceeds the download byte limit');
+      if (pointerReader) pointerReader.write(chunk);
+      else chunks.push(chunk);
     }
-    const body = Buffer.concat(chunks, bytes).toString('utf8');
-    const pointer = body.trim();
-    if (/^https:\/\/\S+$/.test(pointer) && pointer.length < 300) {
-      hops.push(current);
+    const body = debugLog ? null : Buffer.concat(chunks, bytes).toString('utf8');
+    const pointer = pointerReader?.finish() ?? body?.trim() ?? '';
+    if (pointer.length < SHARE_POINTER_LIMIT && /^https:\/\/paste\.(?:rs|c-net\.org)\/[A-Za-z0-9._~-]+$/.test(pointer)) {
       current = pointer;
       continue;
     }
-    return { body, status: res.status, contentUrl: current, hops };
+    if (!bytes) throw new Error('Hosted log is empty');
+    return { body, bytes, status: res.status, contentUrl: current };
   }
   throw new Error('too many share-link hops');
 }
@@ -628,7 +657,7 @@ class Explorer {
     await sleep(10000);
   }
 
-  /** About > Debug log > Upload and copy link, then fetch the uploaded text into debug-log.txt. */
+  /** About > Debug log > Upload and copy link, then check the hosted text. */
   async uploadDebugLog() {
     if (!appPid()) { await this.relaunch(); await sleep(10000); }
     await this.open('/about', 'about for debug log');
@@ -664,12 +693,12 @@ class Explorer {
     const result = { url, uploadMs: Date.now() - t0 };
     if (url) {
       try {
-        const { body, status, contentUrl } = await fetchUploadedLog(url);
+        const { bytes, status, contentUrl } = await fetchUploadedLog(url, { debugLog: true });
         result.status = status;
         result.contentUrl = contentUrl;
-        fs.writeFileSync(path.join(this.out, 'debug-log.txt'), body);
-        result.bytes = Buffer.byteLength(body);
+        result.bytes = bytes;
       } catch (error) {
+        if (Number.isInteger(error?.status)) result.status = error.status;
         result.error = String(error.message || error);
       }
     }
@@ -945,6 +974,11 @@ function loadBaseline(file) {
 }
 
 function renderMarkdown(report, baseline) {
+  const debugLog = report.audit?.debugLog;
+  const debugLogSummary = debugLog?.url && debugLog.bytes
+    ? `${debugLog.bytes} bytes read from host ${debugLog.contentUrl ?? debugLog.url}`
+    : debugLog?.url ? `fetch failed (${debugLog.error ?? debugLog.status}) ${debugLog.url}`
+    : debugLog?.error ?? 'none';
   const crashed = report.steps.filter(s => !s.alive);
   const failed = report.steps.filter(s => s.error);
   const slow = report.steps.filter(s => s.settleTimedOut);
@@ -960,7 +994,7 @@ function renderMarkdown(report, baseline) {
     '',
     `Mode ${report.mode} | ${report.steps.length} steps | crashes ${crashed.length} | step failures ${failed.length} | settle timeouts ${slow.length} | steps with JS/native errors ${withErrors.length}`,
     baseline ? `Baseline ${baseline.version}` : '',
-    report.audit ? `**${auditOutcomeLine(report.audit)} | audit log ${report.audit.url ? (report.audit.logError ? `unverified (${report.audit.logError}) ${report.audit.url}` : `${report.audit.logBytes ?? '?'} bytes (audit-log.txt) ${report.audit.logContentUrl || report.audit.url}`) : 'not uploaded'} | debug log ${report.audit.debugLog?.url ? (report.audit.debugLog.bytes ? `${report.audit.debugLog.bytes} bytes (debug-log.txt) ${report.audit.debugLog.url}` : `fetch failed (${report.audit.debugLog.error ?? report.audit.debugLog.status}) ${report.audit.debugLog.url}`) : report.audit.debugLog?.error ?? 'none'}**` : '',
+    report.audit ? `**${auditOutcomeLine(report.audit)} | audit log ${report.audit.url ? (report.audit.logError ? `unverified (${report.audit.logError}) ${report.audit.url}` : `${report.audit.logBytes ?? '?'} bytes (audit-log.txt) ${report.audit.logContentUrl || report.audit.url}`) : 'not uploaded'} | debug log ${debugLogSummary}**` : '',
     '',
     ...(report.audit?.completion ? [auditCoverageLine(report.audit.completion), ''] : []),
     '| # | step | settle ms | Δ vs base | jank | p90 ms | mem MB | notes |',
