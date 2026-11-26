@@ -1,0 +1,169 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Show Mortgage · History",
+  "flags": "tap",
+  "at": [
+   360,
+   251
+  ]
+ },
+ {
+  "label": "Mortgage · History",
+  "at": [
+   328,
+   241
+  ]
+ },
+ {
+  "label": "Show Eligibility",
+  "flags": "tap",
+  "at": [
+   360,
+   482
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   328,
+   482
+  ]
+ },
+ {
+  "label": "Show Constraints",
+  "flags": "tap",
+  "at": [
+   360,
+   723
+  ]
+ },
+ {
+  "label": "Constraints",
+  "at": [
+   328,
+   723
+  ]
+ },
+ {
+  "label": "Show Terms",
+  "flags": "tap",
+  "at": [
+   360,
+   964
+  ]
+ },
+ {
+  "label": "Terms",
+  "at": [
+   328,
+   964
+  ]
+ },
+ {
+  "label": "Show Source criteria",
+  "flags": "tap",
+  "at": [
+   360,
+   1205
+  ]
+ },
+ {
+  "label": "Source criteria",
+  "at": [
+   328,
+   1205
+  ]
+ },
+ {
+  "label": "Show Source evidence",
+  "flags": "tap",
+  "at": [
+   360,
+   1387
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

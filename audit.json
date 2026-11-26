@@ -1,0 +1,44 @@
+{
+  "kind": "live",
+  "url": "https://paste.c-net.org/5b62fac3-52d5-0f7f-e09e-105dd3b7a095",
+  "outcome": null,
+  "elapsedMs": 783530,
+  "visibleOutcome": [
+    "Navigate up",
+    "App health audit",
+    "Account",
+    "https://paste.c-net.org/5b62fac3-52d5-0f7f-e09e-105dd3b7a095",
+    "Copy paste.rs link",
+    "Copy paste.rs link",
+    "Copy paste.c-net.org link",
+    "Copy paste.c-net.org link",
+    "Audit history",
+    "Retained runs",
+    "1 / 120",
+    "Live checks",
+    "Live checks",
+    "Performance",
+    "Performance",
+    "UX & fluidity",
+    "UX & fluidity",
+    "Coverage",
+    "Coverage",
+    "Failures"
+  ],
+  "logStatus": 200,
+  "logContentUrl": "https://paste.c-net.org/5b62fac3-52d5-0f7f-e09e-105dd3b7a095",
+  "logBytes": 834721,
+  "completion": {
+    "outcome": "failed",
+    "collectionComplete": true,
+    "coverageComplete": false,
+    "detailsComplete": true
+  },
+  "debugLog": {
+    "url": "https://paste.rs/vWEMp",
+    "uploadMs": 21470,
+    "status": 200,
+    "contentUrl": "https://paste.c-net.org/6f9934ad-37dd-6a71-287f-231f326540d7",
+    "bytes": 5697361
+  }
+}

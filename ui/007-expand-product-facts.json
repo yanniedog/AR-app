@@ -1,0 +1,248 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "30 days",
+  "flags": "tap,sel",
+  "at": [
+   107,
+   230
+  ]
+ },
+ {
+  "label": "30 days",
+  "at": [
+   107,
+   215
+  ]
+ },
+ {
+  "label": "90 days",
+  "flags": "tap",
+  "at": [
+   268,
+   230
+  ]
+ },
+ {
+  "label": "90 days",
+  "at": [
+   268,
+   215
+  ]
+ },
+ {
+  "label": "1 year",
+  "flags": "tap",
+  "at": [
+   418,
+   230
+  ]
+ },
+ {
+  "label": "1 year",
+  "at": [
+   418,
+   215
+  ]
+ },
+ {
+  "label": "All",
+  "flags": "tap",
+  "at": [
+   541,
+   230
+  ]
+ },
+ {
+  "label": "All",
+  "at": [
+   535,
+   215
+  ]
+ },
+ {
+  "label": "Benchmarks · LVR >70.0%–80.0%",
+  "flags": "tap",
+  "at": [
+   266,
+   326
+  ]
+ },
+ {
+  "label": "Benchmarks · LVR >70.0%–80.0%",
+  "at": [
+   266,
+   326
+  ]
+ },
+ {
+  "label": "Home loans · 30 days · 31 Observed · 27 Nov 2026 · Virgin Money Lite Home Loan 6.34% · Leading advertised · All tiers",
+  "at": [
+   360,
+   600
+  ]
+ },
+ {
+  "label": "History",
+  "at": [
+   396,
+   592
+  ]
+ },
+ {
+  "label": "Previous date",
+  "flags": "tap",
+  "at": [
+   80,
+   882
+  ]
+ },
+ {
+  "label": "27 Nov 2026",
+  "at": [
+   360,
+   842
+  ]
+ },
+ {
+  "label": "6.34% · Leading advertised · All tiers",
+  "at": [
+   360,
+   902
+  ]
+ },
+ {
+  "label": "Next date",
+  "flags": "tap,off",
+  "at": [
+   640,
+   882
+  ]
+ },
+ {
+  "label": "Product rate",
+  "at": [
+   165,
+   978
+  ]
+ },
+ {
+  "label": "Hide Product facts",
+  "flags": "tap",
+  "at": [
+   360,
+   1207
+  ]
+ },
+ {
+  "label": "Product facts",
+  "at": [
+   328,
+   1207
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   360,
+   1307
+  ]
+ },
+ {
+  "label": "Digital banking",
+  "at": [
+   190,
+   1363
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   1368
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

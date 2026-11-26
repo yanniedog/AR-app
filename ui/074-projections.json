@@ -1,0 +1,256 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Calculate",
+  "at": [
+   236,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "Rate check",
+  "flags": "tap",
+  "at": [
+   190,
+   245
+  ]
+ },
+ {
+  "label": "Rate check",
+  "at": [
+   190,
+   243
+  ]
+ },
+ {
+  "label": "Projection",
+  "flags": "tap,sel",
+  "at": [
+   530,
+   245
+  ]
+ },
+ {
+  "label": "Projection",
+  "at": [
+   530,
+   243
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   843
+  ]
+ },
+ {
+  "label": "Pending · Observed: 27 Nov 2026 · Pending: 27 Nov 2026",
+  "at": [
+   387,
+   401
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   583
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   581
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   583
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   581
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   583
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   581
+  ]
+ },
+ {
+  "label": "Current values",
+  "at": [
+   360,
+   735
+  ]
+ },
+ {
+  "label": "Current rate",
+  "flags": "tap,sel",
+  "at": [
+   190,
+   835
+  ]
+ },
+ {
+  "label": "Current rate",
+  "at": [
+   190,
+   833
+  ]
+ },
+ {
+  "label": "Reference + adjustment",
+  "flags": "tap",
+  "at": [
+   530,
+   835
+  ]
+ },
+ {
+  "label": "Reference + adjustment",
+  "at": [
+   530,
+   833
+  ]
+ },
+ {
+  "label": "Current interest rate",
+  "at": [
+   360,
+   923
+  ]
+ },
+ {
+  "label": "Current interest rate",
+  "flags": "tap",
+  "at": [
+   350,
+   1001
+  ]
+ },
+ {
+  "label": "%",
+  "at": [
+   652,
+   1001
+  ]
+ },
+ {
+  "label": "Current loan balance",
+  "at": [
+   360,
+   1097
+  ]
+ },
+ {
+  "label": "$",
+  "at": [
+   67,
+   1177
+  ]
+ },
+ {
+  "label": "Current loan balance, thousands of dollars",
+  "flags": "tap",
+  "at": [
+   333,
+   1177
+  ]
+ },
+ {
+  "label": "Amount unit, K",
+  "flags": "tap",
+  "at": [
+   638,
+   1177
+  ]
+ },
+ {
+  "label": "K",
+  "at": [
+   638,
+   1177
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

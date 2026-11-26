@@ -1,0 +1,159 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Open calculation receipt",
+  "at": [
+   360,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Pending · Observed: 27 Nov 2026 · Pending: 27 Nov 2026",
+  "at": [
+   387,
+   305
+  ]
+ },
+ {
+  "label": "Paste calculation receipt",
+  "flags": "tap",
+  "at": [
+   360,
+   487
+  ]
+ },
+ {
+  "label": "Paste calculation receipt",
+  "at": [
+   361,
+   488
+  ]
+ },
+ {
+  "label": "Receipt text",
+  "at": [
+   360,
+   579
+  ]
+ },
+ {
+  "label": "Receipt text",
+  "flags": "tap",
+  "at": [
+   360,
+   715
+  ]
+ },
+ {
+  "label": "Read receipt",
+  "flags": "tap",
+  "at": [
+   360,
+   891
+  ]
+ },
+ {
+  "label": "Read receipt",
+  "at": [
+   360,
+   892
+  ]
+ },
+ {
+  "label": "Privacy",
+  "at": [
+   360,
+   995
+  ]
+ },
+ {
+  "label": "Local only",
+  "at": [
+   360,
+   1043
+  ]
+ },
+ {
+  "label": "Profile",
+  "at": [
+   360,
+   1131
+  ]
+ },
+ {
+  "label": "Unchanged",
+  "at": [
+   360,
+   1179
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

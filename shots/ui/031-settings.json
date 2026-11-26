@@ -1,0 +1,168 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Settings",
+  "at": [
+   224,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Data",
+  "at": [
+   364,
+   333
+  ]
+ },
+ {
+  "label": "Refresh now",
+  "flags": "tap",
+  "at": [
+   360,
+   451
+  ]
+ },
+ {
+  "label": "Refresh now",
+  "at": [
+   387,
+   451
+  ]
+ },
+ {
+  "label": "Clear cache",
+  "flags": "tap",
+  "at": [
+   360,
+   572
+  ]
+ },
+ {
+  "label": "Clear cache",
+  "at": [
+   386,
+   573
+  ]
+ },
+ {
+  "label": "Show Data details",
+  "flags": "tap",
+  "at": [
+   360,
+   692
+  ]
+ },
+ {
+  "label": "Data details",
+  "at": [
+   330,
+   692
+  ]
+ },
+ {
+  "label": "Account & privacy",
+  "at": [
+   364,
+   884
+  ]
+ },
+ {
+  "label": "Local only",
+  "at": [
+   360,
+   972
+  ]
+ },
+ {
+  "label": "App lock",
+  "flags": "tap",
+  "at": [
+   360,
+   1068
+  ]
+ },
+ {
+  "label": "Show Optional reporting",
+  "flags": "tap",
+  "at": [
+   360,
+   1188
+  ]
+ },
+ {
+  "label": "Optional reporting",
+  "at": [
+   330,
+   1188
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

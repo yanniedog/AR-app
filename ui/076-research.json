@@ -1,0 +1,270 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Trends",
+  "at": [
+   211,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Pending · Observed: 27 Nov 2026 · Pending: 27 Nov 2026",
+  "at": [
+   387,
+   305
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   495
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   493
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   495
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   493
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   495
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   493
+  ]
+ },
+ {
+  "label": "Home loans · Observed: 27 Nov 2026",
+  "at": [
+   360,
+   619
+  ]
+ },
+ {
+  "label": "Comparison rate · Lowest: 5.87% · Median: 7.21% · Spread: 134 bps · 7,725 rates · 86 banks",
+  "at": [
+   360,
+   796
+  ]
+ },
+ {
+  "label": "Lowest",
+  "at": [
+   191,
+   715
+  ]
+ },
+ {
+  "label": "Median",
+  "at": [
+   529,
+   715
+  ]
+ },
+ {
+  "label": "5.87%",
+  "at": [
+   191,
+   771
+  ]
+ },
+ {
+  "label": "7.21%",
+  "at": [
+   529,
+   771
+  ]
+ },
+ {
+  "label": "Comparison rate · 7,725 rates · 86 banks · Spread: 134 bps",
+  "at": [
+   360,
+   881
+  ]
+ },
+ {
+  "label": "Browse these products",
+  "flags": "tap",
+  "at": [
+   360,
+   1001
+  ]
+ },
+ {
+  "label": "Browse these products",
+  "at": [
+   361,
+   1002
+  ]
+ },
+ {
+  "label": "Hide Rate history",
+  "flags": "tap",
+  "at": [
+   360,
+   1202
+  ]
+ },
+ {
+  "label": "Rate history",
+  "at": [
+   328,
+   1202
+  ]
+ },
+ {
+  "label": "30 days",
+  "flags": "tap,sel",
+  "at": [
+   107,
+   1330
+  ]
+ },
+ {
+  "label": "30 days",
+  "at": [
+   107,
+   1330
+  ]
+ },
+ {
+  "label": "90 days",
+  "flags": "tap",
+  "at": [
+   268,
+   1330
+  ]
+ },
+ {
+  "label": "90 days",
+  "at": [
+   268,
+   1330
+  ]
+ },
+ {
+  "label": "1 year",
+  "flags": "tap",
+  "at": [
+   418,
+   1330
+  ]
+ },
+ {
+  "label": "1 year",
+  "at": [
+   418,
+   1330
+  ]
+ },
+ {
+  "label": "All",
+  "flags": "tap",
+  "at": [
+   541,
+   1330
+  ]
+ },
+ {
+  "label": "All",
+  "at": [
+   535,
+   1330
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap,sel",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "sel",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

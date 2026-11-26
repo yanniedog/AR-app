@@ -1,0 +1,186 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "RBA",
+  "at": [
+   186,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Pending · Observed: 27 Nov 2026 · Pending: 27 Nov 2026",
+  "at": [
+   387,
+   305
+  ]
+ },
+ {
+  "label": "Last confirmed cash rate",
+  "at": [
+   204,
+   459
+  ]
+ },
+ {
+  "label": "4.85%",
+  "at": [
+   204,
+   527
+  ]
+ },
+ {
+  "label": "Next RBA decision",
+  "at": [
+   557,
+   495
+  ]
+ },
+ {
+  "label": "Checked 27 Nov 2026",
+  "at": [
+   204,
+   595
+  ]
+ },
+ {
+  "label": "8 Dec 2026",
+  "at": [
+   557,
+   551
+  ]
+ },
+ {
+  "label": "Decision",
+  "at": [
+   360,
+   703
+  ]
+ },
+ {
+  "label": "3 Nov 2026",
+  "at": [
+   360,
+   751
+  ]
+ },
+ {
+  "label": "Source",
+  "at": [
+   360,
+   871
+  ]
+ },
+ {
+  "label": "Decisions",
+  "at": [
+   360,
+   919
+  ]
+ },
+ {
+  "label": "Market expectations",
+  "at": [
+   360,
+   1068
+  ]
+ },
+ {
+  "label": "View ASX market expectations",
+  "flags": "tap",
+  "at": [
+   360,
+   1168
+  ]
+ },
+ {
+  "label": "View ASX market expectations",
+  "at": [
+   361,
+   1168
+  ]
+ },
+ {
+  "label": "Outlook",
+  "at": [
+   360,
+   1333
+  ]
+ },
+ {
+  "label": "Refresh outlook",
+  "flags": "tap",
+  "at": [
+   177,
+   1389
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap,sel",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "sel",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
