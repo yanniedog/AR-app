@@ -5,6 +5,7 @@
   { "think": 800, "scroll": "up", "name": "scroll rates back" },
   { "think": 1500, "tap": { "contains": ", Comparison rate" }, "gone": { "contains": "Temporary filters" }, "name": "open product" },
   { "think": 2000, "scroll": "down", "name": "scroll product" },
+  { "think": 800, "tap": "Show Fees", "timeout": 800, "optional": true, "name": "expand visible fees" },
   { "think": 1200, "tap": "Show Product facts", "scroll": true, "optional": true, "name": "expand product facts" },
   { "think": 1200, "scroll": "down", "name": "scroll product fees" },
   { "think": 1200, "scroll": "down", "name": "scroll product eligibility" },
