@@ -5,7 +5,7 @@ import { useProductEvidenceCriteria } from '../../hooks/useProductEvidenceCriter
 import { type CriteriaKind } from '../../data/productEvidenceCriteria';
 import { type CriteriaColumn } from '../../data/productEvidenceCriteriaDocument';
 import { useStore } from '../../data/store';
-import { uiCount, uiDate, uiIdentifier, uiJoin, uiLabel, useEvidenceCriteriaInput, type UiLabel } from '../../lib/uiCopy';
+import { uiCount, uiDate, uiIdentifier, uiJoin, uiLabel, uiProductKeyLabel, useEvidenceCriteriaInput, type UiLabel } from '../../lib/uiCopy';
 
 const KINDS: readonly [CriteriaKind, UiLabel][] = [['all', 'All'], ['fee', 'Fees'], ['eligibility', 'Eligibility'], ['constraint', 'Constraints'],
   ['feature', 'Features'], ['rate', 'Rates'], ['tier', 'Tiers'], ['condition', 'Conditions'], ['attribute', 'Attributes'], ['bundle', 'Bundles']];
@@ -14,7 +14,7 @@ const STATUSES: Record<string, UiLabel> = { observed: 'Observed', conditional: '
 function Column({ column, first }: { column: CriteriaColumn; first: boolean }) {
   return <View style={{ width: 300, gap: 8 }}>
     <AppText>{uiLabel(first ? 'Reference product' : 'Exact scope')}</AppText>
-    <AppText variant="small">{uiIdentifier(column.productKey)}</AppText>
+    <AppText variant="small">{uiProductKeyLabel(column.productKey)}</AppText>
     {column.status !== 'observed' ? <AppText>{uiLabel(STATUSES[column.status])}</AppText> : <>
       <AppText variant="small">{uiJoin(uiDate(column.observedDate), ' · ', column.observationState === 'partial' ? 'Partial' : column.observationState === 'failed' ? 'Unverified' : 'Observed', ' · ', 'Eligibility unverified')}</AppText>
       <AppText variant="small">{uiJoin('Matching records', ': ', uiCount(column.criteria.matching), ' / ', uiCount(column.criteria.total))}</AppText>
