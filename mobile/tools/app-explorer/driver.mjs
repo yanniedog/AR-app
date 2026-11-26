@@ -7,7 +7,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { computeVerdict, renderOutcome, renderSessionCoverage } from './session-verdict.mjs';
-import { auditCompletion, auditCoverageLine, auditOutcomeLine, decodeAuditExport, MAX_ENVELOPE_BYTES } from './audit-export.mjs';
+import { auditCompletion, auditCoverageLine, auditOutcomeLine, decodeAuditExport, sourceDuplicateCount, MAX_ENVELOPE_BYTES } from './audit-export.mjs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
@@ -795,7 +795,9 @@ class Explorer {
         audit.logContentUrl = contentUrl;
         fs.writeFileSync(path.join(this.out, 'audit-log.txt'), body);
         audit.logBytes = Buffer.byteLength(body);
-        const completion = auditCompletion(decodeAuditExport(body));
+        const exported = decodeAuditExport(body);
+        audit.sourceDuplicateItemsRemoved = sourceDuplicateCount(exported);
+        const completion = auditCompletion(exported);
         if (completion) audit.completion = completion;
         else audit.logError = 'Audit export did not include a recognised completion outcome';
       } catch (error) {

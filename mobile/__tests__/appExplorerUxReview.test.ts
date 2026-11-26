@@ -37,6 +37,7 @@ function review(screens: Record<string, N[]>, steps: Record<string, unknown>[] =
   }));
   execFileSync(process.execPath, [path.join(dir, 'ux-review.mjs'), out], { encoding: 'utf8' });
   return JSON.parse(fs.readFileSync(path.join(out, 'ux-review.json'), 'utf8')) as {
+    productDuplicates: { sourceRecordsRemoved: number | null; visible: { extraRows: number | null; evidence: { occurrences: number }[] } };
     findings: { check: string; severity: string; detail: string; fix: string; text: string }[];
     rubric: { key: string; score: number }[]; summaryLines: string[]; screens: number;
     tasks: { task: string; taps: number | null; ms: number | null }[]; firstRun: { firstValueMs: number | null };
@@ -386,4 +387,17 @@ console.log(JSON.stringify({ a: a && [a.width, a.height, a.data.toString('base64
     const neg = review({ rates: [node({ desc: 'Basic Loan, Bank B, Advertised rate -1.00%', clickable: true, bounds: [0, 300, 720, 500] })] });
     expect(neg.findings.some(f => f.check === 'accuracy' && /outside/.test(f.detail))).toBe(true);
   });
+});
+
+// Captured on Android, explorer/run-45897919403 (app-v1.0.387), steps 007–011.
+test('distinguishes repeated visible rows from collapsed, clipped and overlapping emulator evidence', () => {
+  const captures: Record<string, N[]> = JSON.parse(fs.readFileSync(
+    path.join(__dirname, 'fixtures', 'app-explorer-45897919403.json'), 'utf8'));
+  expect(review({ 'closed eligibility': captures['scroll product eligibility'] }).productDuplicates.visible.extraRows).toBeNull();
+  const result = review(captures).productDuplicates;
+  expect(result.sourceRecordsRemoved).toBeNull();
+  // Four complete feature rows (one further row clipped), three identical criteria
+  // seen in two successive captures. Count the extras once for each group.
+  expect(result.visible.evidence.map(group => group.occurrences)).toEqual([4, 3]);
+  expect(result.visible.extraRows).toBe(5);
 });
