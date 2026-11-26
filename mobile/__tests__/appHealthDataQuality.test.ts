@@ -496,7 +496,7 @@ describe('app-health data quality', () => {
     });
   });
 
-  it('records rendered gaps: unknown values, raw codes, duplicates, hidden fee names and absent companion channels', () => {
+  it('records rendered gaps and counts removed source duplicates separately', () => {
     const { snapshot, contract } = makeHealthyDataFixture();
     const key = snapshot.core!.sections.Mortgage.rates[0].product_key;
     snapshot.details!.products = {
@@ -511,7 +511,7 @@ describe('app-health data quality', () => {
     const metrics = byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
       APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS).metrics;
     expect(metrics).toMatchObject({
-      renderedGapsAudited: true, renderedDuplicateItems: 1, renderedUnknownEligibilityValues: 1,
+      renderedGapsAudited: true, sourceDuplicateItemsRemoved: 1, renderedUnknownEligibilityValues: 1,
       renderedUnknownFeeValues: 0, renderedRawCodeLabels: 0, companionChannelsExpected: 3, companionChannelsAbsent: 3,
     });
     expect(metrics.renderedSuppressedFeeNames).toBe(1);
