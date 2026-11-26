@@ -43,3 +43,14 @@ test('public pricing search takes a lender term plus product words', () => {
   expect(publicProductMatches(product, 'nab variable')).toBe(false);
   expect(publicProductMatches(product, 'cba fixed')).toBe(false);
 });
+
+test('term-deposit timeframes are whole numbers of terms', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { PROJECTION_HORIZONS, termDepositRolloversFor } = require('../src/data/projectionHorizons');
+  const offered = (term: number) => PROJECTION_HORIZONS.filter((option: { months: number }) => option.months % term === 0
+    && (termDepositRolloversFor(option.months, term) ?? 99) <= 10).map((option: { label: string }) => option.label);
+  expect(offered(9)).toEqual([]);
+  expect(offered(12)).toEqual(['1Y', '5Y', '10Y']);
+  expect(offered(3)).toEqual(['3M', '1Y']);
+  expect(offered(60)).toEqual(['5Y', '10Y', '20Y', '30Y', '40Y', '50Y']);
+});

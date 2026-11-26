@@ -377,12 +377,14 @@ export function ProjectionWorkspace() {
   const timeframeOptions = useMemo(() => PROJECTION_HORIZONS.map(option => {
     if (section !== 'TD') return { label: uiLabel(option.label), value: option.value };
     const rollovers = termDepositRolloversFor(option.months, tdTermMonths);
-    // Term deposits run in whole terms, capped at the renewals the model allows.
-    return { label: uiLabel(option.label), value: option.value, disabled: rollovers == null || option.months < tdTermMonths || rollovers > 10 };
+    // Term deposits run in whole terms: a timeframe is offered only when it is an exact
+    // number of terms within the renewals the model allows, so the label is the modelled duration.
+    return { label: uiLabel(option.label), value: option.value,
+      disabled: rollovers == null || option.months % tdTermMonths !== 0 || rollovers > 10 };
   }), [section, tdTermMonths]);
   const timeframe = section === 'TD'
-    ? PROJECTION_HORIZONS.find(option => Number.isInteger(tdTermMonths) && tdTermMonths > 0
-      && termDepositRolloversFor(option.months, tdTermMonths) === tdRollovers && option.months >= tdTermMonths)?.value ?? null
+    ? PROJECTION_HORIZONS.find(option => Number.isInteger(tdTermMonths) && tdTermMonths > 0 && Number.isInteger(tdRollovers)
+      && option.months === tdTermMonths * (tdRollovers + 1))?.value ?? null
     : projectionHorizonValue(projectionInputs.horizonYears, section === 'Mortgage' ? DEFAULT_MORTGAGE_HORIZON_YEARS : '1');
   // A saved horizon outside the listed timeframes is shown as its own selected option.
   const tdMonths = Number.isInteger(tdTermMonths) && tdTermMonths > 0 && Number.isInteger(tdRollovers) && tdRollovers >= 0 ? tdTermMonths * (tdRollovers + 1) : null;
@@ -399,7 +401,7 @@ export function ProjectionWorkspace() {
     if (section !== 'TD') { updateProjection({ horizonYears: next }); return; }
     const months = PROJECTION_HORIZONS.find(option => option.value === next)?.months ?? 0;
     const rollovers = termDepositRolloversFor(months, tdTermMonths);
-    if (rollovers != null) updateProjection({ rollovers: String(rollovers) });
+    if (rollovers != null && months % tdTermMonths === 0) updateProjection({ rollovers: String(rollovers) });
   }, [inputsEditable, section, tdTermMonths, updateProjection]);
   // Conditional savings has two intentionally separate rates: the conditional
   // rate field is validated below as currentRate, while future range scenarios
