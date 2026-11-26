@@ -1,0 +1,42 @@
+{
+  "kind": "live",
+  "url": "https://paste.rs/p1Fy6",
+  "outcome": null,
+  "elapsedMs": 1074729,
+  "visibleOutcome": [
+    "Navigate up",
+    "App health audit",
+    "Account",
+    "https://paste.rs/p1Fy6",
+    "https://paste.c-net.org/0411e154-2731-0d67-fff2-ef5131f0cac0",
+    "Copy paste.rs link",
+    "Copy paste.rs link",
+    "Copy paste.c-net.org link",
+    "Copy paste.c-net.org link",
+    "Audit history",
+    "Retained runs",
+    "1 / 120",
+    "Live checks",
+    "Live checks",
+    "Performance",
+    "Performance",
+    "UX & fluidity",
+    "UX & fluidity",
+    "Coverage",
+    "Coverage"
+  ],
+  "logStatus": 200,
+  "logContentUrl": "https://paste.c-net.org/0411e154-2731-0d67-fff2-ef5131f0cac0",
+  "logBytes": 855009,
+  "completion": {
+    "outcome": "failed",
+    "collectionComplete": true,
+    "coverageComplete": false,
+    "detailsComplete": true
+  },
+  "debugLog": {
+    "url": "https://paste.rs/CyJU5",
+    "uploadMs": 23924,
+    "error": "Hosted log exceeds the upload byte limit"
+  }
+}

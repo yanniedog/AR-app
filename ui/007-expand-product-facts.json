@@ -1,0 +1,243 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Premium Smart Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Home loans · 30 days · 31 Observed · 26 Nov 2026 · Premium Smart Home Loan 6.34% · Leading advertised · All tiers",
+  "at": [
+   360,
+   257
+  ]
+ },
+ {
+  "label": "History",
+  "at": [
+   396,
+   235
+  ]
+ },
+ {
+  "label": "Previous date",
+  "flags": "tap",
+  "at": [
+   80,
+   389
+  ]
+ },
+ {
+  "label": "26 Nov 2026",
+  "at": [
+   360,
+   349
+  ]
+ },
+ {
+  "label": "6.34% · Leading advertised · All tiers",
+  "at": [
+   360,
+   409
+  ]
+ },
+ {
+  "label": "Next date",
+  "flags": "tap,off",
+  "at": [
+   640,
+   389
+  ]
+ },
+ {
+  "label": "Product rate",
+  "at": [
+   165,
+   485
+  ]
+ },
+ {
+  "label": "Hide Product facts",
+  "flags": "tap",
+  "at": [
+   360,
+   714
+  ]
+ },
+ {
+  "label": "Product facts",
+  "at": [
+   328,
+   714
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   360,
+   814
+  ]
+ },
+ {
+  "label": "Digital banking",
+  "at": [
+   190,
+   870
+  ]
+ },
+ {
+  "label": "Included",
+  "at": [
+   530,
+   870
+  ]
+ },
+ {
+  "label": "Early / extra repayments",
+  "at": [
+   190,
+   930
+  ]
+ },
+ {
+  "label": "Included",
+  "at": [
+   530,
+   930
+  ]
+ },
+ {
+  "label": "Offset account",
+  "at": [
+   190,
+   990
+  ]
+ },
+ {
+  "label": "Included",
+  "at": [
+   530,
+   990
+  ]
+ },
+ {
+  "label": "Other feature",
+  "at": [
+   190,
+   1050
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   1070
+  ]
+ },
+ {
+  "label": "Other feature",
+  "at": [
+   190,
+   1150
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   1170
+  ]
+ },
+ {
+  "label": "Redraw facility",
+  "at": [
+   190,
+   1250
+  ]
+ },
+ {
+  "label": "Included",
+  "at": [
+   530,
+   1250
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
