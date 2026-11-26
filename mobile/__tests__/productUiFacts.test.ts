@@ -344,3 +344,10 @@ test('normalized feature facts read reviewed values too', () => {
   expect(uiNormalizedProductFact(fact).value).toBe('Apple Pay');
   expect(uiNormalizedProductFact({ ...(fact as object), value: 'Free coffee' } as never).value).toBe('Unknown');
 });
+
+test('reviewed fee names from real captures are shown and conditional names stay hidden', () => {
+  expect(uiDetailItem({ label: 'EVENT', name: 'Settlement Fee', value: '300' }, 0, 'Fees').label).toMatch(/^Settlement Fee/);
+  expect(uiDetailItem({ label: 'EVENT', name: 'direct debit dishonour fee', value: '10' }, 0, 'Fees').label).toMatch(/^direct debit dishonour fee/);
+  expect(uiDetailItem({ label: 'EVENT', name: 'Dormancy Fee (after 2 years of inactivity)', value: '10' }, 0, 'Fees').label).not.toMatch(/Dormancy/);
+  expect(uiDetailItem({ label: 'RESIDENCY_STATUS', value: 'Must be a permanent resident of Australia.' }, 0, 'Eligibility').value).toBe('Australian permanent resident');
+});

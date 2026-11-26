@@ -186,7 +186,9 @@ function residencyValue(item: DetailItem): UiText | null {
     case 'australian residents only.': return uiLabel('Australian resident');
     case 'permanent resident': return uiLabel('Permanent resident');
     case 'permanent australian resident':
-    case 'australian permanent resident': return uiLabel('Australian permanent resident');
+    case 'australian permanent resident':
+    case 'must be a permanent resident of australia':
+    case 'must be a permanent resident of australia.': return uiLabel('Australian permanent resident');
     case 'australian citizen or australian permanent resident':
       return uiJoin('Australian citizen', ' ', 'or', ' ', 'Australian permanent resident');
     case 'an australian citizen or permanent resident':
