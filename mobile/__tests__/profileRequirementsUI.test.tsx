@@ -11,7 +11,17 @@ let mockCore: any;
 jest.mock('../src/data/store', () => ({ useStore: (selector: (state: any) => unknown) => selector({ core: mockCore }) }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ spacing: (n: number) => n * 4 }) }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Chip: 'Chip', Row: 'Row', Button: 'Button' }));
-jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedControl' }));
+
+jest.mock('../src/components/selectors', () => ({ OptionSelect: 'OptionSelect', OptionStrip: 'OptionStrip' }));
+/** Every selectable option rendered by the editor, as simple label/selected/press records. */
+function chips(root: any): any[] {
+  const fromList = (type: string) => root.findAllByType(type).flatMap((n: any) => n.props.options.map((o: any) => ({ props: {
+    label: o.label, selected: Array.isArray(n.props.value) ? n.props.value.includes(o.value) : n.props.value === o.value,
+    onPress: () => n.props.onChange(o.value) } })));
+  return [...fromList('OptionSelect'), ...fromList('OptionStrip'), ...root.findAllByType('CompactToggle').map((n: any) => ({ props: {
+    label: n.props.label, selected: n.props.value, onPress: () => n.props.onChange(!n.props.value) } }))];
+}
+jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedControl', CompactToggle: 'CompactToggle' }));
 
 function core(types: string[]) { return { sections: { Mortgage: { rates: types.map((rate_type, index) => ({
   rate_type, product_key: String(index), product_name: String(index), provider: 'A', rate: '0.05',
@@ -33,10 +43,10 @@ test('selection edits reuse catalogue metadata and a replaced edition refreshes 
     expect(initialReads).toBeGreaterThan(0);
     act(() => tree.update(<ProfileEditor sections={stableSections} value={{ ...EMPTY_PROFILE, rateTypes: ['OLD_TYPE'] }} onChange={onChange} />));
     expect(readType).toHaveBeenCalledTimes(initialReads);
-    expect(tree.root.findAllByType('Chip').some((n: any) => n.props.label === 'OLD_TYPE' && n.props.selected)).toBe(true);
+    expect(chips(tree.root).some((n: any) => n.props.label === 'OLD_TYPE' && n.props.selected)).toBe(true);
     mockCore = core(['FIXED']);
     act(() => tree.update(render(EMPTY_PROFILE)));
-    const labels = tree.root.findAllByType('Chip').map((n: any) => n.props.label);
+    const labels = chips(tree.root).map((n: any) => n.props.label);
     expect(labels).toContain('Fixed');
     expect(labels).not.toContain('Variable');
   } finally { act(() => tree.unmount()); }
@@ -49,14 +59,11 @@ test('all selected values remain visible beyond the old twelve-option limit and 
   installMandatoryEligibility(selectMandatoryEligibility(mockCore, value, null));
   act(() => { tree = TestRenderer.create(<ProfileEditor sections={['Mortgage']} value={value} onChange={onChange} />); });
   try {
-    const chips = () => tree.root.findAllByType('Chip');
-    expect(chips().filter((n: any) => n.props.selected).map((n: any) => n.props.label)).toEqual(expect.arrayContaining(['TYPE_17', 'REMOVED_TYPE']));
-    act(() => chips().find((n: any) => n.props.label === 'REMOVED_TYPE').props.onPress());
+    expect(chips(tree.root).filter((n: any) => n.props.selected).map((n: any) => n.props.label)).toEqual(expect.arrayContaining(['TYPE_17', 'REMOVED_TYPE']));
+    act(() => chips(tree.root).find((n: any) => n.props.label === 'REMOVED_TYPE').props.onPress());
     expect(onChange.mock.calls[0][0].rateTypes).toEqual(['TYPE_17']);
-    const expand = tree.root.findAllByType('Button').find((n: any) => n.props.title.startsWith('Show All'));
-    expect(expand.props.accessibilityState.expanded).toBe(false);
-    act(() => expand.props.onPress());
-    expect(chips().filter((n: any) => n.props.label.startsWith('TYPE_'))).toHaveLength(18);
+    // Every option sits in one collapsed list, with no partial reveal.
+    expect(chips(tree.root).filter((n: any) => n.props.label.startsWith('TYPE_'))).toHaveLength(18);
   } finally { act(() => tree.unmount()); }
 });
 test('empty catalogue still exposes hidden saved values, unrecognised features and the scoped clear action', () => {
@@ -65,8 +72,8 @@ test('empty catalogue still exposes hidden saved values, unrecognised features a
     depositKinds: ['BONUS'], accountFeatures: ['OFFSET', 'CARD_ACCESS', 'LEGACY_FEATURE'] };
   act(() => { tree = TestRenderer.create(<ProfileEditor sections={['Mortgage', 'Savings', 'TD']} value={value} onChange={onChange} />); });
   try {
-    expect(tree.root.findAllByType('Chip').filter((n: any) => n.props.selected)).toHaveLength(6);
-    act(() => tree.root.findAllByType('Chip').find((n: any) => n.props.label === 'LEGACY_FEATURE').props.onPress());
+    expect(chips(tree.root).filter((n: any) => n.props.selected)).toHaveLength(6);
+    act(() => chips(tree.root).find((n: any) => n.props.label === 'LEGACY_FEATURE').props.onPress());
     expect(onChange.mock.calls[0][0].accountFeatures).toEqual(['OFFSET', 'CARD_ACCESS']);
     act(() => tree.root.findAllByType('Button').find((n: any) => n.props.title === 'Clear Home loans requirements').props.onPress());
     expect(onChange.mock.calls[1][0]).toMatchObject({ rateTypes: [], lvrTiers: [], depositKinds: ['BONUS'], accountFeatures: ['CARD_ACCESS', 'LEGACY_FEATURE'] });
@@ -102,8 +109,8 @@ test('shared features are edited once with both affected categories visible', ()
   act(() => { tree = TestRenderer.create(<ProfileEditor sections={['Mortgage', 'Savings', 'TD']}
     value={{ ...EMPTY_PROFILE, accountFeatures: ['DIGITAL_BANKING'] }} onChange={jest.fn()} />); });
   try {
-    expect(tree.root.findAllByType('Chip').filter((node: any) => node.props.label === 'Digital banking')).toHaveLength(1);
-    expect(tree.root.findAllByType('AppText').some((node: any) => node.props.children === 'Savings accounts / Term deposits')).toBe(true);
+    expect(chips(tree.root).filter((node: any) => node.props.label === 'Digital banking')).toHaveLength(1);
+    expect(tree.root.findAllByType('AppText').some((node: any) => String(node.props.children).includes('Savings accounts / Term deposits'))).toBe(true);
   } finally { act(() => tree.unmount()); }
 });
 
@@ -122,10 +129,10 @@ test('LVR options in ProfileEditor are strictly the five canonical bands', () =>
   const onChange = jest.fn();
   act(() => { tree = TestRenderer.create(<ProfileEditor sections={['Mortgage']} value={EMPTY_PROFILE} onChange={onChange} />); });
   try {
-    const labels = tree.root.findAllByType('Chip').map((node: any) => node.props.label);
+    const labels = chips(tree.root).map((node: any) => node.props.label);
     expect(labels.filter((label: string) => label.includes('60') || label.includes('70') || label.includes('80') || label.includes('90') || label.includes('30')))
       .toEqual(['<60', '60-70', '70-80', '80-90', '>90']);
-    act(() => tree.root.findAllByType('Chip').find((node: any) => node.props.label === '70-80').props.onPress());
+    act(() => chips(tree.root).find((node: any) => node.props.label === '70-80').props.onPress());
     expect(onChange).toHaveBeenCalledWith({ ...EMPTY_PROFILE, lvrTiers: ['70-80'] });
   } finally { act(() => tree.unmount()); }
 });

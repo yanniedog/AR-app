@@ -1,6 +1,7 @@
 import Ionicons from '../icons/AppIcon';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
+import { ChipStrip } from '../selectors';
 
 import type { BankInsightsPayload } from '../../data/bankInsights';
 import type { BankHistoryChartModel, Brand, HistoryWindow, RbaEntry, SectionKey } from '../../types';
@@ -149,11 +150,11 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
       ) : null}
 
       {showWindowChips ? (
-        <Row gap={6} style={{ marginBottom: 8, flexWrap: 'wrap' }}>
+        <ChipStrip style={{ marginBottom: 8 }}>
           {WINDOW_OPTIONS.map((w) => (
             <Chip key={w} label={uiChartWindow(w)} selected={window === w} onPress={() => changeWindow(w)} />
           ))}
-        </Row>
+        </ChipStrip>
       ) : null}
 
       {standardFilterWarming ? (

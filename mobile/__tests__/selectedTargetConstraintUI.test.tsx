@@ -50,6 +50,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: { bg
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button', Badge: 'Badge',
   Card: 'Card', Chip: 'Chip', Row: 'Row', Disclosure: 'Disclosure', SectionHeading: 'SectionHeading' }));
 jest.mock('../src/components/controls', () => ({ CompactToggle: 'CompactToggle', SegmentedControl: 'SegmentedControl' }));
+jest.mock('../src/components/selectors', () => ({ OptionSelect: 'OptionSelect', OptionStrip: 'OptionStrip' }));
 jest.mock('../src/components/icons/AppIcon', () => 'Icon');
 jest.mock('../src/components/Screen', () => ({ Screen: 'Screen', ScreenScrollView: 'ScreenScrollView' }));
 jest.mock('../src/components/feedback', () => ({ IndeterminateProgressBar: 'IndeterminateProgressBar', ScreenSkeleton: 'ScreenSkeleton' }));

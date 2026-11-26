@@ -37,6 +37,7 @@ import { withAlpha } from '../theme/colors';
 import { useTheme } from '../theme/ThemeProvider';
 import { ChartSliceControls } from './charts/ChartSliceControls';
 import { AppText, Chip, Row } from './ui';
+import { OptionStrip } from './selectors';
 
 const chartSessions = new Map<string, { window: HistoryWindow; date: string | null }>();
 /** The last window chosen in a memory group opens the next chart in that group. */
@@ -514,16 +515,12 @@ function BankHistoryChartView({
 
   const controls = (
     <>
-      <Row gap={6} style={{ marginBottom: 8, flexWrap: 'wrap' }}>
-        {WINDOW_OPTIONS.map((opt) => (
-          <Chip
-            key={opt.value}
-            label={uiChartWindow(opt.value)}
-            selected={window === opt.value}
-            onPress={() => setWindow(opt.value)}
-          />
-        ))}
-      </Row>
+      <OptionStrip
+        style={{ marginBottom: 6 }}
+        options={WINDOW_OPTIONS.map(opt => ({ label: uiChartWindow(opt.value), value: opt.value }))}
+        value={window}
+        onChange={setWindow}
+      />
 
       {productHistory ? (
         <Row style={{ marginBottom: 8 }}>

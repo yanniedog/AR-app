@@ -134,15 +134,14 @@ export function Chip({
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: 6,
         minWidth: 48,
+        minHeight: 30,
         maxWidth: '100%',
         paddingHorizontal: 12,
-        paddingVertical: 7,
-        borderRadius: theme.radius.pill,
-        // Unselected chips still need a visible control boundary to read as tappable.
-        borderWidth: 1,
-        borderColor: selected ? theme.ledger.eucalyptus : theme.ledger.controlRule,
+        paddingVertical: 5,
+        borderRadius: 9,
+        // A soft fill marks the control as tappable without an outline.
         backgroundColor: selected ? theme.colors.primaryMuted : theme.colors.surfaceAlt,
         overflow: 'hidden',
       }}
@@ -151,12 +150,12 @@ export function Chip({
         <Ionicons
           name={icon}
           size={14}
-          color={selected ? theme.colors.primary : theme.colors.chipText}
+          color={selected ? theme.colors.primary : theme.colors.textMuted}
         />
       ) : null}
       <Text
         style={{
-          color: selected ? theme.colors.primary : theme.colors.chipText,
+          color: selected ? theme.colors.primary : theme.colors.textMuted,
           ...fontStyle(selected ? '600' : '500'),
           fontSize: theme.font.small,
           flexShrink: 1,

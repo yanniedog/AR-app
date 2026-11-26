@@ -5,6 +5,7 @@ import { SECTION_KEYS } from '../types';
 import { StandardUrl } from './standardUrl';
 import type { EligibilityScenario, ScenarioRole } from '../data/eligibilityContracts/facts';
 import { brandKeyForProvider, resolveBrandShort } from '../data/bankBrand';
+import { displayProviderName } from '../data/providerDisplayName';
 import type { RatesSectionState } from '../data/ratesSession';
 import type { MortgageInputs } from '../data/mortgageContracts/types';
 import type { RateRow, SectionKey } from '../types';
@@ -22,6 +23,7 @@ import type { CurrentProductOption } from '../data/scenarioCatalog';
 /** Reviewed actions, field names, statuses and fact units. Never explanatory prose. */
 export const UI_LABELS = [
   'Reference product', 'Exact scope',
+  'Any', 'Timeframe', 'Scenarios', '3M', '1Y', '5Y', '10Y', '20Y', '30Y', '40Y', '50Y',
   'Source criteria', 'Selected products only', 'Search selected products', 'Matching records', 'Typed records', 'Source-only records',
   'Record', 'First record', 'Previous record', 'Next record', 'Last record',
   'Conditional', 'Conflicting', 'Attributes', 'Bundles', 'Tiers', 'All', 'Coverage unverified',
@@ -804,15 +806,15 @@ export function uiDetailsProductReference(details: DetailsPayload | null | undef
     || bound.productCategory !== undefined && bound.productCategory !== category)) return uiLabel('Unverified');
   return identity(productKey);
 }
-export function uiProviderName(row: Pick<RateRow, 'provider'>): UiText { return identity(row.provider); }
+export function uiProviderName(row: Pick<RateRow, 'provider'>): UiText { return identity(displayProviderName(row.provider ?? '')); }
 /** Known brands use their reviewed short name; other lenders keep their full name. */
 export function uiProviderShort(row: Pick<RateRow, 'provider'>): UiText {
-  return identity(brandKeyForProvider(row.provider) ? resolveBrandShort(row.provider) : row.provider);
+  return identity(brandKeyForProvider(row.provider) ? resolveBrandShort(row.provider) : displayProviderName(row.provider ?? ''));
 }
 export function uiPublicProductName(product: PublicProduct | CurrentProductOption): UiText { return identity(product.name); }
 export function uiPublicAliasName(alias: PublicProduct['aliases'][number]): UiText { return identity(alias.name); }
 export function uiPublicReferenceName(reference: PublicReferenceRate): UiText { return identity(reference.name); }
-export function uiPublicProviderName(item: PublicProduct | PublicCoverage): UiText { return identity(item.providerName); }
+export function uiPublicProviderName(item: PublicProduct | PublicCoverage): UiText { return identity(displayProviderName(item.providerName ?? '')); }
 export function uiPublicEvidenceLocator(evidence: PublicEvidence): UiText { return uiIdentifier(evidence.locator); }
 /** Rebind navigator titles to reviewed labels or current catalogue identities. */
 let navigationTitleIndex: {

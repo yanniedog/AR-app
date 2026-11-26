@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { View } from 'react-native';
 
 import { humanizeEnum } from '../data/format';
@@ -10,11 +10,11 @@ import {
 import { PROFILE_LVR_OPTIONS } from '../data/lvrTier';
 import { clearHomeLoanRequirements, otherProfileFeatures, profileAttributeOptions, sharedProfileFeatures } from '../data/profileRequirements';
 import { profileSectionCount } from '../data/profile';
-import { visibleFilterOptions } from '../lib/filterOptions';
 import { useStore } from '../data/store';
 import type { SectionKey } from '../types';
-import { useTheme } from '../theme/ThemeProvider';
-import { AppText, Button, Chip, Row } from './ui';
+import { AppText, Button } from './ui';
+import { CompactToggle } from './controls';
+import { OptionSelect, OptionStrip } from './selectors';
 import { uiListedLvr } from '../lib/financialUiCopy';
 import { uiCount, uiJoin, uiLabel, uiSectionName, type UiLabel, type UiText } from '../lib/uiCopy';
 
@@ -44,9 +44,7 @@ export function ProfileEditor({
   value: ProfileFilters;
   onChange: (next: ProfileFilters) => void;
 }) {
-  const theme = useTheme();
   const core = useStore((s) => s.core);
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
 
   const groups = useMemo(() => {
     const attrGroups: EditorGroup[] = PROFILE_GROUPS.filter((g) => sections.includes(g.section))
@@ -94,41 +92,34 @@ export function ProfileEditor({
         {section === 'Mortgage' && profileSectionCount(value, section) > 0 ? <Button
           title="Clear Home loans requirements" variant="ghost"
           onPress={() => onChange(clearHomeLoanRequirements(value))} /> : null}
-        {groups.filter(group => group.section === section).map(g => {
-          const groupKey = `${g.section}-${g.key}`;
-          // Saved values remain removable even if absent from this catalogue.
-          const options = g.key === 'accountFeatures' ? g.options : [...new Set([...value[g.key], ...g.options])];
-          if (!options.length) return null;
-          const { visible, hidden } = visibleFilterOptions(options, value[g.key], expanded.has(groupKey), 12);
-          return <View key={groupKey}>
-            <AppText variant="small" weight="700" style={{ marginBottom: theme.spacing(2) }}>
-              {GROUP_LABELS[g.key]}
-            </AppText>
-            <Row gap={8} style={{ flexWrap: 'wrap' }}>
-              {visible.map((o) => (
-                <Chip
-                  key={o}
-                  label={g.key === 'lvrTiers' ? lvrOptionLabel(o) : humanizeEnum(o)}
-                  selected={value[g.key].includes(o)}
-                  onPress={() => toggle(g.key, o)}
-                />
-              ))}
-            </Row>
-            {hidden > 0 ? <Button title={uiJoin('Show', ' ', 'All', ' ', uiCount(options.length), ' ', GROUP_LABELS[g.key])}
-              variant="ghost" accessibilityState={{ expanded: false }}
-              onPress={() => setExpanded(current => new Set(current).add(groupKey))} /> : null}
-          </View>;
-        })}
+        <View>
+          {groups.filter(group => group.section === section).map((g, index, sectionGroups) => {
+            // Saved values remain removable even if absent from this catalogue.
+            const options = g.key === 'accountFeatures' ? g.options : [...new Set([...value[g.key], ...g.options])];
+            if (!options.length) return null;
+            const items = options.map(o => ({ value: o, label: g.key === 'lvrTiers' ? lvrOptionLabel(o) : humanizeEnum(o) }));
+            return <OptionSelect
+              key={`${g.section}-${g.key}`}
+              auditId={`profile:${g.section}:${g.key}`}
+              label={GROUP_LABELS[g.key]}
+              options={items}
+              value={value[g.key].filter(item => options.includes(item))}
+              multiple
+              onChange={option => toggle(g.key, option)}
+              onClear={() => onChange({ ...value, [g.key]: value[g.key].filter(item => !options.includes(item)) })}
+              last={index === sectionGroups.length - 1}
+            />;
+          })}
+        </View>
       </View>)}
       {sharedProfileFeatures(sections).map(item => <View key={item.feature} style={{ gap: 8 }}>
-        <AppText variant="small" weight="700">{uiLabel('Shared requirements')}</AppText>
-        <AppText variant="tiny" color="textMuted">{uiJoin(...item.sections.flatMap((section, index) => index ? [uiLabel(' / '), uiSectionName(section)] : [uiSectionName(section)]))}</AppText>
-        <Chip label={humanizeEnum(item.feature)} selected={value.accountFeatures.includes(item.feature)} onPress={() => toggle('accountFeatures', item.feature)} />
+        <AppText variant="small" weight="700">{uiJoin('Shared requirements', ' · ', ...item.sections.flatMap((section, index) => index ? [uiLabel(' / '), uiSectionName(section)] : [uiSectionName(section)]))}</AppText>
+        <CompactToggle label={humanizeEnum(item.feature)} value={value.accountFeatures.includes(item.feature)} onChange={() => toggle('accountFeatures', item.feature)} />
       </View>)}
       {otherFeatures.length ? <View style={{ gap: 8 }}>
         <AppText variant="small" weight="700">{uiLabel('Other saved selections')}</AppText>
-        <Row gap={8} style={{ flexWrap: 'wrap' }}>{otherFeatures.map(option => <Chip key={option}
-          label={humanizeEnum(option)} selected onPress={() => toggle('accountFeatures', option)} />)}</Row>
+        <OptionStrip multiple options={otherFeatures.map(option => ({ value: option, label: humanizeEnum(option) }))}
+          value={otherFeatures} onChange={option => toggle('accountFeatures', option)} />
       </View> : null}
     </View>
   );

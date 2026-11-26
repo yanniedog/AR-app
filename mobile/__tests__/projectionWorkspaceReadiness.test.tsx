@@ -36,6 +36,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: {}, 
 jest.mock('../src/components/Screen', () => ({ ScreenScrollView: 'ScreenScrollView' }));
 jest.mock('../src/components/controls', () => ({ CompactToggle: 'CompactToggle', SegmentedControl: 'SegmentedControl' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Badge: 'Badge', Button: 'Button', Card: 'Card', Chip: 'Chip', Row: 'Row' }));
+jest.mock('../src/components/selectors', () => ({ OptionStrip: 'OptionStrip', OptionSelect: 'OptionSelect', ChipStrip: 'ChipStrip' }));
 jest.mock('../src/components/icons/AppIcon', () => 'Icon');
 jest.mock('../src/components/calculation/SelectedCalculationTarget', () => ({ SelectedCalculationTarget: () => null }));
 jest.mock('../src/components/calculation/ProjectionFactRows', () => ({ ProjectionFactRows: () => null }));

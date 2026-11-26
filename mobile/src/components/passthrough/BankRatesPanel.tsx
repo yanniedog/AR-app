@@ -12,9 +12,10 @@ import { useBankRateHistory } from '../../hooks/useBankRateHistory';
 import { hasPositiveChartLayout, type ChartRenderEvidence } from '../../lib/chartRenderEvidence';
 import { BankRateChart } from './BankRateChart';
 import { SegmentedControl } from '../controls';
-import { AppText, Chip, Row } from '../ui';
+import { AppText, Chip } from '../ui';
 import { uiCount, uiJoin, uiLabel, type UiCopy } from '../../lib/uiCopy';
 import { uiChartWindow } from '../../lib/chartUiCopy';
+import { ChipStrip } from '../selectors';
 
 const STATISTICS: { value: RateStatistic; label: UiCopy }[] = [
   { value: 'min', label: 'Min' }, { value: 'mean', label: 'Mean' },
@@ -118,17 +119,17 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
     <SegmentedControl options={[{ value: 'rates' as const, label: 'Rates' }, { value: 'gap' as const, label: 'Gap' }]} value={tab} onChange={setTab} />
     {gapUnavailable ? <View key={chartRevision} onLayout={(event) => { if (hasPositiveChartLayout(event) && activeChartRevision.current === chartRevision) setRenderedEmptyRevision(chartRevision); }}><AppText variant="small">{uiJoin('Gap', ' · ', 'Unavailable')}</AppText></View> : <>
       {showSections && !gap ? <SegmentedControl options={options} value={section} onChange={next => { setChosenSection(next); onSectionChange?.(next); }} /> : null}
-      {!gap ? <Row gap={8} style={{ flexWrap: 'wrap' }}>
+      {!gap ? <ChipStrip>
         {STATISTICS.map(item => (
           <Chip key={item.value} label={item.label} selected={statistic === item.value} onPress={() => setStatistic(item.value)} />
         ))}
-      </Row> : null}
-      <Row gap={8} style={{ flexWrap: 'wrap' }}>
+      </ChipStrip> : null}
+      <ChipStrip>
         <Chip label={uiChartWindow('1Y')} selected={range === '1Y'} onPress={() => setRange('1Y')} />
         <Chip label={uiChartWindow('All')} selected={range === 'All'} onPress={() => setRange('All')} />
         <Chip label="Big four" selected={comparison === 'big4'} onPress={() => setComparison('big4')} />
         <Chip label="All banks" selected={comparison === 'all'} onPress={() => setComparison('all')} />
-      </Row>
+      </ChipStrip>
       <AppText variant="small" color="textMuted">{uiJoin(personalized ? 'Profile' : 'Products', ' · ', gap ? uiJoin('Home loans', ' ', 'Mean', ' ', '−', ' ', 'Savings', ' ', 'Mean') : uiLabel('Advertised rate'))}</AppText>
       {core && !historyAvailable && !historyLoading ? <AppText variant="small" color="textMuted" accessibilityRole="alert">{uiJoin('History', ' · ', 'Unavailable', ' · ', 'Current rate')}</AppText> : null}
       {!historyLoading && missingDates.length > 0 ? <AppText variant="small" color="textMuted" accessibilityRole="alert">{uiJoin('Missing observations', ' · ', uiCount(missingDates.length))}</AppText> : null}
