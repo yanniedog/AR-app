@@ -1,0 +1,227 @@
+[
+ {
+  "label": "",
+  "flags": "tap",
+  "at": [
+   360,
+   800
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "at": [
+   300,
+   224
+  ]
+ },
+ {
+  "label": "Close Temporary filters",
+  "flags": "tap",
+  "at": [
+   640,
+   224
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   859
+  ]
+ },
+ {
+  "label": "Availability",
+  "at": [
+   360,
+   341
+  ]
+ },
+ {
+  "label": "Listed rate",
+  "flags": "tap,sel",
+  "at": [
+   190,
+   425
+  ]
+ },
+ {
+  "label": "Listed rate",
+  "at": [
+   190,
+   423
+  ]
+ },
+ {
+  "label": "No listed rate",
+  "flags": "tap",
+  "at": [
+   530,
+   425
+  ]
+ },
+ {
+  "label": "No listed rate",
+  "at": [
+   530,
+   423
+  ]
+ },
+ {
+  "label": "Interest paid",
+  "at": [
+   360,
+   541
+  ]
+ },
+ {
+  "label": "at maturity",
+  "flags": "tap",
+  "at": [
+   125,
+   629
+  ]
+ },
+ {
+  "label": "Monthly",
+  "flags": "tap",
+  "at": [
+   309,
+   629
+  ]
+ },
+ {
+  "label": "Annually",
+  "flags": "tap",
+  "at": [
+   479,
+   629
+  ]
+ },
+ {
+  "label": "Unknown",
+  "flags": "tap",
+  "at": [
+   115,
+   741
+  ]
+ },
+ {
+  "label": "Account features",
+  "at": [
+   360,
+   857
+  ]
+ },
+ {
+  "label": "Digital banking",
+  "flags": "tap",
+  "at": [
+   150,
+   945
+  ]
+ },
+ {
+  "label": "NOTIFICATIONS",
+  "flags": "tap",
+  "at": [
+   411,
+   945
+  ]
+ },
+ {
+  "label": "PayID",
+  "flags": "tap",
+  "at": [
+   616,
+   945
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   360,
+   1061
+  ]
+ },
+ {
+  "label": "Business applicants",
+  "flags": "tap",
+  "at": [
+   182,
+   1149
+  ]
+ },
+ {
+  "label": "Individual applicants",
+  "flags": "tap",
+  "at": [
+   501,
+   1149
+  ]
+ },
+ {
+  "label": "Maximum age",
+  "flags": "tap",
+  "at": [
+   147,
+   1261
+  ]
+ },
+ {
+  "label": "Minimum age",
+  "flags": "tap",
+  "at": [
+   390,
+   1261
+  ]
+ },
+ {
+  "label": "OTHER",
+  "flags": "tap",
+  "at": [
+   588,
+   1261
+  ]
+ },
+ {
+  "label": "Pension recipients",
+  "flags": "tap",
+  "at": [
+   173,
+   1373
+  ]
+ },
+ {
+  "label": "Residency status",
+  "flags": "tap",
+  "at": [
+   460,
+   1373
+  ]
+ },
+ {
+  "label": "STAFF",
+  "flags": "tap",
+  "at": [
+   99,
+   1433
+  ]
+ },
+ {
+  "label": "Students",
+  "flags": "tap",
+  "at": [
+   262,
+   1433
+  ]
+ },
+ {
+  "label": "Reset",
+  "flags": "tap",
+  "at": [
+   154,
+   1502
+  ]
+ }
+]

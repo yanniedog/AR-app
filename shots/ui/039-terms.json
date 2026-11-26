@@ -1,0 +1,121 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Terms",
+  "at": [
+   206,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "General information only. Rate and product figures are indicative; confirm all terms with the lender before applying. No",
+  "at": [
+   360,
+   314
+  ]
+ },
+ {
+  "label": "Data sources",
+  "at": [
+   360,
+   502
+  ]
+ },
+ {
+  "label": "Rate information is compiled from publicly available Australian banking product disclosures made available under applica",
+  "at": [
+   360,
+   708
+  ]
+ },
+ {
+  "label": "This application is not an accredited Consumer Data Right participant, does not use the CDR trade mark, and is not affil",
+  "at": [
+   360,
+   943
+  ]
+ },
+ {
+  "label": "Lender artwork",
+  "at": [
+   360,
+   1131
+  ]
+ },
+ {
+  "label": "When online, Australian Rates may load a lender logo from the public HTTPS address carried in the integrity-checked rate",
+  "at": [
+   360,
+   1306
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

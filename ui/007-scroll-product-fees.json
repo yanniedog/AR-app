@@ -1,0 +1,217 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Premium Smart Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Home loans · 30 days · 31 Observed · 26 Nov 2026 · Premium Smart Home Loan 6.34% · Leading advertised · All tiers",
+  "at": [
+   360,
+   222
+  ]
+ },
+ {
+  "label": "History",
+  "at": [
+   396,
+   200
+  ]
+ },
+ {
+  "label": "Previous date",
+  "flags": "tap",
+  "at": [
+   80,
+   319
+  ]
+ },
+ {
+  "label": "26 Nov 2026",
+  "at": [
+   360,
+   279
+  ]
+ },
+ {
+  "label": "6.34% · Leading advertised · All tiers",
+  "at": [
+   360,
+   339
+  ]
+ },
+ {
+  "label": "Next date",
+  "flags": "tap,off",
+  "at": [
+   640,
+   319
+  ]
+ },
+ {
+  "label": "Product rate",
+  "at": [
+   165,
+   415
+  ]
+ },
+ {
+  "label": "Show Product facts",
+  "flags": "tap",
+  "at": [
+   360,
+   644
+  ]
+ },
+ {
+  "label": "Product facts",
+  "at": [
+   328,
+   644
+  ]
+ },
+ {
+  "label": "Show Documents",
+  "flags": "tap",
+  "at": [
+   360,
+   885
+  ]
+ },
+ {
+  "label": "Documents",
+  "at": [
+   328,
+   885
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   360,
+   1049
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   286,
+   1101
+  ]
+ },
+ {
+  "label": "Unverified",
+  "at": [
+   626,
+   1101
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   273,
+   1153
+  ]
+ },
+ {
+  "label": "Unassessed",
+  "at": [
+   613,
+   1153
+  ]
+ },
+ {
+  "label": "Show Recorded criteria",
+  "flags": "tap",
+  "at": [
+   360,
+   1318
+  ]
+ },
+ {
+  "label": "Recorded criteria",
+  "at": [
+   328,
+   1318
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

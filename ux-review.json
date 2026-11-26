@@ -1,0 +1,3403 @@
+{
+ "schemaVersion": 1,
+ "screens": 91,
+ "findingsTotal": 201,
+ "major": 3,
+ "counts": {
+  "jargon": 73,
+  "accuracy": 81,
+  "crowded-targets": 23,
+  "slow": 2,
+  "contrast": 15,
+  "no-primary-action": 1,
+  "tap-target": 3,
+  "text-size": 1,
+  "slow-first-value": 1,
+  "slow-relaunch": 1
+ },
+ "rubric": [
+  {
+   "key": "designConsistency",
+   "title": "Design consistency",
+   "score": 4.5,
+   "findings": 16,
+   "top": [
+    "major debug log uploaded: contrast \"Rates\" (1.3:1, needs 4.5:1). Fix: Darken the text or lighten the background",
+    "minor scroll product: contrast \"30 days\" (4.5:1, needs 4.5:1). Fix: Darken the text or lighten the background",
+    "minor select fixed in draft: contrast \"Fixed\" (4.5:1, needs 4.5:1). Fix: Darken the text or lighten the background"
+   ]
+  },
+  {
+   "key": "layout",
+   "title": "Layout",
+   "score": 5,
+   "findings": 0,
+   "top": []
+  },
+  {
+   "key": "easeOfUse",
+   "title": "Ease of use",
+   "score": 4.9,
+   "findings": 3,
+   "top": [
+    "minor /calculator: tap-target \"EditText\" (328x44 dp, minimum 48). Fix: Pad the control to 48 dp or add hitSlop",
+    "minor /calculator: tap-target \"EditText\" (328x44 dp, minimum 48). Fix: Pad the control to 48 dp or add hitSlop",
+    "minor /projections: tap-target \"EditText\" (292x38 dp, minimum 48). Fix: Pad the control to 48 dp or add hitSlop"
+   ]
+  },
+  {
+   "key": "comfort",
+   "title": "Comfort",
+   "score": 4.8,
+   "findings": 5,
+   "top": [
+    "major restart with a saved rate: slow (14.1 s to settle). Fix: Show content first and defer the slow work",
+    "minor open product: slow (5.7 s to settle). Fix: Show content first and defer the slow work",
+    "minor /calculator: tap-target \"EditText\" (328x44 dp, minimum 48). Fix: Pad the control to 48 dp or add hitSlop"
+   ]
+  },
+  {
+   "key": "helpfulness",
+   "title": "Helpfulness",
+   "score": 5,
+   "findings": 0,
+   "top": []
+  },
+  {
+   "key": "appropriateness",
+   "title": "Appropriateness",
+   "score": 2.8,
+   "findings": 81,
+   "top": [
+    "minor open app: accuracy \"CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank\" (comparison 6% is below advertised 6.54%). Fix: Fix the displayed figure or its sort",
+    "minor open app: accuracy \"Owner Occupier P&I No Offset Mortgage, MoveBank\" (comparison 6.19% is below advertised 6.49%). Fix: Fix the displayed figure or its sort",
+    "minor scroll rates 1: accuracy \"Owner Occupier P&I No Offset Mortgage, MoveBank\" (comparison 6.25% is below advertised 6.44%). Fix: Fix the displayed figure or its sort"
+   ]
+  },
+  {
+   "key": "onboarding",
+   "title": "Onboarding ease",
+   "score": 4.9,
+   "findings": 1,
+   "top": [
+    "major cold start: slow-first-value (30.6 s from launch to rates showing). Fix: Show cached rates on launch before the refresh"
+   ]
+  },
+  {
+   "key": "barriers",
+   "title": "Barriers to entry and use",
+   "score": 4.9,
+   "findings": 2,
+   "top": [
+    "major cold start: slow-first-value (30.6 s from launch to rates showing). Fix: Show cached rates on launch before the refresh",
+    "minor cold start: slow-relaunch (9.5 s from relaunch to rates showing). Fix: Draw the cached rates first, then refresh in the background"
+   ]
+  },
+  {
+   "key": "engagement",
+   "title": "Engagement hooks",
+   "score": 5,
+   "findings": 0,
+   "top": []
+  },
+  {
+   "key": "frustration",
+   "title": "Frustration and abandonment risk",
+   "score": 2,
+   "findings": 104,
+   "top": [
+    "major restart with a saved rate: slow (14.1 s to settle). Fix: Show content first and defer the slow work",
+    "major cold start: slow-first-value (30.6 s from launch to rates showing). Fix: Show cached rates on launch before the refresh",
+    "minor open app: jargon \"Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI\" (unexpanded LVR). Fix: Replace the abbreviation with a plain label"
+   ]
+  }
+ ],
+ "tasks": [
+  {
+   "task": "Find the best rate",
+   "taps": 0,
+   "ms": 30573
+  },
+  {
+   "task": "Compare",
+   "taps": null,
+   "ms": null
+  },
+  {
+   "task": "Open a lender",
+   "taps": null,
+   "ms": null
+  },
+  {
+   "task": "Open a product",
+   "taps": 1,
+   "ms": 2803
+  },
+  {
+   "task": "Save a rate",
+   "taps": null,
+   "ms": null
+  }
+ ],
+ "firstRun": {
+  "firstValueMs": 30573,
+  "ratesShown": true,
+  "gates": [],
+  "relaunchValueMs": 9503
+ },
+ "hooks": {
+  "saveRow": true,
+  "savedTab": true,
+  "alerts": true
+ },
+ "perScreen": [
+  {
+   "slug": "001-open-app",
+   "name": "open app",
+   "elements": 52,
+   "tappable": 31,
+   "rows": 5,
+   "findings": 4,
+   "major": 0
+  },
+  {
+   "slug": "002-scroll-rates-1",
+   "name": "scroll rates 1",
+   "elements": 51,
+   "tappable": 33,
+   "rows": 8,
+   "findings": 9,
+   "major": 0
+  },
+  {
+   "slug": "003-scroll-rates-2",
+   "name": "scroll rates 2",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 4,
+   "major": 0
+  },
+  {
+   "slug": "004-scroll-rates-back",
+   "name": "scroll rates back",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 4,
+   "major": 0
+  },
+  {
+   "slug": "005-open-product",
+   "name": "open product",
+   "elements": 31,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "006-scroll-product",
+   "name": "scroll product",
+   "elements": 30,
+   "tappable": 13,
+   "rows": 0,
+   "findings": 2,
+   "major": 0
+  },
+  {
+   "slug": "007-scroll-product-fees",
+   "name": "scroll product fees",
+   "elements": 26,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "008-scroll-product-eligibility",
+   "name": "scroll product eligibility",
+   "elements": 23,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "009-scroll-product-sources",
+   "name": "scroll product sources",
+   "elements": 20,
+   "tappable": 11,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "010-back-to-rates",
+   "name": "back to rates",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 4,
+   "major": 0
+  },
+  {
+   "slug": "011-open-lenders",
+   "name": "open lenders",
+   "elements": 41,
+   "tappable": 21,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "012-scroll-lenders",
+   "name": "scroll lenders",
+   "elements": 38,
+   "tappable": 20,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "013-back-from-lenders",
+   "name": "back from lenders",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 4,
+   "major": 0
+  },
+  {
+   "slug": "014-switch-to-savings",
+   "name": "switch to savings",
+   "elements": 49,
+   "tappable": 31,
+   "rows": 6,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "015-switch-to-home-loans",
+   "name": "switch to home loans",
+   "elements": 57,
+   "tappable": 30,
+   "rows": 7,
+   "findings": 5,
+   "major": 0
+  },
+  {
+   "slug": "016-open-filters",
+   "name": "open filters",
+   "elements": 42,
+   "tappable": 20,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "017-close-filters",
+   "name": "close filters",
+   "elements": 57,
+   "tappable": 30,
+   "rows": 7,
+   "findings": 5,
+   "major": 0
+  },
+  {
+   "slug": "018-open-market",
+   "name": "open market",
+   "elements": 42,
+   "tappable": 13,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "019-open-rba",
+   "name": "open rba",
+   "elements": 24,
+   "tappable": 7,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "020-scroll-rba",
+   "name": "scroll rba",
+   "elements": 25,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "021-back-from-rba",
+   "name": "back from rba",
+   "elements": 42,
+   "tappable": 13,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "022-scroll-market",
+   "name": "scroll market",
+   "elements": 32,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "023-open-saved",
+   "name": "open saved",
+   "elements": 19,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "024-return-to-rates",
+   "name": "return to rates",
+   "elements": 60,
+   "tappable": 30,
+   "rows": 7,
+   "findings": 7,
+   "major": 0
+  },
+  {
+   "slug": "025-start-category-switch",
+   "name": "start category switch",
+   "elements": 60,
+   "tappable": 30,
+   "rows": 7,
+   "findings": 7,
+   "major": 0
+  },
+  {
+   "slug": "026-open-term-deposits",
+   "name": "open term deposits",
+   "elements": 49,
+   "tappable": 31,
+   "rows": 6,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "027-verify-term-deposit-rates",
+   "name": "verify term deposit rates",
+   "elements": 51,
+   "tappable": 33,
+   "rows": 8,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "028-restore-home-loans",
+   "name": "restore home loans",
+   "elements": 57,
+   "tappable": 30,
+   "rows": 7,
+   "findings": 5,
+   "major": 0
+  },
+  {
+   "slug": "029-start-search-from-rates",
+   "name": "start search from rates",
+   "elements": 57,
+   "tappable": 30,
+   "rows": 7,
+   "findings": 5,
+   "major": 0
+  },
+  {
+   "slug": "030-open-savings-search",
+   "name": "open savings search",
+   "elements": 49,
+   "tappable": 31,
+   "rows": 6,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "031-search-macquarie",
+   "name": "search Macquarie",
+   "elements": 50,
+   "tappable": 32,
+   "rows": 6,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "032-verify-macquarie-result",
+   "name": "verify Macquarie result",
+   "elements": 50,
+   "tappable": 32,
+   "rows": 6,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "033-clear-query-and-restore-results",
+   "name": "clear query and restore results",
+   "elements": 49,
+   "tappable": 31,
+   "rows": 6,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "034-return-from-savings-search",
+   "name": "return from savings search",
+   "elements": 60,
+   "tappable": 30,
+   "rows": 7,
+   "findings": 7,
+   "major": 0
+  },
+  {
+   "slug": "035-start-filter-rollback",
+   "name": "start filter rollback",
+   "elements": 60,
+   "tappable": 30,
+   "rows": 7,
+   "findings": 7,
+   "major": 0
+  },
+  {
+   "slug": "036-open-mortgage-filter-draft",
+   "name": "open mortgage filter draft",
+   "elements": 37,
+   "tappable": 18,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "037-select-fixed-in-draft",
+   "name": "select fixed in draft",
+   "elements": 37,
+   "tappable": 18,
+   "rows": 0,
+   "findings": 2,
+   "major": 0
+  },
+  {
+   "slug": "038-discard-unsaved-filter-draft",
+   "name": "discard unsaved filter draft",
+   "elements": 60,
+   "tappable": 30,
+   "rows": 7,
+   "findings": 7,
+   "major": 0
+  },
+  {
+   "slug": "039-verify-fixed-was-not-applied",
+   "name": "verify fixed was not applied",
+   "elements": 37,
+   "tappable": 18,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "040-close-verified-filter-draft",
+   "name": "close verified filter draft",
+   "elements": 60,
+   "tappable": 30,
+   "rows": 7,
+   "findings": 7,
+   "major": 0
+  },
+  {
+   "slug": "041-start-save-from-rates",
+   "name": "start save from rates",
+   "elements": 60,
+   "tappable": 30,
+   "rows": 7,
+   "findings": 7,
+   "major": 0
+  },
+  {
+   "slug": "042-open-unsaved-rate",
+   "name": "open unsaved rate",
+   "elements": 27,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "043-save-a-rate",
+   "name": "save a rate",
+   "elements": 27,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "044-leave-saved-product",
+   "name": "leave saved product",
+   "elements": 60,
+   "tappable": 30,
+   "rows": 7,
+   "findings": 7,
+   "major": 0
+  },
+  {
+   "slug": "045-restart-with-a-saved-rate",
+   "name": "restart with a saved rate",
+   "elements": 52,
+   "tappable": 31,
+   "rows": 5,
+   "findings": 5,
+   "major": 1
+  },
+  {
+   "slug": "046-verify-saved-rate-after-restart",
+   "name": "verify saved rate after restart",
+   "elements": 26,
+   "tappable": 12,
+   "rows": 1,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "047-open-product-from-saved-rates",
+   "name": "open product from saved rates",
+   "elements": 27,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "048-remove-saved-rate",
+   "name": "remove saved rate",
+   "elements": 27,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "049-leave-removed-product",
+   "name": "leave removed product",
+   "elements": 19,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "050-follow-browse-rates-recovery",
+   "name": "follow browse rates recovery",
+   "elements": 52,
+   "tappable": 31,
+   "rows": 5,
+   "findings": 4,
+   "major": 0
+  },
+  {
+   "slug": "051-start-compare-from-rates",
+   "name": "start compare from rates",
+   "elements": 52,
+   "tappable": 31,
+   "rows": 5,
+   "findings": 4,
+   "major": 0
+  },
+  {
+   "slug": "052-enter-selection-mode",
+   "name": "enter selection mode",
+   "elements": 42,
+   "tappable": 21,
+   "rows": 5,
+   "findings": 5,
+   "major": 0
+  },
+  {
+   "slug": "053-select-first-comparison-rate",
+   "name": "select first comparison rate",
+   "elements": 42,
+   "tappable": 21,
+   "rows": 5,
+   "findings": 5,
+   "major": 0
+  },
+  {
+   "slug": "054-select-second-comparison-rate",
+   "name": "select second comparison rate",
+   "elements": 42,
+   "tappable": 21,
+   "rows": 5,
+   "findings": 5,
+   "major": 0
+  },
+  {
+   "slug": "055-open-two-rate-comparison",
+   "name": "open two-rate comparison",
+   "elements": 19,
+   "tappable": 2,
+   "rows": 0,
+   "findings": 2,
+   "major": 0
+  },
+  {
+   "slug": "056-return-from-two-rate-comparison",
+   "name": "return from two-rate comparison",
+   "elements": 42,
+   "tappable": 21,
+   "rows": 5,
+   "findings": 5,
+   "major": 0
+  },
+  {
+   "slug": "057-cold-start",
+   "name": "cold start",
+   "elements": 52,
+   "tappable": 31,
+   "rows": 5,
+   "findings": 4,
+   "major": 0
+  },
+  {
+   "slug": "058-browse",
+   "name": "/browse",
+   "elements": 52,
+   "tappable": 31,
+   "rows": 5,
+   "findings": 4,
+   "major": 0
+  },
+  {
+   "slug": "059-watchlist",
+   "name": "/watchlist",
+   "elements": 19,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "060-market",
+   "name": "/market",
+   "elements": 42,
+   "tappable": 13,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "061-tools",
+   "name": "/tools",
+   "elements": 42,
+   "tappable": 13,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "062-trends",
+   "name": "/trends",
+   "elements": 33,
+   "tappable": 14,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "063-search",
+   "name": "/search",
+   "elements": 52,
+   "tappable": 31,
+   "rows": 5,
+   "findings": 4,
+   "major": 0
+  },
+  {
+   "slug": "064-banks",
+   "name": "/banks",
+   "elements": 52,
+   "tappable": 31,
+   "rows": 5,
+   "findings": 4,
+   "major": 0
+  },
+  {
+   "slug": "065-bank-rates",
+   "name": "/bank-rates",
+   "elements": 45,
+   "tappable": 21,
+   "rows": 0,
+   "findings": 4,
+   "major": 0
+  },
+  {
+   "slug": "066-categories",
+   "name": "/categories",
+   "elements": 52,
+   "tappable": 31,
+   "rows": 5,
+   "findings": 4,
+   "major": 0
+  },
+  {
+   "slug": "067-catalogue",
+   "name": "/catalogue",
+   "elements": 48,
+   "tappable": 17,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "068-compare",
+   "name": "/compare",
+   "elements": 6,
+   "tappable": 3,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "069-matches",
+   "name": "/matches",
+   "elements": 48,
+   "tappable": 17,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "070-calculator",
+   "name": "/calculator",
+   "elements": 41,
+   "tappable": 20,
+   "rows": 0,
+   "findings": 5,
+   "major": 0
+  },
+  {
+   "slug": "071-projections",
+   "name": "/projections",
+   "elements": 33,
+   "tappable": 15,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "072-profile",
+   "name": "/profile",
+   "elements": 49,
+   "tappable": 21,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "073-research",
+   "name": "/research",
+   "elements": 33,
+   "tappable": 14,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "074-rba",
+   "name": "/rba",
+   "elements": 24,
+   "tappable": 7,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "075-rba-response",
+   "name": "/rba-response",
+   "elements": 47,
+   "tappable": 15,
+   "rows": 0,
+   "findings": 2,
+   "major": 0
+  },
+  {
+   "slug": "076-settings",
+   "name": "/settings",
+   "elements": 30,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "077-about",
+   "name": "/about",
+   "elements": 22,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "078-terms",
+   "name": "/terms",
+   "elements": 15,
+   "tappable": 5,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "079-privacy",
+   "name": "/privacy",
+   "elements": 15,
+   "tappable": 5,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "080-third-party-notices",
+   "name": "/third-party-notices",
+   "elements": 16,
+   "tappable": 5,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "081-node",
+   "name": "/node",
+   "elements": 48,
+   "tappable": 17,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "082-passthrough",
+   "name": "/passthrough",
+   "elements": 42,
+   "tappable": 13,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "083-calculation-receipt",
+   "name": "/calculation-receipt",
+   "elements": 19,
+   "tappable": 8,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "084-rate-receipt",
+   "name": "/rate-receipt",
+   "elements": 10,
+   "tappable": 5,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "085-warm-resume",
+   "name": "warm resume",
+   "elements": 10,
+   "tappable": 5,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "086-cold-relaunch",
+   "name": "cold relaunch",
+   "elements": 52,
+   "tappable": 31,
+   "rows": 5,
+   "findings": 4,
+   "major": 0
+  },
+  {
+   "slug": "087-about",
+   "name": "about",
+   "elements": 22,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "088-audit-screen",
+   "name": "audit screen",
+   "elements": 25,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "113-about-for-debug-log",
+   "name": "about for debug log",
+   "elements": 22,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "114-debug-log-screen",
+   "name": "debug log screen",
+   "elements": 31,
+   "tappable": 11,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "115-debug-log-uploaded",
+   "name": "debug log uploaded",
+   "elements": 31,
+   "tappable": 11,
+   "rows": 0,
+   "findings": 1,
+   "major": 1
+  }
+ ],
+ "findings": [
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "open app",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    920
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "open app",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    1064
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "open app",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    961
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "open app",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    1361
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "Save, PLUS HOME LOAN FIXED 2YR 60-80 LVR PI, Cairns bank, Comparison rate 6.28%",
+   "at": [
+    640,
+    607
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "MoveBank · Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    384,
+    1115
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "View Cairns bank · History · Freshness · Unknown / PLUS HOME LOAN FIXED 2YR 60-80 LVR PI, Cairns bank, Comparison rate 6.28%, Adver",
+   "at": [
+    104,
+    614
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "PLUS HOME LOAN FIXED 2YR 60-80 LVR PI, Cairns bank, Comparison rate 6.28%, Adver / Save, PLUS HOME LOAN FIXED 2YR 60-80 LVR PI, Cairns bank, Comparison rate 6.28%",
+   "at": [
+    384,
+    614
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    542
+   ],
+   "detail": "comparison 6.25% is below advertised 6.44%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "PLUS HOME LOAN FIXED 2YR 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    614
+   ],
+   "detail": "comparison 6.28% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "PLUS HOME LOAN FIXED 1YR 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    724
+   ],
+   "detail": "comparison 6.31% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "PLUS HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    868
+   ],
+   "detail": "comparison 6.32% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    1386
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "scroll rates 2",
+   "text": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.41%, Listed L",
+   "at": [
+    640,
+    789
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 2",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    431
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 2",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    503
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 2",
+   "text": "Virgin Money Lite Home Loan, Virgin Money",
+   "at": [
+    384,
+    789
+   ],
+   "detail": "comparison 6.41% is below advertised 6.89%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "scroll rates back",
+   "text": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.41%, Listed L",
+   "at": [
+    640,
+    789
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates back",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    431
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates back",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    503
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates back",
+   "text": "Virgin Money Lite Home Loan, Virgin Money",
+   "at": [
+    384,
+    789
+   ],
+   "detail": "comparison 6.41% is below advertised 6.89%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "slow",
+   "severity": "minor",
+   "screen": "open product",
+   "text": "",
+   "at": [
+    0,
+    0
+   ],
+   "detail": "5.7 s to settle",
+   "fix": "Show content first and defer the slow work"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "scroll product",
+   "text": "Benchmarks · LVR ≤80.0%",
+   "at": [
+    218,
+    1272
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "contrast",
+   "fix": "Darken the text or lighten the background",
+   "severity": "minor",
+   "screen": "scroll product",
+   "text": "30 days",
+   "at": [
+    107,
+    1160
+   ],
+   "detail": "4.5:1, needs 4.5:1"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "back to rates",
+   "text": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.41%, Listed L",
+   "at": [
+    640,
+    789
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "back to rates",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    431
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "back to rates",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    503
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "back to rates",
+   "text": "Virgin Money Lite Home Loan, Virgin Money",
+   "at": [
+    384,
+    789
+   ],
+   "detail": "comparison 6.41% is below advertised 6.89%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll lenders",
+   "text": "Bank of Queensland Limited / Show All 139 Lenders",
+   "at": [
+    232,
+    1359
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "back from lenders",
+   "text": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.41%, Listed L",
+   "at": [
+    640,
+    789
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "back from lenders",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    431
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "back from lenders",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    503
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "back from lenders",
+   "text": "Virgin Money Lite Home Loan, Virgin Money",
+   "at": [
+    384,
+    789
+   ],
+   "detail": "comparison 6.41% is below advertised 6.89%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "switch to home loans",
+   "text": "Unity Bank · Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "switch to home loans",
+   "text": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.41%, Listed L",
+   "at": [
+    640,
+    933
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "switch to home loans",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    503
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "switch to home loans",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    575
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "switch to home loans",
+   "text": "Virgin Money Lite Home Loan, Virgin Money",
+   "at": [
+    384,
+    933
+   ],
+   "detail": "comparison 6.41% is below advertised 6.89%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "open filters",
+   "text": "LVR · Tier",
+   "at": [
+    360,
+    1265
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "close filters",
+   "text": "Unity Bank · Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "close filters",
+   "text": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.41%, Listed L",
+   "at": [
+    640,
+    933
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "close filters",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    503
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "close filters",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    575
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "close filters",
+   "text": "Virgin Money Lite Home Loan, Virgin Money",
+   "at": [
+    384,
+    933
+   ],
+   "detail": "comparison 6.41% is below advertised 6.89%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll market",
+   "text": "ME Bank - ME Go · Increase · Home loans · Average +5.0 bps · 2/2 products · 21 N / Macquarie Bank Limited · Increase · Home loans · Average +20.0 bps · 2/2 product",
+   "at": [
+    360,
+    237
+   ],
+   "detail": "1 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "return to rates",
+   "text": "Save, Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Ba",
+   "at": [
+    640,
+    613
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "return to rates",
+   "text": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.41%, Listed L",
+   "at": [
+    640,
+    880
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "return to rates",
+   "text": "View Unity Bank · History · Freshness · Unknown / Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Co",
+   "at": [
+    104,
+    620
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "return to rates",
+   "text": "Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Co / Save, Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Ba",
+   "at": [
+    384,
+    620
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "return to rates",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    476
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "return to rates",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    548
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "return to rates",
+   "text": "Virgin Money Lite Home Loan, Virgin Money",
+   "at": [
+    384,
+    880
+   ],
+   "detail": "comparison 6.41% is below advertised 6.89%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "start category switch",
+   "text": "Save, Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Ba",
+   "at": [
+    640,
+    613
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "start category switch",
+   "text": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.41%, Listed L",
+   "at": [
+    640,
+    880
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "start category switch",
+   "text": "View Unity Bank · History · Freshness · Unknown / Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Co",
+   "at": [
+    104,
+    620
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "start category switch",
+   "text": "Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Co / Save, Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Ba",
+   "at": [
+    384,
+    620
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start category switch",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    476
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start category switch",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    548
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start category switch",
+   "text": "Virgin Money Lite Home Loan, Virgin Money",
+   "at": [
+    384,
+    880
+   ],
+   "detail": "comparison 6.41% is below advertised 6.89%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "verify term deposit rates",
+   "text": "View Judo Bank · History · Freshness · Unknown / Personal Term Deposits, Judo Bank, Rate 5.65%, 10 mo · at maturity · Conditions:",
+   "at": [
+    104,
+    587
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "restore home loans",
+   "text": "Unity Bank · Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "restore home loans",
+   "text": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.41%, Listed L",
+   "at": [
+    640,
+    933
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "restore home loans",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    503
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "restore home loans",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    575
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "restore home loans",
+   "text": "Virgin Money Lite Home Loan, Virgin Money",
+   "at": [
+    384,
+    933
+   ],
+   "detail": "comparison 6.41% is below advertised 6.89%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "start search from rates",
+   "text": "Unity Bank · Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "start search from rates",
+   "text": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.41%, Listed L",
+   "at": [
+    640,
+    933
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start search from rates",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    503
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start search from rates",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    575
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start search from rates",
+   "text": "Virgin Money Lite Home Loan, Virgin Money",
+   "at": [
+    384,
+    933
+   ],
+   "detail": "comparison 6.41% is below advertised 6.89%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "return from savings search",
+   "text": "Save, Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Ba",
+   "at": [
+    640,
+    613
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "return from savings search",
+   "text": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.41%, Listed L",
+   "at": [
+    640,
+    880
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "return from savings search",
+   "text": "View Unity Bank · History · Freshness · Unknown / Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Co",
+   "at": [
+    104,
+    620
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "return from savings search",
+   "text": "Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Co / Save, Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Ba",
+   "at": [
+    384,
+    620
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "return from savings search",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    476
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "return from savings search",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    548
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "return from savings search",
+   "text": "Virgin Money Lite Home Loan, Virgin Money",
+   "at": [
+    384,
+    880
+   ],
+   "detail": "comparison 6.41% is below advertised 6.89%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "start filter rollback",
+   "text": "Save, Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Ba",
+   "at": [
+    640,
+    613
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "start filter rollback",
+   "text": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.41%, Listed L",
+   "at": [
+    640,
+    880
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "start filter rollback",
+   "text": "View Unity Bank · History · Freshness · Unknown / Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Co",
+   "at": [
+    104,
+    620
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "start filter rollback",
+   "text": "Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Co / Save, Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Ba",
+   "at": [
+    384,
+    620
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start filter rollback",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    476
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start filter rollback",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    548
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start filter rollback",
+   "text": "Virgin Money Lite Home Loan, Virgin Money",
+   "at": [
+    384,
+    880
+   ],
+   "detail": "comparison 6.41% is below advertised 6.89%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "open mortgage filter draft",
+   "text": "LVR · Tier",
+   "at": [
+    360,
+    1252
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "select fixed in draft",
+   "text": "LVR · Tier",
+   "at": [
+    360,
+    1252
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "contrast",
+   "fix": "Darken the text or lighten the background",
+   "severity": "minor",
+   "screen": "select fixed in draft",
+   "text": "Fixed",
+   "at": [
+    92,
+    820
+   ],
+   "detail": "4.5:1, needs 4.5:1"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "discard unsaved filter draft",
+   "text": "Save, Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Ba",
+   "at": [
+    640,
+    613
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "discard unsaved filter draft",
+   "text": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.41%, Listed L",
+   "at": [
+    640,
+    880
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "discard unsaved filter draft",
+   "text": "View Unity Bank · History · Freshness · Unknown / Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Co",
+   "at": [
+    104,
+    620
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "discard unsaved filter draft",
+   "text": "Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Co / Save, Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Ba",
+   "at": [
+    384,
+    620
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "discard unsaved filter draft",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    476
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "discard unsaved filter draft",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    548
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "discard unsaved filter draft",
+   "text": "Virgin Money Lite Home Loan, Virgin Money",
+   "at": [
+    384,
+    880
+   ],
+   "detail": "comparison 6.41% is below advertised 6.89%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "verify fixed was not applied",
+   "text": "LVR · Tier",
+   "at": [
+    360,
+    1252
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "close verified filter draft",
+   "text": "Save, Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Ba",
+   "at": [
+    640,
+    613
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "close verified filter draft",
+   "text": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.41%, Listed L",
+   "at": [
+    640,
+    880
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "close verified filter draft",
+   "text": "View Unity Bank · History · Freshness · Unknown / Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Co",
+   "at": [
+    104,
+    620
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "close verified filter draft",
+   "text": "Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Co / Save, Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Ba",
+   "at": [
+    384,
+    620
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "close verified filter draft",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    476
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "close verified filter draft",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    548
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "close verified filter draft",
+   "text": "Virgin Money Lite Home Loan, Virgin Money",
+   "at": [
+    384,
+    880
+   ],
+   "detail": "comparison 6.41% is below advertised 6.89%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "start save from rates",
+   "text": "Save, Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Ba",
+   "at": [
+    640,
+    613
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "start save from rates",
+   "text": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.41%, Listed L",
+   "at": [
+    640,
+    880
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "start save from rates",
+   "text": "View Unity Bank · History · Freshness · Unknown / Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Co",
+   "at": [
+    104,
+    620
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "start save from rates",
+   "text": "Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Co / Save, Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Ba",
+   "at": [
+    384,
+    620
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start save from rates",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    476
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start save from rates",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    548
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start save from rates",
+   "text": "Virgin Money Lite Home Loan, Virgin Money",
+   "at": [
+    384,
+    880
+   ],
+   "detail": "comparison 6.41% is below advertised 6.89%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "open unsaved rate",
+   "text": "Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO",
+   "at": [
+    318,
+    142
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "save a rate",
+   "text": "Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO",
+   "at": [
+    318,
+    142
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "leave saved product",
+   "text": "Remove, Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity ",
+   "at": [
+    640,
+    613
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "leave saved product",
+   "text": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.41%, Listed L",
+   "at": [
+    640,
+    880
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "leave saved product",
+   "text": "View Unity Bank · History · Freshness · Unknown / Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Co",
+   "at": [
+    104,
+    620
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "leave saved product",
+   "text": "Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Co / Remove, Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity ",
+   "at": [
+    384,
+    620
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "leave saved product",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    476
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "leave saved product",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    548
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "leave saved product",
+   "text": "Virgin Money Lite Home Loan, Virgin Money",
+   "at": [
+    384,
+    880
+   ],
+   "detail": "comparison 6.41% is below advertised 6.89%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "restart with a saved rate",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    920
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "restart with a saved rate",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    1064
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "restart with a saved rate",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    961
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "restart with a saved rate",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    1361
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "slow",
+   "severity": "major",
+   "screen": "restart with a saved rate",
+   "text": "",
+   "at": [
+    0,
+    0
+   ],
+   "detail": "14.1 s to settle",
+   "fix": "Show content first and defer the slow work"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "verify saved rate after restart",
+   "text": "Unity Bank · Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO",
+   "at": [
+    328,
+    869
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "open product from saved rates",
+   "text": "Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO",
+   "at": [
+    318,
+    142
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "remove saved rate",
+   "text": "Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO",
+   "at": [
+    318,
+    142
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "follow browse rates recovery",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    904
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "follow browse rates recovery",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    1048
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "follow browse rates recovery",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    945
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "follow browse rates recovery",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    1353
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "start compare from rates",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    904
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "start compare from rates",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    1048
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start compare from rates",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    945
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start compare from rates",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    1353
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "enter selection mode",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    904
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "enter selection mode",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    1048
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "contrast",
+   "fix": "Darken the text or lighten the background",
+   "severity": "minor",
+   "screen": "enter selection mode",
+   "text": "Done",
+   "at": [
+    386,
+    543
+   ],
+   "detail": "4.5:1, needs 4.5:1"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "enter selection mode",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    945
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "enter selection mode",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    1353
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "select first comparison rate",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    904
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "select first comparison rate",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    1048
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "contrast",
+   "fix": "Darken the text or lighten the background",
+   "severity": "minor",
+   "screen": "select first comparison rate",
+   "text": "Done",
+   "at": [
+    386,
+    543
+   ],
+   "detail": "4.5:1, needs 4.5:1"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "select first comparison rate",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    945
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "select first comparison rate",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    1353
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "select second comparison rate",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    904
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "select second comparison rate",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    1048
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "contrast",
+   "fix": "Darken the text or lighten the background",
+   "severity": "minor",
+   "screen": "select second comparison rate",
+   "text": "Done",
+   "at": [
+    386,
+    543
+   ],
+   "detail": "4.5:1, needs 4.5:1"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "select second comparison rate",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    945
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "select second comparison rate",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    1280
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "open two-rate comparison",
+   "text": "Listed LVR",
+   "at": [
+    360,
+    739
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "no-primary-action",
+   "severity": "minor",
+   "screen": "open two-rate comparison",
+   "text": "",
+   "at": [
+    0,
+    0
+   ],
+   "detail": "content with no action in the body",
+   "fix": "Make the next step an explicit labelled action"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "return from two-rate comparison",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    904
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "return from two-rate comparison",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    1048
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "contrast",
+   "fix": "Darken the text or lighten the background",
+   "severity": "minor",
+   "screen": "return from two-rate comparison",
+   "text": "Done",
+   "at": [
+    386,
+    543
+   ],
+   "detail": "4.5:1, needs 4.5:1"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "return from two-rate comparison",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    945
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "return from two-rate comparison",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    1280
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "cold start",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    920
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "cold start",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    1064
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "cold start",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    961
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "cold start",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    1361
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "/browse",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    904
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "/browse",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    1048
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "/browse",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    945
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "/browse",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    1353
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "contrast",
+   "fix": "Darken the text or lighten the background",
+   "severity": "minor",
+   "screen": "/trends",
+   "text": "30 days",
+   "at": [
+    107,
+    1128
+   ],
+   "detail": "4.5:1, needs 4.5:1"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "/search",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    904
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "/search",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    1048
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "/search",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    945
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "/search",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    1353
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "/banks",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    904
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "/banks",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    1048
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "/banks",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    945
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "/banks",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    1353
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "contrast",
+   "fix": "Darken the text or lighten the background",
+   "severity": "minor",
+   "screen": "/bank-rates",
+   "text": "All banks",
+   "at": [
+    535,
+    797
+   ],
+   "detail": "4.5:1, needs 4.5:1"
+  },
+  {
+   "check": "contrast",
+   "fix": "Darken the text or lighten the background",
+   "severity": "minor",
+   "screen": "/bank-rates",
+   "text": "Mean",
+   "at": [
+    207,
+    661
+   ],
+   "detail": "4.5:1, needs 4.5:1"
+  },
+  {
+   "check": "contrast",
+   "fix": "Darken the text or lighten the background",
+   "severity": "minor",
+   "screen": "/bank-rates",
+   "text": "All",
+   "at": [
+    217,
+    797
+   ],
+   "detail": "4.5:1, needs 4.5:1"
+  },
+  {
+   "check": "contrast",
+   "fix": "Darken the text or lighten the background",
+   "severity": "minor",
+   "screen": "/bank-rates",
+   "text": "3M",
+   "at": [
+    172,
+    1093
+   ],
+   "detail": "3.8:1, needs 4.5:1"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "/categories",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    904
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "/categories",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    1048
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "/categories",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    945
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "/categories",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    1353
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "/catalogue",
+   "text": "2 YEAR DISCOUNTED BASIC VARIABLE LOAN OWNER OCCUPIED P&I, MACARTHUR CREDIT UNION",
+   "at": [
+    360,
+    857
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "/matches",
+   "text": "2 YEAR DISCOUNTED BASIC VARIABLE LOAN OWNER OCCUPIED P&I, MACARTHUR CREDIT UNION",
+   "at": [
+    360,
+    857
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "tap-target",
+   "severity": "minor",
+   "screen": "/calculator",
+   "text": "EditText",
+   "at": [
+    360,
+    749
+   ],
+   "detail": "328x44 dp, minimum 48",
+   "fix": "Pad the control to 48 dp or add hitSlop"
+  },
+  {
+   "check": "tap-target",
+   "severity": "minor",
+   "screen": "/calculator",
+   "text": "EditText",
+   "at": [
+    360,
+    1344
+   ],
+   "detail": "328x44 dp, minimum 48",
+   "fix": "Pad the control to 48 dp or add hitSlop"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "/calculator",
+   "text": "EditText / Buying",
+   "at": [
+    360,
+    749
+   ],
+   "detail": "0 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "/calculator",
+   "text": "EditText / Rates",
+   "at": [
+    360,
+    1344
+   ],
+   "detail": "3 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "contrast",
+   "fix": "Darken the text or lighten the background",
+   "severity": "minor",
+   "screen": "/calculator",
+   "text": "Refinancing",
+   "at": [
+    282,
+    840
+   ],
+   "detail": "4.5:1, needs 4.5:1"
+  },
+  {
+   "check": "tap-target",
+   "severity": "minor",
+   "screen": "/projections",
+   "text": "EditText",
+   "at": [
+    350,
+    807
+   ],
+   "detail": "292x38 dp, minimum 48",
+   "fix": "Pad the control to 48 dp or add hitSlop"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "/profile",
+   "text": "LVR",
+   "at": [
+    360,
+    1209
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "contrast",
+   "fix": "Darken the text or lighten the background",
+   "severity": "minor",
+   "screen": "/research",
+   "text": "30 days",
+   "at": [
+    107,
+    1128
+   ],
+   "detail": "4.5:1, needs 4.5:1"
+  },
+  {
+   "check": "text-size",
+   "severity": "minor",
+   "screen": "/rba-response",
+   "text": "AHLR",
+   "at": [
+    60,
+    1372
+   ],
+   "detail": "text box 12 dp tall",
+   "fix": "Raise the text to at least 12 sp"
+  },
+  {
+   "check": "contrast",
+   "fix": "Darken the text or lighten the background",
+   "severity": "minor",
+   "screen": "/rba-response",
+   "text": "3M",
+   "at": [
+    60,
+    982
+   ],
+   "detail": "3.8:1, needs 4.5:1"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "/node",
+   "text": "2 YEAR DISCOUNTED BASIC VARIABLE LOAN OWNER OCCUPIED P&I, MACARTHUR CREDIT UNION",
+   "at": [
+    360,
+    857
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "cold relaunch",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    920
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "cold relaunch",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    1064
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "cold relaunch",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    961
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "cold relaunch",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    1361
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "contrast",
+   "fix": "Darken the text or lighten the background",
+   "severity": "major",
+   "screen": "debug log uploaded",
+   "text": "Rates",
+   "at": [
+    120,
+    1505
+   ],
+   "detail": "1.3:1, needs 4.5:1"
+  },
+  {
+   "check": "slow-first-value",
+   "severity": "major",
+   "screen": "cold start",
+   "text": "",
+   "at": [
+    0,
+    0
+   ],
+   "detail": "30.6 s from launch to rates showing",
+   "fix": "Show cached rates on launch before the refresh"
+  },
+  {
+   "check": "slow-relaunch",
+   "severity": "minor",
+   "screen": "cold start",
+   "text": "",
+   "at": [
+    0,
+    0
+   ],
+   "detail": "9.5 s from relaunch to rates showing",
+   "fix": "Draw the cached rates first, then refresh in the background"
+  }
+ ],
+ "sampleChecked": false,
+ "contrastMeasured": true,
+ "summaryLines": [
+  "UX review: 3 major, 198 minor across 91 screens. Weakest: Frustration and abandonment risk 2/5, Appropriateness 2.8/5, Design consistency 4.5/5.",
+  "First value 30.6 s, relaunch 9.5 s, 0 gate taps. Taps: find the best rate 0, compare unknown, open a lender unknown, open a product 1, save a rate unknown.",
+  "- major | debug log uploaded: contrast \"Rates\", 1.3:1, needs 4.5:1 | Fix: Darken the text or lighten the background",
+  "",
+  "Frustration and abandonment risk 2/5: 2 major, 102 minor.",
+  "- major | restart with a saved rate: slow, 14.1 s to settle | Fix: Show content first and defer the slow work",
+  "- major | cold start: slow-first-value, 30.6 s from launch to rates showing | Fix: Show cached rates on launch before the refresh",
+  "- minor | open app: jargon \"Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI\", unexpanded LVR | Fix: Replace the abbreviation with a plain label",
+  "- minor | scroll rates 1: jargon \"Save, PLUS HOME LOAN FIXED 2YR 60-80 LVR PI, Cairn\", unexpanded LVR | Fix: Replace the abbreviation with a plain label",
+  "- minor | scroll rates 1: crowded-targets \"View Cairns bank · History · Freshness · Unknown /\", 4 dp apart | Fix: Add at least 8 dp between adjacent controls",
+  "- minor | scroll rates 2: jargon \"Save, Virgin Money Lite Home Loan, Virgin Money, C\", unexpanded LVR | Fix: Replace the abbreviation with a plain label"
+ ]
+}
