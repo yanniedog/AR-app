@@ -2,7 +2,6 @@ import { router } from 'expo-router';
 import { Linking, Platform } from 'react-native';
 
 import { IOS_INSTALL_URL, PLAY_STORE_URL, SELF_UPDATE_ENABLED } from '../config';
-import { useStore } from '../data/store';
 import { checkForAppUpdate, upgradeFromBackgroundDownload } from './appUpdate';
 import { debugLog } from './debugLog';
 
@@ -16,9 +15,7 @@ export async function startAppUpdate(): Promise<void> {
     if (SELF_UPDATE_ENABLED && Platform.OS === 'android') {
       const result = await checkForAppUpdate({ force: true });
       if (result.status === 'available') {
-        await upgradeFromBackgroundDownload(result.remote, {
-          wifiOnly: useStore.getState().prefs.apkUpdatesWifiOnly,
-        });
+        await upgradeFromBackgroundDownload(result.remote);
         return;
       }
       debugLog.info('app-update', `update action check status=${result.status}`);

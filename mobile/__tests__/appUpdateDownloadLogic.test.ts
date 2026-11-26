@@ -128,7 +128,6 @@ describe('appUpdateDownloadLogic', () => {
         sha256: 'b'.repeat(64),
         bytes: 4321,
       },
-      true,
     );
 
     expect(rejected).toMatchObject({
@@ -137,7 +136,6 @@ describe('appUpdateDownloadLogic', () => {
       localUri: null,
       bytesWritten: 0,
       totalBytes: 4321,
-      wifiOnly: true,
       startedAt: null,
       lastProgressAt: null,
       nativeState: null,
@@ -163,7 +161,7 @@ describe('appUpdateDownloadLogic', () => {
       actionLabel: 'Retry',
       actionEnabled: true,
     });
-    expect(updateBannerCopy('waiting', '1.0.44', 93).title).toBe('Waiting for Wi-Fi');
+    expect(updateBannerCopy('waiting', '1.0.44', 93).title).toBe('Waiting for network');
     expect(updateBannerCopy('verifying', '1.0.44', 93)).toEqual({
       title: 'Verifying · 1.0.44', actionLabel: 'Checking', actionEnabled: false,
     });

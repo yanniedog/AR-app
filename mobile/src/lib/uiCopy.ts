@@ -183,7 +183,7 @@ export const UI_LABELS = [
   'Early / extra repayments', 'Redraw facility', 'Guarantor option', 'Cashback offer',
   'PayID', 'Unlimited transactions', 'Free transactions', 'Bill payment', 'Card access', 'Digital banking',
   'Status', 'App update', 'Managed by Google Play', 'Automatic app updates',
-  'Download APKs on Wi-Fi only', 'Waiting for Wi-Fi', 'Cancelled', 'Downloading',
+  'Waiting for network', 'Cancelled', 'Downloading',
   'Incompatible device', 'Checking', 'Check failed', 'Download update', 'Verified APK', 'APK',
   'GitHub', 'Wi-Fi only', 'Current network', 'Android installation permission', 'Update failed',
   'Install when ready', 'Resume update', 'Install update', 'Download & install', 'Latest',
