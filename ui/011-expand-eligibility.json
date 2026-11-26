@@ -1,0 +1,223 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Show Mortgage · History",
+  "flags": "tap",
+  "at": [
+   360,
+   212
+  ]
+ },
+ {
+  "label": "Hide Eligibility",
+  "flags": "tap",
+  "at": [
+   360,
+   404
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   328,
+   404
+  ]
+ },
+ {
+  "label": "Residency status",
+  "at": [
+   190,
+   504
+  ]
+ },
+ {
+  "label": "Resident or Citizen",
+  "at": [
+   530,
+   504
+  ]
+ },
+ {
+  "label": "Individual applicants",
+  "at": [
+   190,
+   564
+  ]
+ },
+ {
+  "label": "Required · Conditions: Unverified",
+  "at": [
+   530,
+   584
+  ]
+ },
+ {
+  "label": "Minimum age",
+  "at": [
+   190,
+   664
+  ]
+ },
+ {
+  "label": "18 years",
+  "at": [
+   530,
+   664
+  ]
+ },
+ {
+  "label": "Other criterion",
+  "at": [
+   190,
+   724
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   530,
+   724
+  ]
+ },
+ {
+  "label": "Other criterion",
+  "at": [
+   190,
+   784
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   530,
+   784
+  ]
+ },
+ {
+  "label": "Other criterion",
+  "at": [
+   190,
+   844
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   530,
+   844
+  ]
+ },
+ {
+  "label": "Show Constraints",
+  "flags": "tap",
+  "at": [
+   360,
+   1073
+  ]
+ },
+ {
+  "label": "Constraints",
+  "at": [
+   328,
+   1073
+  ]
+ },
+ {
+  "label": "Show Terms",
+  "flags": "tap",
+  "at": [
+   360,
+   1314
+  ]
+ },
+ {
+  "label": "Terms",
+  "at": [
+   328,
+   1314
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

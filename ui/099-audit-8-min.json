@@ -1,0 +1,78 @@
+[
+ {
+  "label": "",
+  "flags": "tap",
+  "at": [
+   360,
+   800
+  ]
+ },
+ {
+  "label": "Sort",
+  "at": [
+   300,
+   1102
+  ]
+ },
+ {
+  "label": "Close Sort",
+  "flags": "tap",
+  "at": [
+   640,
+   1102
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1358
+  ]
+ },
+ {
+  "label": "Advertised rate",
+  "flags": "tap",
+  "at": [
+   360,
+   1246
+  ]
+ },
+ {
+  "label": "Advertised rate",
+  "at": [
+   168,
+   1246
+  ]
+ },
+ {
+  "label": "Comparison rate",
+  "flags": "tap,sel",
+  "at": [
+   360,
+   1358
+  ]
+ },
+ {
+  "label": "Comparison rate",
+  "at": [
+   179,
+   1358
+  ]
+ },
+ {
+  "label": "Bank A–Z",
+  "flags": "tap",
+  "at": [
+   360,
+   1470
+  ]
+ },
+ {
+  "label": "Bank A–Z",
+  "at": [
+   130,
+   1470
+  ]
+ }
+]

@@ -1,0 +1,227 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   217
+  ]
+ },
+ {
+  "label": "Other feature",
+  "at": [
+   190,
+   277
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   297
+  ]
+ },
+ {
+  "label": "Other feature",
+  "at": [
+   190,
+   377
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   397
+  ]
+ },
+ {
+  "label": "Other feature",
+  "at": [
+   190,
+   477
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   497
+  ]
+ },
+ {
+  "label": "Other feature",
+  "at": [
+   190,
+   577
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   597
+  ]
+ },
+ {
+  "label": "Other feature",
+  "at": [
+   190,
+   677
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   697
+  ]
+ },
+ {
+  "label": "Redraw facility",
+  "at": [
+   190,
+   777
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   797
+  ]
+ },
+ {
+  "label": "Show Documents",
+  "flags": "tap",
+  "at": [
+   360,
+   1046
+  ]
+ },
+ {
+  "label": "Documents",
+  "at": [
+   328,
+   1046
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   360,
+   1210
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   286,
+   1262
+  ]
+ },
+ {
+  "label": "Unverified",
+  "at": [
+   626,
+   1262
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   273,
+   1314
+  ]
+ },
+ {
+  "label": "Unassessed",
+  "at": [
+   613,
+   1314
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

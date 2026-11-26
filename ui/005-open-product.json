@@ -1,0 +1,265 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan",
+  "at": [
+   414,
+   269
+  ]
+ },
+ {
+  "label": "Virgin Money",
+  "at": [
+   72,
+   337
+  ]
+ },
+ {
+  "label": "Virgin Money",
+  "flags": "tap",
+  "at": [
+   221,
+   341
+  ]
+ },
+ {
+  "label": "Virgin Money",
+  "at": [
+   221,
+   313
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   414,
+   409
+  ]
+ },
+ {
+  "label": "Comparison rate",
+  "at": [
+   360,
+   529
+  ]
+ },
+ {
+  "label": "6.41%",
+  "at": [
+   360,
+   597
+  ]
+ },
+ {
+  "label": "6.89% Advertised rate",
+  "at": [
+   360,
+   665
+  ]
+ },
+ {
+  "label": "Bank updated 5 Nov 2026 · Checked 27 Nov 2026",
+  "at": [
+   360,
+   725
+  ]
+ },
+ {
+  "label": "Save",
+  "flags": "tap",
+  "at": [
+   190,
+   875
+  ]
+ },
+ {
+  "label": "Save",
+  "at": [
+   217,
+   876
+  ]
+ },
+ {
+  "label": "Calculate",
+  "flags": "tap",
+  "at": [
+   530,
+   875
+  ]
+ },
+ {
+  "label": "Calculate",
+  "at": [
+   531,
+   875
+  ]
+ },
+ {
+  "label": "Hide Rate details",
+  "flags": "tap",
+  "at": [
+   360,
+   1101
+  ]
+ },
+ {
+  "label": "Rate details",
+  "at": [
+   328,
+   1101
+  ]
+ },
+ {
+  "label": "Rate type",
+  "at": [
+   315,
+   1201
+  ]
+ },
+ {
+  "label": "Fixed",
+  "at": [
+   655,
+   1201
+  ]
+ },
+ {
+  "label": "Term",
+  "at": [
+   326,
+   1253
+  ]
+ },
+ {
+  "label": "1 yr",
+  "at": [
+   666,
+   1253
+  ]
+ },
+ {
+  "label": "Repayment",
+  "at": [
+   232,
+   1305
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "at": [
+   572,
+   1305
+  ]
+ },
+ {
+  "label": "Loan purpose",
+  "at": [
+   248,
+   1357
+  ]
+ },
+ {
+  "label": "Owner occupied",
+  "at": [
+   588,
+   1357
+  ]
+ },
+ {
+  "label": "Listed LVR",
+  "at": [
+   256,
+   1391
+  ]
+ },
+ {
+  "label": ">70.0%–80.0%",
+  "at": [
+   596,
+   1391
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

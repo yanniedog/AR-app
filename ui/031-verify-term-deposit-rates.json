@@ -1,0 +1,431 @@
+[
+ {
+  "label": "Rates",
+  "at": [
+   361,
+   149
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   673,
+   149
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap",
+  "at": [
+   134,
+   277
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   275
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   277
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   275
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap,sel",
+  "at": [
+   587,
+   277
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "sel",
+  "at": [
+   586,
+   275
+  ]
+ },
+ {
+  "label": "Search",
+  "flags": "tap",
+  "at": [
+   386,
+   399
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "flags": "tap",
+  "at": [
+   80,
+   521
+  ]
+ },
+ {
+  "label": "Filter",
+  "at": [
+   80,
+   543
+  ]
+ },
+ {
+  "label": "Sort · Advertised rate",
+  "flags": "tap",
+  "at": [
+   218,
+   521
+  ]
+ },
+ {
+  "label": "Advertised",
+  "at": [
+   218,
+   543
+  ]
+ },
+ {
+  "label": "Compare",
+  "flags": "tap",
+  "at": [
+   378,
+   521
+  ]
+ },
+ {
+  "label": "Compare",
+  "at": [
+   378,
+   543
+  ]
+ },
+ {
+  "label": "Lenders",
+  "flags": "tap",
+  "at": [
+   520,
+   521
+  ]
+ },
+ {
+  "label": "Lenders",
+  "at": [
+   520,
+   543
+  ]
+ },
+ {
+  "label": "Search actions",
+  "flags": "tap",
+  "at": [
+   640,
+   521
+  ]
+ },
+ {
+  "label": "More",
+  "at": [
+   640,
+   543
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   989
+  ]
+ },
+ {
+  "label": "View Judo Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   562
+  ]
+ },
+ {
+  "label": "Personal Term Deposits, Judo Bank, Rate 5.65%, 4 yrs · Annually · Conditions: Unverified, Tier #2, Best advertised ↑ 5 b",
+  "flags": "tap",
+  "at": [
+   384,
+   562
+  ]
+ },
+ {
+  "label": "Judo · Personal Term Deposits",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   520
+  ]
+ },
+ {
+  "label": "Save, Personal Term Deposits, Judo Bank, Rate 5.65%, 4 yrs",
+  "id": "rate-save:Judo%20Bank%7C09c281bb-27cb-4daf-88f4-067e28d37ea4%7CTERM_DEPOSITS%7CPersonal%20Term%20Deposits:2",
+  "flags": "tap",
+  "at": [
+   640,
+   554
+  ]
+ },
+ {
+  "label": "View Judo Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   634
+  ]
+ },
+ {
+  "label": "Personal Term Deposits, Judo Bank, Rate 5.65%, 10 mo · at maturity · Conditions: Unverified, Tier #23, Best advertised ↑",
+  "flags": "tap",
+  "at": [
+   384,
+   634
+  ]
+ },
+ {
+  "label": "Judo · Personal Term Deposits",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   592
+  ]
+ },
+ {
+  "label": "Save, Personal Term Deposits, Judo Bank, Rate 5.65%, 10 mo",
+  "id": "rate-save:Judo%20Bank%7C09c281bb-27cb-4daf-88f4-067e28d37ea4%7CTERM_DEPOSITS%7CPersonal%20Term%20Deposits:23",
+  "flags": "tap",
+  "at": [
+   640,
+   626
+  ]
+ },
+ {
+  "label": "View Judo Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   763
+  ]
+ },
+ {
+  "label": "Personal Term Deposits, Judo Bank, Rate 5.65%, 5 yrs · Annually · Conditions: Unverified, Tier #24, Best advertised ↑ 5 ",
+  "flags": "tap",
+  "at": [
+   384,
+   763
+  ]
+ },
+ {
+  "label": "Judo · Personal Term Deposits",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   722
+  ]
+ },
+ {
+  "label": "Save, Personal Term Deposits, Judo Bank, Rate 5.65%, 5 yrs",
+  "id": "rate-save:Judo%20Bank%7C09c281bb-27cb-4daf-88f4-067e28d37ea4%7CTERM_DEPOSITS%7CPersonal%20Term%20Deposits:24",
+  "flags": "tap",
+  "at": [
+   640,
+   763
+  ]
+ },
+ {
+  "label": "View Heartland · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   907
+  ]
+ },
+ {
+  "label": "Term Deposit, Heartland, Rate 5.62%, 1 yr · $5k+ · at maturity · Conditions: Unverified, Tier #7, Best advertised ↑ 7 bp",
+  "flags": "tap",
+  "at": [
+   384,
+   907
+  ]
+ },
+ {
+  "label": "Heart · Term Deposit",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   866
+  ]
+ },
+ {
+  "label": "Save, Term Deposit, Heartland, Rate 5.62%",
+  "id": "rate-save:Heartland%7CTD01.1%7CTERM_DEPOSITS%7CTerm%20Deposit:7",
+  "flags": "tap",
+  "at": [
+   640,
+   907
+  ]
+ },
+ {
+  "label": "View Australian Military Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1051
+  ]
+ },
+ {
+  "label": "Income Plus, Australian Military Bank, Rate 5.60%, 6 mo · $1k+ · at maturity, Tier #9, Best advertised ↑ 25 bps · 2 days",
+  "flags": "tap",
+  "at": [
+   384,
+   1051
+  ]
+ },
+ {
+  "label": "AMB · Income Plus",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1010
+  ]
+ },
+ {
+  "label": "Save, Income Plus, Australian Military Bank, Rate 5.60%",
+  "id": "rate-save:Australian%20Military%20Bank%7C3b2158a8-34ee-4cb2-870d-1b741ad6e77e%7CTERM_DEPOSITS%7CIncome%20Plus:9",
+  "flags": "tap",
+  "at": [
+   640,
+   1051
+  ]
+ },
+ {
+  "label": "View Australian Military Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1195
+  ]
+ },
+ {
+  "label": "Investment Plus, Australian Military Bank, Rate 5.60%, 1 yr · $1k+ · at maturity, Tier #30, Best advertised ↑ 25 bps · 2",
+  "flags": "tap",
+  "at": [
+   384,
+   1195
+  ]
+ },
+ {
+  "label": "AMB · Investment Plus",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1154
+  ]
+ },
+ {
+  "label": "Save, Investment Plus, Australian Military Bank, Rate 5.60%",
+  "id": "rate-save:Australian%20Military%20Bank%7Cc70ea9ac-cf01-49ff-a100-b59a953ff33a%7CTERM_DEPOSITS%7CInvestment%20Plus:30",
+  "flags": "tap",
+  "at": [
+   640,
+   1195
+  ]
+ },
+ {
+  "label": "View CommFCU · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1334
+  ]
+ },
+ {
+  "label": "12 Month Term Deposit Special, CommFCU, Rate 5.60%, 1 yr · $10k–$2m · at maturity · Conditions: Unverified, Tier #1, Fre",
+  "flags": "tap",
+  "at": [
+   384,
+   1334
+  ]
+ },
+ {
+  "label": "CommFCU · 12 Month Term Deposit Special",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1298
+  ]
+ },
+ {
+  "label": "Save, 12 Month Term Deposit Special, CommFCU, Rate 5.60%",
+  "id": "rate-save:CommFCU%7C12_TERM_DEPOSIT_MTH_SPECIAL%7CTERM_DEPOSITS%7C12%20Month%20Term%20Deposit%20Special:1",
+  "flags": "tap",
+  "at": [
+   640,
+   1339
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

@@ -1,0 +1,45 @@
+{
+  "kind": "live",
+  "url": "https://paste.rs/6N6hD",
+  "outcome": null,
+  "elapsedMs": 1037517,
+  "visibleOutcome": [
+    "Verified · 1.0.389",
+    "Install verified update",
+    "Install",
+    "Dismiss update banner",
+    "Back",
+    "App health audit",
+    "Account",
+    "Executed",
+    "2,881 / 2,885",
+    "Verified upload",
+    "Verified upload",
+    "Uploaded",
+    "https://paste.rs/6N6hD",
+    "https://paste.c-net.org/d43fd282-0973-4e6b-eea8-208a74ec512d",
+    "Copy paste.rs link",
+    "Copy paste.rs link",
+    "Copy paste.c-net.org link",
+    "Copy paste.c-net.org link",
+    "Audit history",
+    "Retained runs"
+  ],
+  "logStatus": 200,
+  "logContentUrl": "https://paste.c-net.org/d43fd282-0973-4e6b-eea8-208a74ec512d",
+  "logBytes": 861077,
+  "sourceDuplicateItemsRemoved": 139,
+  "completion": {
+    "outcome": "failed",
+    "collectionComplete": true,
+    "coverageComplete": false,
+    "detailsComplete": true
+  },
+  "debugLog": {
+    "url": "https://paste.rs/sEmxG",
+    "uploadMs": 29059,
+    "status": 200,
+    "contentUrl": "https://paste.c-net.org/612831b5-7237-ccbb-0c98-6e8fd6d80b67",
+    "bytes": 5814296
+  }
+}
