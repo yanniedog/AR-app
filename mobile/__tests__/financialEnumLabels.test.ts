@@ -52,3 +52,8 @@ test('durations use singular units only for exactly one and retain numeric value
     expect(uiDuration(value, 'years')).toBe('Unknown');
   }
 });
+
+test('published CDR feature, eligibility and constraint codes read as plain labels', () => {
+  const cases = [['NPP_ENABLED', 'NPP payments'], ['NOTIFICATIONS', 'Notifications'], ['DIGITAL_WALLET', 'Digital wallet'], ['FRAUD_PROTECTION', 'Fraud protection'], ['RELATIONSHIP_MANAGEMENT', 'Relationship management'], ['COMPLEMENTARY_PRODUCT_DISCOUNTS', 'Complementary product discounts'], ['ADDITIONAL_CARDS', 'Additional cards'], ['LOYALTY_PROGRAM', 'Loyalty program'], ['BONUS_REWARDS', 'Bonus rewards'], ['FUNDS_AVAILABLE_AFTER', 'Funds availability'], ['INTEREST_FREE', 'Interest free'], ['INTEREST_FREE_TRANSFERS', 'Interest free transfers'], ['BALANCE_TRANSFERS', 'Balance transfers'], ['INSURANCE', 'Insurance'], ['INSTALMENT_PLAN', 'Instalment plan'], ['DONATE_INTEREST', 'Donate interest'], ['FREE_TXNS_ALLOWANCE', 'Free transactions allowance'], ['OPENING_BALANCE', 'Opening balance'], ['STAFF', 'Staff applicants'], ['MIN_TURNOVER', 'Minimum turnover']];
+  for (const [code, label] of cases) expect(humanizeEnum(code)).toBe(label);
+});

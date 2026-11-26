@@ -32,7 +32,7 @@ The app validates and aggregates this local data synchronously after applying
 its ordinary eligibility and profile filters. Home and Bank response show all
 history together. There are no graph-history requests, daily-catalogue downloads,
 progressive backfills, or Load more controls. Existing verified core caching,
-refresh, correction, encryption, and Wi-Fi preferences cover the entire graph.
+refresh, correction, encryption, and preferences cover the entire graph.
 The signed app also includes a 97 KB gzip history snapshot for the exact verified
 22 September 2026 catalogue. It attaches before quarantine on fresh downloads
 and offline cache loads only when the core SHA-256 and observation date match.

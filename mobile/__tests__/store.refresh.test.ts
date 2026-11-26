@@ -1220,21 +1220,6 @@ describe('store refresh lifecycle', () => {
     });
   });
 
-  it('sets wifi-skip outcome when wifi-only pref blocks background refresh', async () => {
-    useStore.setState({
-      prefs: { ...useStore.getState().prefs, wifiOnly: true },
-    });
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest mock
-    const Network = require('expo-network');
-    Network.getNetworkStateAsync.mockResolvedValueOnce({ type: 'CELLULAR' });
-
-    const changed = await useStore.getState().refresh({});
-
-    expect(changed).toBe(false);
-    expect(useStore.getState().refreshOutcome).toBe('wifi-skip');
-    expect(mockFetchManifest).not.toHaveBeenCalled();
-  });
-
   it('clearRefreshOutcome resets snackbar state', () => {
     useStore.setState({ refreshOutcome: 'success' });
     useStore.getState().clearRefreshOutcome();

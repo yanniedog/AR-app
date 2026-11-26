@@ -140,11 +140,43 @@ jobs:
           test -s app.apk
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - name: Previous run baselines
+        env:
+          APK_TAG: ${{ steps.apk.outputs.tag }}
         run: |
           set -uo pipefail
-          # baseline.json: newest earlier run of any kind (step deltas).
-          # session-baseline.json: newest earlier run holding a real-use session verdict.
-          # Only run ids below this run, so a rerun or a faster newer run is never its own baseline.
+          trap 'rm -f candidate.json' EXIT
+          if [ "$MODE" = full ] && [ "$AUDIT" = live ]; then
+            # Tested markers retain verified full audits after the result branches are pruned.
+            marker_prefix=refs/heads/explorer/tested/
+            if ! markers=$(git ls-remote --heads origin "${marker_prefix}app-v*"); then
+              echo '::warning::Could not list verified release baselines'
+              exit 0
+            fi
+            current_marker="$marker_prefix$APK_TAG"
+            for prev in $(printf '%s\n' "$current_marker" "$markers" | awk -F '\t' 'NF { print $NF }' \
+              | sort -Vru | awk -v current="$current_marker" 'older; $0 == current { older = 1 }'); do
+              if ! git fetch --depth 1 origin "$prev" && ! git fetch --depth 1 origin "$prev"; then
+                echo "::warning::Could not fetch verified release baseline ${prev#"$marker_prefix"} after two attempts"
+                continue
+              fi
+              facts=$(git show FETCH_HEAD:run.json 2>/dev/null) || continue
+              if ! jq -e --arg tag "${prev#"$marker_prefix"}" \
+                '.tag == $tag and .mode == "full" and (.runId | type == "number")' \
+                <<< "$facts" >/dev/null; then continue; fi
+              git show FETCH_HEAD:report.json > candidate.json 2>/dev/null || continue
+              if ! jq -e --arg tag "${prev#"$marker_prefix"}" \
+                '.app.versionName == ($tag | ltrimstr("app-v")) and .session and .audit.kind == "live"
+                 and .audit.completion.collectionComplete == true' \
+                candidate.json >/dev/null; then continue; fi
+              cp candidate.json baseline.json
+              cp candidate.json session-baseline.json
+              jq -r '"Verified release baseline: \(.tag), explorer run \(.runId)"' <<< "$facts"
+              exit 0
+            done
+            echo "::notice::No verified prior release baseline for $APK_TAG"
+            exit 0
+          fi
+          # Other runs keep their existing baselines. Exclude this run and any newer run.
           have_any=""; have_session=""
           for prev in $(git ls-remote --heads origin 'explorer/run-*' | awk '{print $2}' | sed 's#refs/heads/##' | awk -F'run-' -v cur="$GITHUB_RUN_ID" '($2 + 0) < (cur + 0)' | sort -t- -k2 -n -r); do
             if [ -n "$have_any" ] && [ -n "$have_session" ]; then break; fi
@@ -153,15 +185,21 @@ jobs:
             if [ -z "$have_any" ]; then cp candidate.json baseline.json; have_any=1; fi
             if [ -z "$have_session" ] && jq -e '.session' candidate.json >/dev/null 2>&1; then mv candidate.json session-baseline.json; have_session=1; fi
           done
-          rm -f candidate.json
       - name: Payload reachability from runner
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
           url=https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json
-          code=$(curl -sSL -o manifest.json -w '%{http_code}' "$url" || echo 000)
+          code=$(curl -sSL -o manifest.json -w '%{http_code}' "$url") || code=000
           bytes=$(stat -c %s manifest.json 2>/dev/null || echo 0)
-          run_date=$(node -e 'try{console.log(require("./manifest.json").run_date??"")}catch{console.log("")}')
-          printf '{"manifestStatus":%s,"manifestBytes":%s,"runDate":"%s"}\n' "$code" "$bytes" "$run_date" > payload-check.json
+          # The rolling manifest is encrypted, so the newest dated release tag (optionally revision-suffixed) is the authority on the latest run date.
+          latest=$(gh api --paginate 'repos/yanniedog/AR-local/releases?per_page=100' --jq '.[].tag_name' \
+            | sed -nE 's/^app-payload-([0-9]{4}-[0-9]{2}-[0-9]{2})(-r[0-9]{6})?$/\1/p' | sort | tail -n 1)
+          if [ -z "$latest" ]; then echo "::error::Could not determine the latest published run date"; exit 1; fi
+          jq -n --argjson status "$code" --argjson bytes "$bytes" --arg latest "$latest" \
+            '{manifestStatus: $status, manifestBytes: $bytes, latestRunDate: $latest}' > payload-check.json
+          jq -e . payload-check.json >/dev/null
           cat payload-check.json
       - name: Enable KVM
         run: |

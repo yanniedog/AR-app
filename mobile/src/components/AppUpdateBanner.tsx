@@ -21,7 +21,6 @@ import { getPerformanceAuditState, isPerformanceAuditActive, subscribePerformanc
 import { shouldShowUpdateBanner } from '../lib/updateBanner';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Row } from './ui';
-import { uiIdentifier, uiJoin } from '../lib/uiCopy';
 
 export interface AppUpdateBannerState {
   visible: boolean;
@@ -57,8 +56,6 @@ export function useAppUpdateBannerVisible(): boolean {
  */
 export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
   const dismissedBuild = useStore((s) => s.prefs.dismissedUpdateBuild);
-  const wifiOnly = useStore((s) => s.prefs.apkUpdatesWifiOnly);
-  const autoDownload = useStore((s) => s.prefs.apkUpdatesAutoDownload);
   const setPref = useStore((s) => s.setPref);
   const auditOwnsNetwork = useSyncExternalStore(
     subscribePerformanceAudit,
@@ -87,16 +84,16 @@ export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
           ) return;
           setResult(r);
           availableManifest = r.status === 'available' ? r.remote : null;
-          if (autoDownload && r.status === 'available') {
-            void ensureApkBackgroundDownload(r.remote, { wifiOnly }).catch(() => {
+          if (r.status === 'available') {
+            void ensureApkBackgroundDownload(r.remote).catch(() => {
               // ensureApkBackgroundDownload persists phase=error for Retry.
             });
           }
         })
         .catch(() => {});
     const reconcileActiveDownload = () => {
-      if (!autoDownload || !availableManifest || AppState.currentState !== 'active') return;
-      void ensureApkBackgroundDownload(availableManifest, { wifiOnly }).catch(() => {
+      if (!availableManifest || AppState.currentState !== 'active') return;
+      void ensureApkBackgroundDownload(availableManifest).catch(() => {
         // Reconciliation persists an actionable error state for Retry.
       });
     };
@@ -111,19 +108,19 @@ export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
       clearInterval(reconcileTimer);
       appStateSubscription.remove();
     };
-  }, [auditOwnsNetwork, autoDownload, enabled, wifiOnly]);
+  }, [auditOwnsNetwork, enabled]);
 
   const available = result?.status === 'available' ? result : null;
   const readyManifest = download.phase === 'ready' && available &&
     String(download.buildNumber) === String(available.remote.build_number) ? available.remote : null;
   useEffect(() => {
-    if (!enabled || !autoDownload || auditOwnsNetwork || !readyManifest || Platform.OS !== 'android') return;
+    if (!enabled || auditOwnsNetwork || !readyManifest || Platform.OS !== 'android') return;
     let cancelled = false;
     const install = () => { void autoInstallReadyApkUpdate(readyManifest, () => !cancelled); };
     const onActive = AppState.addEventListener('change', state => { if (state === 'active') install(); });
     install();
     return () => { cancelled = true; onActive.remove(); };
-  }, [enabled, autoDownload, auditOwnsNetwork, readyManifest]);
+  }, [enabled, auditOwnsNetwork, readyManifest]);
 
   return {
     visible: !auditOwnsNetwork && shouldShowUpdateBanner(result, dismissedBuild),
@@ -149,8 +146,6 @@ export function AppUpdateBanner({
   const { width, fontScale } = useWindowDimensions();
   const messageOwnLine = width - 28 < 360 * Math.max(1, fontScale);
   const insets = useSafeAreaInsets();
-  const wifiOnly = useStore((s) => s.prefs.apkUpdatesWifiOnly);
-  const autoDownload = useStore((s) => s.prefs.apkUpdatesAutoDownload);
   const [busy, setBusy] = useState(false);
   const forThisBuild =
     download.buildNumber != null && String(download.buildNumber) === String(remote.build_number);
@@ -162,7 +157,7 @@ export function AppUpdateBanner({
     if (busy) return;
     setBusy(true);
     try {
-      await upgradeFromBackgroundDownload(remote, { wifiOnly });
+      await upgradeFromBackgroundDownload(remote);
     } catch {
       Alert.alert('Update failed');
     } finally {
@@ -171,18 +166,7 @@ export function AppUpdateBanner({
   };
 
   const requestUpgrade = () => {
-    if (phase === 'ready' || autoDownload) {
-      void onUpgrade();
-      return;
-    }
-    Alert.alert(
-      'Download update',
-      uiJoin('Version', ': ', uiIdentifier(remote.version), ' · ', 'Verified APK', ' · ', 'GitHub', ' · ', wifiOnly ? 'Wi-Fi only' : 'Current network', ' · ', 'Android installation permission'),
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Download', onPress: () => void onUpgrade() },
-      ],
-    );
+    void onUpgrade();
   };
 
   return (
