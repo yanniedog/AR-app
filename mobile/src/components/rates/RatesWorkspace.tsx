@@ -410,6 +410,9 @@ export default function RatesWorkspace() {
     (section !== 'Mortgage' || mortgageCriteriaReady || isDefaultMortgageBrowse));
   const pricingActive = mortgageSearchActive ||
     (availability === 'listed' && section === 'Mortgage' && mortgagePricingReady);
+  const effectiveIncludeNonStandard = task.includeNonStandardOverride ?? includeNonStandard;
+  // A closed suitability gate hides the results and invalidates their membership.
+  const suitabilityReady = isSuitabilityFilterReady(effectiveIncludeNonStandard);
   const indexedScenarioKey = JSON.stringify(sectionScenario), indexedInputsKey = JSON.stringify(effectiveMortgageInputs);
   const mortgageWorkKey = useMemo(() => ({ sourceRates, mortgageContext, catalogue, indexedScenarioKey, indexedInputsKey, suitabilityRevision }),
     [sourceRates, mortgageContext, catalogue, indexedScenarioKey, indexedInputsKey, suitabilityRevision]);
@@ -418,15 +421,18 @@ export default function RatesWorkspace() {
   // Defer large warmups until that request finishes. A small book can finish
   // its index before the first viewport commits, so later edits settle at once.
   const mortgageIndex = useMortgageResultsIndex(core?.sections.Mortgage.rates ?? EMPTY_RATE_ROWS,
-    catalogue, mortgageContext, task.includeNonStandardOverride ?? includeNonStandard, suitabilityRevision,
+    catalogue, mortgageContext, effectiveIncludeNonStandard, suitabilityRevision,
     isFocused && section === 'Mortgage' && availability === 'listed',
     sourceRates.length <= SMALL_MORTGAGE_BOOK_ROWS || !mortgagePricingReady || settledMortgageWork === mortgageWorkKey);
-  const indexedPricing = useMemo(() => availability === 'listed' && section === 'Mortgage' && !task.intentError && mortgagePricingReady &&
+  const activeMortgageIndex = availability === 'listed' && section === 'Mortgage' && !task.intentError && mortgagePricingReady &&
     pricingMortgageFilters.loanPurposes.length === 1 && pricingMortgageFilters.repaymentTypes.length === 1
-    ? mortgageIndex.index?.select(sectionScenario, effectiveMortgageInputs) ?? null : null,
+    ? mortgageIndex.index : null;
+  const indexedPricing = useMemo(() => suitabilityReady ? activeMortgageIndex?.select(sectionScenario, effectiveMortgageInputs) ?? null : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [availability, section, task.intentError, mortgagePricingReady, pricingMortgageFilters.loanPurposes.length, pricingMortgageFilters.repaymentTypes.length,
-    mortgageIndex.index, indexedScenarioKey, indexedInputsKey]);
+  [suitabilityReady, activeMortgageIndex, indexedScenarioKey, indexedInputsKey]);
+  // If a ready index can answer the request, a closed gate should not start the fallback pricing pass.
+  const indexedPricingBlocked = !suitabilityReady && activeMortgageIndex != null;
+  const needsCooperativePricing = pricingActive && !task.intentError && !indexedPricing && !indexedPricingBlocked;
   // Default rate ranking: scope the leading rows first so page one can paint
   // before the whole book has been scoped. Anything else waits for the full pass.
   const leadingScope = useMemo((): LeadingScopeRequest | null => section === 'Mortgage' && sortKey === 'rate' && task.page === 1
@@ -436,11 +442,11 @@ export default function RatesWorkspace() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [section, sortKey, task.page, path.length, hierarchyScoped, query, filters.factCriteria.length, suitabilityRevision, prefs.ratesPageSize, depositRankMetric, mortgageRateMetric]);
   const cooperativePricing = useResolvedPublicRankingRows({
-    sourceRows: task.intentError || !pricingActive || indexedPricing ? EMPTY_RATE_ROWS : sourceRates,
+    sourceRows: needsCooperativePricing ? sourceRates : EMPTY_RATE_ROWS,
     // Empty sourceRows alone still expands catalogue offers. Pass an explicit
     // empty candidate set while Mortgage criteria are incomplete so Rates does
     // not sync-scan the full-day book on every render.
-    candidates: task.intentError || !pricingActive || indexedPricing ? EMPTY_RATE_ROWS : null,
+    candidates: needsCooperativePricing ? null : EMPTY_RATE_ROWS,
     catalogue,
     section,
     sectionScenario,
@@ -448,13 +454,14 @@ export default function RatesWorkspace() {
     mortgageInputs: effectiveMortgageInputs,
     mortgageContext,
     applyMortgageScope: section === 'Mortgage' && mortgagePricingReady,
-    focused: isFocused && pricingActive && !indexedPricing,
+    focused: isFocused && needsCooperativePricing,
     interactive: isFocused,
     revision: suitabilityRevision,
     prepareMortgageIndex: false,
-    leadingScope: indexedPricing ? null : leadingScope,
+    leadingScope: needsCooperativePricing ? leadingScope : null,
     resolutionContextKey: JSON.stringify([scenario, prefs.profileFilters, pricingMortgageFilters.loanPurposes, pricingMortgageFilters.repaymentTypes]),
   });
+  // An empty placeholder must not tell consumers that pricing is complete.
   const publicPricing = indexedPricing ? {
     ...cooperativePricing, candidates: indexedPricing.candidates,
     resolution: { rows: indexedPricing.priced, priced: indexedPricing.priced.length,
@@ -462,12 +469,12 @@ export default function RatesWorkspace() {
     mortgageScope: indexedPricing.rawScope, ready: true, error: null,
     work: { ...cooperativePricing.work, pricingStage: 'ready' as const, sourceRowCount: sourceRates.length,
       candidateCount: indexedPricing.candidates.length, pricedRowCount: indexedPricing.priced.length },
-  } : cooperativePricing;
+  } : indexedPricingBlocked ? { ...cooperativePricing, ready: false } : cooperativePricing;
   useEffect(() => {
-    if (isFocused && section === 'Mortgage' && mortgagePricingReady && cooperativePricing.ready && !indexedPricing) {
+    if (isFocused && section === 'Mortgage' && mortgagePricingReady && needsCooperativePricing && cooperativePricing.ready) {
       setSettledMortgageWork(mortgageWorkKey);
     }
-  }, [isFocused, section, mortgagePricingReady, cooperativePricing.ready, indexedPricing, mortgageWorkKey]);
+  }, [isFocused, section, mortgagePricingReady, needsCooperativePricing, cooperativePricing.ready, mortgageWorkKey]);
   const fullPricingCandidates = publicPricing.candidates;
   const mandatoryActive = hasMandatoryRequirements();
   const discoveryKeys = useMemo(() => {
@@ -595,9 +602,9 @@ export default function RatesWorkspace() {
   const effectiveFilters = useMemo(
     () => ({
       ...filters,
-      includeNonStandard: task.includeNonStandardOverride ?? includeNonStandard,
+      includeNonStandard: effectiveIncludeNonStandard,
     }),
-    [filters, includeNonStandard, task.includeNonStandardOverride],
+    [filters, effectiveIncludeNonStandard],
   );
 
   const resultFilters = useMemo(() => ({ ...effectiveFilters, query: debouncedQuery,
@@ -611,10 +618,11 @@ export default function RatesWorkspace() {
     ? indexedPricing.filtered(resultFilters, sortKey, mortgageRateMetric) : null,
   [indexedPricing, path.length, hierarchyScoped, resultFilters, sortKey, mortgageRateMetric]);
   const criteriaPending = effectiveFilters.factCriteria.length > 0 && (productCriteria.status === 'idle' || productCriteria.status === 'loading');
-  const cooperativeResults = usePreparedSearchRows(indexedRows ? EMPTY_RATE_ROWS : mortgageScope.rows, resultFilters, sortKey, section,
+  const resultPreparationBlocked = !suitabilityReady || criteriaPending;
+  const cooperativeResults = usePreparedSearchRows(resultPreparationBlocked || indexedRows ? EMPTY_RATE_ROWS : mortgageScope.rows, resultFilters, sortKey, section,
     filterDetails, resultSearchIndex, depositRankMetric, mortgageRateMetric,
-    suitabilityRevision, isFocused && !indexedRows && !criteriaPending);
-  const preparedResults = criteriaPending ? { ...cooperativeResults, rows: EMPTY_RATE_ROWS, ready: false, error: null }
+    suitabilityRevision, isFocused && !indexedRows && !resultPreparationBlocked);
+  const preparedResults = resultPreparationBlocked ? { ...cooperativeResults, rows: EMPTY_RATE_ROWS, ready: false, error: null }
     : indexedRows ? { ...cooperativeResults, rows: indexedRows, ready: true, error: null } : cooperativeResults;
   const rows = preparedResults.rows;
   // Ancillary facet inventories must not compete with the matching-result
@@ -624,7 +632,7 @@ export default function RatesWorkspace() {
     mortgageSearchActive ? baseRows : EMPTY_RATE_ROWS,
     mortgageSearchActive ? filterDetails : undefined,
     section, suitabilityRevision,
-    publicPricing.ready && preparedResults.ready && isSuitabilityFilterReady(effectiveFilters.includeNonStandard),
+    publicPricing.ready && preparedResults.ready && suitabilityReady,
   );
   const unverifiedResultCount = useMemo(
     () => (section !== 'Mortgage' || mortgageScope.unverified === 0 ? 0 : rows.reduce((count, row) => count + (mortgageScope.unverifiedRows.has(row) ? 1 : 0), 0)),
@@ -656,7 +664,7 @@ export default function RatesWorkspace() {
   const leadingWhy = useRef<{ gated: boolean; ranked: number; scoped: number; visible?: number; nonStandard?: number } | null>(null);
   const leadingPage = useMemo(() => {
     const scope = cooperativePricing.leadingScope;
-    if (!scope || !leadingScope || indexedPricing || section !== 'Mortgage' || availability !== 'listed' || task.intentError
+    if (resultPreparationBlocked || !scope || !leadingScope || indexedPricing || section !== 'Mortgage' || availability !== 'listed' || task.intentError
       || query.trim() || debouncedQuery.trim() || resultFilters.factCriteria.length || task.page !== 1 || !(mortgageCriteriaReady || isDefaultMortgageBrowse)
       || hasMandatoryRequirements()) { leadingWhy.current = scope ? { gated: true, ranked: 0, scoped: scope.rows.length } : null; return null; }
     const ranked = filterRows(sortRows(scope.rows, 'rate', section, depositRankMetric, mortgageRateMetric), resultFilters, filterDetails, null, section);
@@ -664,7 +672,7 @@ export default function RatesWorkspace() {
       visible: visibleAccountRows(scope.rows, false, filterDetails).length, nonStandard: scope.rows.filter(isNonStandard).length } : null;
     return ranked.length >= pageSize ? { rows: ranked.slice(0, pageSize), unverified: scope.unverifiedRows } : null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cooperativePricing.leadingScope, leadingScope, indexedPricing, section, availability, task.intentError, query, debouncedQuery,
+  }, [resultPreparationBlocked, cooperativePricing.leadingScope, leadingScope, indexedPricing, section, availability, task.intentError, query, debouncedQuery,
     resultFilters, task.page, mortgageCriteriaReady, isDefaultMortgageBrowse, depositRankMetric, mortgageRateMetric, filterDetails, pageSize, suitabilityRevision]);
   useEffect(() => {
     const why = leadingWhy.current;
@@ -764,7 +772,7 @@ export default function RatesWorkspace() {
     queryNeedsSearchIndex &&
     !searchIndex &&
     (searchIndexStatus === 'unavailable' || searchIndexStatus === 'error');
-  const detailFiltersPending = !isSuitabilityFilterReady(effectiveFilters.includeNonStandard) ||
+  const detailFiltersPending = !suitabilityReady ||
     (effectiveFilters.accountFeatures.length > 0 ||
       effectiveFilters.eligibilityCriteria.length > 0 ||
       effectiveFilters.factCriteria.length > 0) &&
@@ -842,7 +850,7 @@ export default function RatesWorkspace() {
   useEffect(() => { if (core != null && !searchIndexLoading) bootMark('search-index-idle'); }, [core, searchIndexLoading]);
   useEffect(() => { if (core != null && !detailFiltersPending) bootMark('detail-filters-idle'); }, [core, detailFiltersPending]);
   // Which link of the early-page chain holds on a cold start: requested, scoped, shown.
-  useEffect(() => { if (core != null && leadingScope && !indexedPricing && !task.intentError && isFocused && pricingActive) bootMark('leading-requested'); }, [core, leadingScope, indexedPricing, task.intentError, isFocused, pricingActive]);
+  useEffect(() => { if (core != null && leadingScope && isFocused && needsCooperativePricing) bootMark('leading-requested'); }, [core, leadingScope, isFocused, needsCooperativePricing]);
   useEffect(() => { if (core != null && cooperativePricing.leadingScope) bootMark('leading-scoped'); }, [core, cooperativePricing.leadingScope]);
   const ratesSettled = core != null && !searchPending;
   // Mirrors the searchPending branches above so the last-blocker mark names the real condition.

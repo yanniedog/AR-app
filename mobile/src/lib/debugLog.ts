@@ -567,8 +567,11 @@ let consoleMirroredLines = 0;
  * per line; already redacted. Development builds skip this so LogBox is not
  * flooded by expected recoverable failures.
  */
+/** Always mirrored so emulator runs can read the run date the app is showing. */
+export const PAYLOAD_RUN_DATE_TAG = 'payload-run-date';
+
 function mirrorToConsole(level: LogLevel, tag: string, messageRedacted: string): void {
-  if (level !== 'warn' && level !== 'error') return;
+  if (level !== 'warn' && level !== 'error' && tag !== PAYLOAD_RUN_DATE_TAG) return;
   if (typeof __DEV__ === 'undefined' || __DEV__) return;
   if (consoleMirroredLines >= CONSOLE_MIRROR_MAX_LINES) return;
   consoleMirroredLines += 1;

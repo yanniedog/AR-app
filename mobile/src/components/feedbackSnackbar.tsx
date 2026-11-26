@@ -13,10 +13,9 @@ import { TouchTarget } from './TouchTarget';
 import { AppText, Row } from './ui';
 import { uiJoin, uiDate, uiLabel } from '../lib/uiCopy';
 
-const SNACKBAR_DISMISS_MS: Record<'success' | 'failure' | 'wifi-skip', number> = {
+const SNACKBAR_DISMISS_MS: Record<'success' | 'failure', number> = {
   success: 3500,
   failure: 7000,
-  'wifi-skip': 5000,
 };
 
 // 48 dp actions; negative margins keep the bar's visual height unchanged.
@@ -56,18 +55,8 @@ export function RefreshOutcomeSnackbar() {
 
   if (!model) return null;
 
-  const iconName =
-    model.kind === 'success'
-      ? 'checkmark-circle'
-      : model.kind === 'failure'
-        ? 'cloud-offline-outline'
-        : 'wifi-outline';
-  const iconColor =
-    model.kind === 'success'
-      ? theme.colors.success
-      : model.kind === 'failure'
-        ? theme.colors.warning
-        : theme.colors.primary;
+  const iconName = model.kind === 'success' ? 'checkmark-circle' : 'cloud-offline-outline';
+  const iconColor = model.kind === 'success' ? theme.colors.success : theme.colors.warning;
 
   const onAction = () => {
     clearRefreshOutcome();
@@ -119,7 +108,7 @@ export function RefreshOutcomeSnackbar() {
       >
         <Ionicons name={iconName} size={18} color={iconColor} />
         <AppText variant="small" style={{ flex: 1 }}>
-          {uiJoin(model.kind === 'success' ? 'Updated' : model.kind === 'failure' ? 'Refresh failed' : 'Wi-Fi only', ' · ', 'Observed', ': ', uiDate(core?.run_date))}
+          {uiJoin(model.kind === 'success' ? 'Updated' : 'Refresh failed', ' · ', 'Observed', ': ', uiDate(core?.run_date))}
         </AppText>
         {model.actionLabel ? (
           <TouchTarget

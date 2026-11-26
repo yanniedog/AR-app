@@ -183,7 +183,7 @@ export const UI_LABELS = [
   'Early / extra repayments', 'Redraw facility', 'Guarantor option', 'Cashback offer',
   'PayID', 'Unlimited transactions', 'Free transactions', 'Bill payment', 'Card access', 'Digital banking',
   'Status', 'App update', 'Managed by Google Play', 'Automatic app updates',
-  'Download APKs on Wi-Fi only', 'Waiting for Wi-Fi', 'Cancelled', 'Downloading',
+  'Waiting for network', 'Cancelled', 'Downloading',
   'Incompatible device', 'Checking', 'Check failed', 'Download update', 'Verified APK', 'APK',
   'GitHub', 'Wi-Fi only', 'Current network', 'Android installation permission', 'Update failed',
   'Install when ready', 'Resume update', 'Install update', 'Download & install', 'Latest',
@@ -447,7 +447,11 @@ export const UI_LABELS = [
   'K', 'M', 'Amount unit', 'millions of dollars', 'dollars',
   'Carousel', 'List', 'Clear filters',
   'Keep current', 'Use saved', 'Choose saved value',
-  'All product variants', 'Upfront fee', 'Best gap', 'Browse rates', 'Trends', 'Decreases', 'Big four', 'All banks', 'Search banks', 'Full', 'Show fewer',
+  'All product variants', 'Upfront fee', 'Best gap',
+  'Variation fee', 'Exit fee', 'Ongoing fee', 'Event fee', 'Transaction fee', 'Withdrawal fee', 'Deposit fee', 'Payment fee', 'Purchase fee', 'Variable fee', 'Other fee', 'Cash advance fee', 'Dishonour fee', 'Late payment fee', 'Enquiry fee', 'Replacement fee', 'Upfront per plan fee',
+  'NPP payments', 'Notifications', 'Digital wallet', 'Fraud protection', 'Relationship management', 'Complementary product discounts', 'Additional cards', 'Loyalty program', 'Bonus rewards', 'Funds availability', 'Interest free', 'Interest free transfers', 'Balance transfers', 'Insurance', 'Instalment plan', 'Donate interest', 'Free transactions allowance', 'Opening balance', 'Staff applicants', 'Minimum turnover',
+  'Other criterion', 'Other feature', 'None published', 'Bank updated', 'No published restriction', 'Not extracted', 'Overview', 'Fee schedule', 'Eligibility page', 'Official page',
+  'Detail gaps', 'Rendered gaps', 'Raw codes', 'Duplicates', 'Suppressed names', 'Companion channels', 'Channel published', 'Channel absent', 'Browse rates', 'Trends', 'Decreases', 'Big four', 'All banks', 'Search banks', 'Full', 'Show fewer',
 ] as const;
 
 export type UiLabel = typeof UI_LABELS[number];
@@ -696,6 +700,36 @@ export function uiBackgroundWorkStage(job: BackgroundWorkSnapshot, index?: numbe
 function identity(value: string | null | undefined): UiText {
   return known(value?.replace(/[\r\n\t]/g, ' ').trim() || 'Unknown');
 }
+const PUBLISHED_TEXT_CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+const PUBLISHED_TEXT_URL = /(?:https?:\/\/|www\.|:\/\/)/i;
+/** Bank-published text admitted as a fact value: bounded, single line, no links. Never a label for prose. */
+export function uiPublishedText(value: unknown, max = 160): UiText | null {
+  if (typeof value !== 'string') return null;
+  // Control characters (including newlines and tabs) are rejected before whitespace is normalised.
+  if (PUBLISHED_TEXT_CONTROL.test(value)) return null;
+  const text = value.replace(/\s+/g, ' ').trim();
+  if (!text || text.length > max || PUBLISHED_TEXT_URL.test(text)) return null;
+  return known(text);
+}
+/** A concise charge, feature or criterion name; sentences and marketing paragraphs never qualify. */
+export function uiPublishedConciseName(value: unknown): UiText | null {
+  const text = uiPublishedText(value, 80);
+  if (!text) return null;
+  if (text.split(' ').length > 9 || /[.!?;]\s|[.!?]$/.test(text)) return null;
+  return text;
+}
+const FEE_TYPE_LABELS: Readonly<Record<string, UiLabel>> = {
+  PERIODIC: 'Ongoing fee', VARIATION: 'Variation fee', EXIT: 'Exit fee', UPFRONT: 'Upfront fee', EVENT: 'Event fee',
+  TRANSACTION: 'Transaction fee', WITHDRAWAL: 'Withdrawal fee', DEPOSIT: 'Deposit fee', PAYMENT: 'Payment fee', PURCHASE: 'Purchase fee',
+  VARIABLE: 'Variable fee', OTHER: 'Other fee', ANNUAL: 'Annual fee', ANNUAL_FEE: 'Annual fee',
+  CASH_ADVANCE: 'Cash advance fee', DISHONOUR: 'Dishonour fee', LATE_PAYMENT: 'Late payment fee', ENQUIRY: 'Enquiry fee', REPLACEMENT: 'Replacement fee',
+  UPFRONT_PER_PLAN: 'Upfront per plan fee',
+};
+/** Closed CDR fee-type codes only; anything else stays an Unknown identity. */
+export function uiFeeTypeLabel(code: string | undefined): UiText | null {
+  const label = FEE_TYPE_LABELS[(code ?? '').trim().toUpperCase()];
+  return label ? known(label) : null;
+}
 // Explicit fee identities reviewed against the retained Bankwest and
 // Dnister/BCU source fixtures, plus the bundled primary-source details sample.
 // New publisher wording requires identity review; source presence alone never
@@ -725,6 +759,16 @@ export function uiPublishedFeeName(item: DetailItem): UiText {
     ? known(name.trim()) : uiLabel('Unknown');
 }
 export function uiProductName(row: Pick<RateRow, 'product_name'>): UiText { return identity(row.product_name); }
+/** Lender and product name from a canonical product key; the raw key is an identifier, not a label. */
+export function uiProductKeyLabel(productKey: string): UiText {
+  const segments = productKey.split('|');
+  // Canonical UIDs and other opaque keys carry no lender or product name.
+  if (segments.length < 4) return uiIdentifier(productKey);
+  const [provider, , , ...nameParts] = segments;
+  const name = nameParts.join('|');
+  const providerText = uiPublishedConciseName(provider), nameText = uiPublishedText(name, 160);
+  return providerText && nameText ? known(`${providerText} · ${nameText}`) : nameText ?? providerText ?? uiLabel('Unknown');
+}
 export function uiProductReference(row: RateRow): UiText {
   const expected = [row.provider, row.product_id ?? '', row.category ?? '', row.product_name].join('|');
   return row.product_key === expected ? identity(row.product_key) : uiIdentifier(row.product_key);

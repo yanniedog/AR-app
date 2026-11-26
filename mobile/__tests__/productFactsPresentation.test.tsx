@@ -47,7 +47,7 @@ test.each([
   </ProductPageLinks>) as Tree; });
   try {
     act(() => tree.root.findAllByType('Disclosure').find(node => node.props.title === 'Eligibility')!.props.onToggle());
-    expect(bodyText(tree)).toEqual(['Minimum age', '18 years', 'Residency status', 'Unknown', 'Other', 'Unknown']);
+    expect(bodyText(tree)).toEqual(['Minimum age', '18 years', 'Residency status', 'Unknown', 'Other criterion', 'Unknown']);
     if (!linked) {
       expect(() => tree.root.findByProps({ accessibilityRole: 'link' })).toThrow();
     } else {
@@ -85,7 +85,7 @@ test('legacy Fees retains conditions without an overview while Product facts omi
     expect(text.filter(value => value === '$100')).toHaveLength(1);
     expect(text.filter(value => value === '$0 · Conditions: Unverified')).toHaveLength(1);
     expect(text).toContain('Discount: $5 · Conditions: Unverified');
-    expect(text.filter(value => value === 'ANNUAL_FEE')).toHaveLength(2);
+    expect(text.filter(value => value === 'Annual fee')).toHaveLength(2);
     expect(text).not.toContain('Source review required');
     expect(text).toContain('Offset account');
     expect(text).not.toContain('With package');

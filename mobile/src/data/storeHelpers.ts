@@ -1,18 +1,7 @@
-import * as Network from 'expo-network';
-
 import { cache } from './cache';
 import { normalizeHistoryBanksPayload } from './historyPayload';
 import { debugLog } from '../lib/debugLog';
 import type { HistoryBanksPayload } from './historyPayload';
-
-export async function onWifi(): Promise<boolean> {
-  try {
-    const state = await Network.getNetworkStateAsync();
-    return state.type === Network.NetworkStateType.WIFI;
-  } catch {
-    return true; // assume ok if we can't tell
-  }
-}
 
 export async function readValidatedHistoryBanks(isCurrent: () => boolean = () => true): Promise<HistoryBanksPayload | null> {
   const raw = await cache.readHistoryBanks();
