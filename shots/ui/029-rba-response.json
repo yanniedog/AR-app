@@ -1,0 +1,384 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Bank response",
+  "at": [
+   289,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Response",
+  "at": [
+   129,
+   294
+  ]
+ },
+ {
+  "label": "Bank rates",
+  "flags": "tap",
+  "at": [
+   575,
+   295
+  ]
+ },
+ {
+  "label": "Bank rates",
+  "at": [
+   575,
+   295
+  ]
+ },
+ {
+  "label": "Previous date",
+  "flags": "tap",
+  "at": [
+   80,
+   440
+  ]
+ },
+ {
+  "label": "3 Nov 2026",
+  "at": [
+   360,
+   396
+  ]
+ },
+ {
+  "label": "+0.25 pp · 4.85%",
+  "at": [
+   360,
+   440
+  ]
+ },
+ {
+  "label": "Tracked to 27 Nov 2026",
+  "at": [
+   360,
+   484
+  ]
+ },
+ {
+  "label": "Next date",
+  "flags": "tap,off",
+  "at": [
+   640,
+   440
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   584
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   582
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   584
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   582
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   584
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   582
+  ]
+ },
+ {
+  "label": "Search banks",
+  "flags": "tap",
+  "at": [
+   386,
+   722
+  ]
+ },
+ {
+  "label": "Bank",
+  "at": [
+   199,
+   856
+  ]
+ },
+ {
+  "label": "First move",
+  "at": [
+   467,
+   856
+  ]
+ },
+ {
+  "label": "After",
+  "at": [
+   629,
+   856
+  ]
+ },
+ {
+  "label": "360 MMS · First move · Baseline unavailable · After · Timing unknown",
+  "flags": "tap",
+  "at": [
+   360,
+   983
+  ]
+ },
+ {
+  "label": "360 MMS",
+  "at": [
+   60,
+   982
+  ]
+ },
+ {
+  "label": "3M",
+  "at": [
+   60,
+   982
+  ]
+ },
+ {
+  "label": "360 MMS",
+  "at": [
+   162,
+   982
+  ]
+ },
+ {
+  "label": "Baseline unavailable",
+  "at": [
+   467,
+   982
+  ]
+ },
+ {
+  "label": "Timing unknown",
+  "at": [
+   629,
+   982
+  ]
+ },
+ {
+  "label": "AAA FINANCIAL CORPORATION · First move · Baseline unavailable · After · Timing unknown",
+  "flags": "tap",
+  "at": [
+   360,
+   1113
+  ]
+ },
+ {
+  "label": "AAA FINANCIAL CORPORATION",
+  "at": [
+   60,
+   1112
+  ]
+ },
+ {
+  "label": "AFC",
+  "at": [
+   60,
+   1112
+  ]
+ },
+ {
+  "label": "AAA FINANCIAL CORPORATION",
+  "at": [
+   233,
+   1112
+  ]
+ },
+ {
+  "label": "Baseline unavailable",
+  "at": [
+   467,
+   1112
+  ]
+ },
+ {
+  "label": "Timing unknown",
+  "at": [
+   629,
+   1112
+  ]
+ },
+ {
+  "label": "Abacus Home Loans · First move · Baseline unavailable · After · Timing unknown",
+  "flags": "tap",
+  "at": [
+   360,
+   1243
+  ]
+ },
+ {
+  "label": "Abacus Home Loans",
+  "at": [
+   60,
+   1242
+  ]
+ },
+ {
+  "label": "AHL",
+  "at": [
+   60,
+   1242
+  ]
+ },
+ {
+  "label": "Abacus Home Loans",
+  "at": [
+   231,
+   1242
+  ]
+ },
+ {
+  "label": "Baseline unavailable",
+  "at": [
+   467,
+   1242
+  ]
+ },
+ {
+  "label": "Timing unknown",
+  "at": [
+   629,
+   1242
+  ]
+ },
+ {
+  "label": "AFG Home Loans - Retro · First move · Baseline unavailable · After · Timing unknown",
+  "flags": "tap",
+  "at": [
+   360,
+   1350
+  ]
+ },
+ {
+  "label": "AFG Home Loans - Retro",
+  "at": [
+   60,
+   1368
+  ]
+ },
+ {
+  "label": "AHLR",
+  "at": [
+   60,
+   1372
+  ]
+ },
+ {
+  "label": "AFG Home Loans - Retro",
+  "at": [
+   233,
+   1372
+  ]
+ },
+ {
+  "label": "Baseline unavailable",
+  "at": [
+   467,
+   1362
+  ]
+ },
+ {
+  "label": "Timing unknown",
+  "at": [
+   629,
+   1362
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap,sel",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "sel",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
