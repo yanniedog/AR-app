@@ -1,0 +1,44 @@
+{
+  "kind": "live",
+  "url": "https://paste.rs/DFCAO",
+  "outcome": null,
+  "elapsedMs": 969089,
+  "visibleOutcome": [
+    "Navigate up",
+    "App health audit",
+    "Account",
+    "2,883 / 2,883",
+    "Verified upload",
+    "Verified upload",
+    "Uploaded",
+    "https://paste.rs/DFCAO",
+    "https://paste.c-net.org/6b778267-8fc1-612f-55e7-0a8c7d5341c4",
+    "Copy paste.rs link",
+    "Copy paste.rs link",
+    "Copy paste.c-net.org link",
+    "Copy paste.c-net.org link",
+    "Audit history",
+    "Retained runs",
+    "1 / 120",
+    "Live checks",
+    "Live checks",
+    "Performance",
+    "Performance"
+  ],
+  "logStatus": 200,
+  "logContentUrl": "https://paste.c-net.org/6b778267-8fc1-612f-55e7-0a8c7d5341c4",
+  "logBytes": 854545,
+  "completion": {
+    "outcome": "failed",
+    "collectionComplete": true,
+    "coverageComplete": false,
+    "detailsComplete": true
+  },
+  "debugLog": {
+    "url": "https://paste.rs/WQzJR",
+    "uploadMs": 24369,
+    "status": 200,
+    "contentUrl": "https://paste.c-net.org/b06f00be-4d93-283c-a02a-361cf1d9ef86",
+    "bytes": 5754168
+  }
+}

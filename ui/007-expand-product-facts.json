@@ -1,0 +1,222 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "PLUS HOME LOAN FIXED 2YR 60-80 LVR PI",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Home loans · 30 days · 27 Observed · 27 Nov 2026 · PLUS HOME LOAN FIXED 2YR 60-80 LVR PI 6.54% · Leading advertised · Al",
+  "at": [
+   360,
+   295
+  ]
+ },
+ {
+  "label": "History",
+  "at": [
+   396,
+   273
+  ]
+ },
+ {
+  "label": "Previous date",
+  "flags": "tap",
+  "at": [
+   80,
+   464
+  ]
+ },
+ {
+  "label": "27 Nov 2026",
+  "at": [
+   360,
+   424
+  ]
+ },
+ {
+  "label": "6.54% · Leading advertised · All tiers",
+  "at": [
+   360,
+   484
+  ]
+ },
+ {
+  "label": "Next date",
+  "flags": "tap,off",
+  "at": [
+   640,
+   464
+  ]
+ },
+ {
+  "label": "Missing observations: 4 · Unknown",
+  "at": [
+   360,
+   544
+  ]
+ },
+ {
+  "label": "Product rate",
+  "at": [
+   165,
+   600
+  ]
+ },
+ {
+  "label": "Hide Product facts",
+  "flags": "tap",
+  "at": [
+   360,
+   829
+  ]
+ },
+ {
+  "label": "Product facts",
+  "at": [
+   328,
+   829
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   360,
+   929
+  ]
+ },
+ {
+  "label": "Early / extra repayments",
+  "at": [
+   190,
+   985
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   1005
+  ]
+ },
+ {
+  "label": "Offset account",
+  "at": [
+   190,
+   1085
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   1105
+  ]
+ },
+ {
+  "label": "Other feature",
+  "at": [
+   190,
+   1185
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   1205
+  ]
+ },
+ {
+  "label": "Redraw facility",
+  "at": [
+   190,
+   1285
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   1305
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

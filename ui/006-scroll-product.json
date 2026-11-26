@@ -1,0 +1,246 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "PLUS HOME LOAN FIXED 2YR 60-80 LVR PI",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Offset account",
+  "at": [
+   98,
+   231
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   438,
+   211
+  ]
+ },
+ {
+  "label": "Availability",
+  "at": [
+   228,
+   297
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   568,
+   297
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   268,
+   349
+  ]
+ },
+ {
+  "label": "Published · 5",
+  "at": [
+   608,
+   349
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   360,
+   501
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "flags": "tap",
+  "at": [
+   360,
+   619
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "at": [
+   386,
+   619
+  ]
+ },
+ {
+  "label": "Show Fees",
+  "flags": "tap",
+  "at": [
+   360,
+   845
+  ]
+ },
+ {
+  "label": "Fees",
+  "at": [
+   328,
+   845
+  ]
+ },
+ {
+  "label": "Published product history",
+  "at": [
+   360,
+   1009
+  ]
+ },
+ {
+  "label": "Leading advertised · All tiers · Conditional rate / Restricted",
+  "at": [
+   360,
+   1149
+  ]
+ },
+ {
+  "label": "PLUS HOME LOAN FIXED 2YR 60-80 LVR PI · Home loans",
+  "at": [
+   360,
+   1245
+  ]
+ },
+ {
+  "label": "30 days",
+  "flags": "tap,sel",
+  "at": [
+   107,
+   1347
+  ]
+ },
+ {
+  "label": "30 days",
+  "at": [
+   107,
+   1349
+  ]
+ },
+ {
+  "label": "90 days",
+  "flags": "tap",
+  "at": [
+   268,
+   1347
+  ]
+ },
+ {
+  "label": "90 days",
+  "at": [
+   268,
+   1349
+  ]
+ },
+ {
+  "label": "1 year",
+  "flags": "tap",
+  "at": [
+   418,
+   1347
+  ]
+ },
+ {
+  "label": "1 year",
+  "at": [
+   418,
+   1349
+  ]
+ },
+ {
+  "label": "All",
+  "flags": "tap",
+  "at": [
+   541,
+   1347
+  ]
+ },
+ {
+  "label": "All",
+  "at": [
+   535,
+   1349
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

@@ -1,0 +1,246 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Debug log",
+  "at": [
+   243,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Private diagnostics",
+  "at": [
+   360,
+   261
+  ]
+ },
+ {
+  "label": "Device / network / rate / product / receipt / error",
+  "at": [
+   360,
+   309
+  ]
+ },
+ {
+  "label": "Privacy",
+  "at": [
+   360,
+   397
+  ]
+ },
+ {
+  "label": "Redaction unguaranteed",
+  "at": [
+   360,
+   445
+  ]
+ },
+ {
+  "label": "Upload",
+  "at": [
+   360,
+   533
+  ]
+ },
+ {
+  "label": "Public hosting",
+  "at": [
+   360,
+   581
+  ]
+ },
+ {
+  "label": "Clear",
+  "flags": "tap",
+  "at": [
+   131,
+   687
+  ]
+ },
+ {
+  "label": "Clear",
+  "at": [
+   157,
+   688
+  ]
+ },
+ {
+  "label": "Copy",
+  "flags": "tap",
+  "at": [
+   346,
+   687
+  ]
+ },
+ {
+  "label": "Copy",
+  "at": [
+   372,
+   687
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   567,
+   687
+  ]
+ },
+ {
+  "label": "Share",
+  "at": [
+   593,
+   687
+  ]
+ },
+ {
+  "label": "Share full evidence",
+  "flags": "tap",
+  "at": [
+   230,
+   800
+  ]
+ },
+ {
+  "label": "Share full evidence",
+  "at": [
+   256,
+   801
+  ]
+ },
+ {
+  "label": "Upload and copy link",
+  "flags": "tap",
+  "at": [
+   242,
+   912
+  ]
+ },
+ {
+  "label": "Upload and copy link",
+  "at": [
+   268,
+   913
+  ]
+ },
+ {
+  "label": "Verified upload",
+  "at": [
+   360,
+   1038
+  ]
+ },
+ {
+  "label": "Verified upload",
+  "at": [
+   184,
+   1038
+  ]
+ },
+ {
+  "label": "Copied",
+  "at": [
+   360,
+   1096
+  ]
+ },
+ {
+  "label": "https://paste.rs/WQzJR",
+  "at": [
+   360,
+   1152
+  ]
+ },
+ {
+  "label": "https://paste.c-net.org/b06f00be-4d93-283c-a02a-361cf1d9ef86",
+  "at": [
+   360,
+   1228
+  ]
+ },
+ {
+  "label": "Copy paste.rs link",
+  "flags": "tap",
+  "at": [
+   360,
+   1334
+  ]
+ },
+ {
+  "label": "Copy paste.rs link",
+  "at": [
+   361,
+   1334
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

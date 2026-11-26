@@ -1,0 +1,309 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "App health audit",
+  "at": [
+   304,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "2,883 / 2,883",
+  "at": [
+   360,
+   217
+  ]
+ },
+ {
+  "label": "Verified upload",
+  "at": [
+   360,
+   318
+  ]
+ },
+ {
+  "label": "Verified upload",
+  "at": [
+   186,
+   318
+  ]
+ },
+ {
+  "label": "Uploaded",
+  "at": [
+   360,
+   376
+  ]
+ },
+ {
+  "label": "https://paste.rs/DFCAO",
+  "at": [
+   360,
+   432
+  ]
+ },
+ {
+  "label": "https://paste.c-net.org/6b778267-8fc1-612f-55e7-0a8c7d5341c4",
+  "at": [
+   360,
+   508
+  ]
+ },
+ {
+  "label": "Copy paste.rs link",
+  "flags": "tap",
+  "at": [
+   360,
+   614
+  ]
+ },
+ {
+  "label": "Copy paste.rs link",
+  "at": [
+   361,
+   614
+  ]
+ },
+ {
+  "label": "Copy paste.c-net.org link",
+  "flags": "tap",
+  "at": [
+   360,
+   729
+  ]
+ },
+ {
+  "label": "Copy paste.c-net.org link",
+  "at": [
+   361,
+   729
+  ]
+ },
+ {
+  "label": "Audit history",
+  "at": [
+   360,
+   928
+  ]
+ },
+ {
+  "label": "Retained runs",
+  "at": [
+   360,
+   1012
+  ]
+ },
+ {
+  "label": "1 / 120",
+  "at": [
+   360,
+   1060
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1164
+  ]
+ },
+ {
+  "label": "Live checks",
+  "flags": "tap,sel",
+  "at": [
+   140,
+   1164
+  ]
+ },
+ {
+  "label": "Live checks",
+  "at": [
+   140,
+   1165
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1284
+  ]
+ },
+ {
+  "label": "Performance",
+  "flags": "tap,sel",
+  "at": [
+   149,
+   1284
+  ]
+ },
+ {
+  "label": "Performance",
+  "at": [
+   149,
+   1285
+  ]
+ },
+ {
+  "label": "UX & fluidity",
+  "flags": "tap",
+  "at": [
+   394,
+   1284
+  ]
+ },
+ {
+  "label": "UX & fluidity",
+  "at": [
+   394,
+   1285
+  ]
+ },
+ {
+  "label": "Coverage",
+  "flags": "tap",
+  "at": [
+   605,
+   1284
+  ]
+ },
+ {
+  "label": "Coverage",
+  "at": [
+   615,
+   1285
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1374
+  ]
+ },
+ {
+  "label": "Failures",
+  "flags": "tap",
+  "at": [
+   113,
+   1374
+  ]
+ },
+ {
+  "label": "Failures",
+  "at": [
+   113,
+   1388
+  ]
+ },
+ {
+  "label": "Check completion",
+  "flags": "tap",
+  "at": [
+   363,
+   1374
+  ]
+ },
+ {
+  "label": "Check completion",
+  "at": [
+   363,
+   1388
+  ]
+ },
+ {
+  "label": "Duration",
+  "flags": "tap",
+  "at": [
+   610,
+   1374
+  ]
+ },
+ {
+  "label": "Duration",
+  "at": [
+   616,
+   1388
+  ]
+ },
+ {
+  "label": "Slowest check",
+  "flags": "tap,sel",
+  "at": [
+   702,
+   1374
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

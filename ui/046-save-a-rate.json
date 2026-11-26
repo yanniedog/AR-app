@@ -1,0 +1,232 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "PLUS HOME LOAN FIXED 2YR 60-80 LVR PI",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Cairns bank",
+  "at": [
+   72,
+   361
+  ]
+ },
+ {
+  "label": "PLUS HOME LOAN FIXED 2YR 60-80 LVR PI",
+  "at": [
+   414,
+   293
+  ]
+ },
+ {
+  "label": "Cairns bank",
+  "flags": "tap",
+  "at": [
+   213,
+   389
+  ]
+ },
+ {
+  "label": "Cairns bank",
+  "at": [
+   213,
+   361
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   414,
+   457
+  ]
+ },
+ {
+  "label": "Comparison rate",
+  "at": [
+   360,
+   577
+  ]
+ },
+ {
+  "label": "6.28%",
+  "at": [
+   360,
+   645
+  ]
+ },
+ {
+  "label": "6.54% Advertised rate",
+  "at": [
+   360,
+   713
+  ]
+ },
+ {
+  "label": "Best advertised ↑ 25 bps · 28 Oct 2026 · 6.29% → 6.54%",
+  "at": [
+   360,
+   797
+  ]
+ },
+ {
+  "label": "Bank updated 5 Nov 2026 · Checked 27 Nov 2026",
+  "at": [
+   360,
+   877
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap,sel",
+  "at": [
+   190,
+   1027
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "sel",
+  "at": [
+   217,
+   1028
+  ]
+ },
+ {
+  "label": "Calculate",
+  "flags": "tap",
+  "at": [
+   530,
+   1027
+  ]
+ },
+ {
+  "label": "Calculate",
+  "at": [
+   531,
+   1027
+  ]
+ },
+ {
+  "label": "Hide Rate details",
+  "flags": "tap",
+  "at": [
+   360,
+   1253
+  ]
+ },
+ {
+  "label": "Rate details",
+  "at": [
+   328,
+   1253
+  ]
+ },
+ {
+  "label": "Rate type",
+  "at": [
+   315,
+   1353
+  ]
+ },
+ {
+  "label": "Fixed",
+  "at": [
+   655,
+   1353
+  ]
+ },
+ {
+  "label": "Term",
+  "at": [
+   319,
+   1389
+  ]
+ },
+ {
+  "label": "2 yrs",
+  "at": [
+   659,
+   1389
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

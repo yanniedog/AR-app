@@ -1,0 +1,198 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "App health audit",
+  "at": [
+   304,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "App health audit",
+  "at": [
+   360,
+   305
+  ]
+ },
+ {
+  "label": "Last audit",
+  "at": [
+   360,
+   385
+  ]
+ },
+ {
+  "label": "Failed · 26 Nov 2026",
+  "at": [
+   360,
+   433
+  ]
+ },
+ {
+  "label": "Estimated time",
+  "at": [
+   360,
+   517
+  ]
+ },
+ {
+  "label": "15:03",
+  "at": [
+   360,
+   565
+  ]
+ },
+ {
+  "label": "Local audit",
+  "id": "audit-start-local",
+  "flags": "tap",
+  "at": [
+   360,
+   665
+  ]
+ },
+ {
+  "label": "Local audit",
+  "at": [
+   386,
+   666
+  ]
+ },
+ {
+  "label": "Live audit",
+  "id": "audit-start-live",
+  "flags": "tap",
+  "at": [
+   360,
+   783
+  ]
+ },
+ {
+  "label": "Live audit",
+  "at": [
+   387,
+   783
+  ]
+ },
+ {
+  "label": "Public upload",
+  "flags": "tap,on",
+  "at": [
+   360,
+   900
+  ]
+ },
+ {
+  "label": "Next destination",
+  "at": [
+   360,
+   1000
+  ]
+ },
+ {
+  "label": "Public hosting",
+  "at": [
+   360,
+   1048
+  ]
+ },
+ {
+  "label": "Show Upload details",
+  "flags": "tap",
+  "at": [
+   360,
+   1197
+  ]
+ },
+ {
+  "label": "Upload details",
+  "at": [
+   328,
+   1197
+  ]
+ },
+ {
+  "label": "Show Audit settings",
+  "flags": "tap",
+  "at": [
+   360,
+   1369
+  ]
+ },
+ {
+  "label": "Audit settings",
+  "at": [
+   328,
+   1389
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
