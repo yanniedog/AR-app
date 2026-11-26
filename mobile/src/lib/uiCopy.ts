@@ -750,6 +750,17 @@ const REVIEWED_PUBLISHED_FEE_NAMES = new Set([
   'Online Redraw Fee', 'Manual Redraw Fee', 'Break Cost Fee', 'Default Fee',
   'Duplicate Fee', 'Establishment Fee', 'Monthly Admin Fee',
   'Security Processing Fee', 'Variation Fee',
+  // Concise fee identities from retained real CDR captures; names carrying conditions are excluded.
+  'Direct Debit Dishonour Fee', 'Settlement Fee', 'Default Notice Fee', 'Arrears Letter Fee',
+  'Discharge of Mortgage Fee', 'Monthly Service Fee', 'Dormant Account Fee', 'Periodical Payment Dishonour Fee',
+  'Periodical Payment Fee', 'Telegraphic transfer fee within Australia', 'Replacement Visa Debit Card',
+  'Excess coin fee', 'Currency Conversion Fee', 'Special Clearance Cheque', 'Copy of a Cheque',
+  'Domestic ATM Transaction', 'EFTPOS Transaction', 'Over the Counter Fee', 'Trace to Other Bank',
+  'Bank Audit Certificate', 'Security Postage', 'Cash Passport Commission', 'VISA Chargeback Request',
+  'Replacement of Lost VISA Debit Card', 'Monthly VISA Debit Card Fee', 'Duplicate Deposit Book',
+  'Issue Corporate Cheque', 'Cheque Collection', 'Branch Cheque Withdrawal', 'Branch Cheque Deposit',
+  'Quick Debit Dishonour Fee', 'Returned EFT Payment Fee', 'Member Cheque Dishonour Fee', 'Agency withdrawal',
+  'Account Information Fee',
 ].map(name => name.toLowerCase()));
 /** Reviewed published charge identity only; descriptions and conditions are never labels. */
 export function uiPublishedFeeName(item: DetailItem): UiText {
