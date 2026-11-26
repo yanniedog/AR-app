@@ -801,7 +801,8 @@ class Explorer {
     if (step.tap || step.longPress) {
       const sel = step.tap || step.longPress;
       const node = (step.scroll ? await this.scrollUntil(sel) : null) || await this.find(sel, step.timeout ?? 8000);
-      if (!node) return this.record(label, { error: `not found: ${JSON.stringify(sel)}` });
+      // An optional step covers UI that only some products render, such as legacy disclosure groups.
+      if (!node) return this.record(label, step.optional ? { skipped: `absent: ${JSON.stringify(sel)}` } : { error: `not found: ${JSON.stringify(sel)}` });
       const [x, y] = centre(node);
       const t0 = Date.now();
       if (step.longPress) sh(`input swipe ${x} ${y} ${x} ${y} 900`);
