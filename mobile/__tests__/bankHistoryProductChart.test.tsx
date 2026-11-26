@@ -43,10 +43,12 @@ test('savings product chart shows market facts and cash rate across a missing pr
     const plot = () => tree.root.findAllByProps({ accessibilityRole: 'image' })[0];
     act(() => (plot().props.onLayout as (event: unknown) => void)({ nativeEvent: { layout: { width: 320 } } }));
     const slice = () => tree.root.findByType(ChartSliceControls).props;
+    // Benchmarks are on by default; the toggle hides and restores them.
+    const benchmarks = tree.root.findAllByProps({ label: 'Benchmarks' })[0];
+    act(() => (benchmarks.props.onPress as () => void)());
     expect(slice().valueLabel).toBe('Unknown');
     expect(slice().facts).toBeUndefined();
     expect(plot().props.accessibilityLabel).not.toContain('RBA cash rate');
-    const benchmarks = tree.root.findAllByProps({ label: 'Benchmarks' })[0];
     act(() => (benchmarks.props.onPress as () => void)());
     expect(slice().valueLabel).toBe('Unknown');
     expect(slice().facts).toEqual([
@@ -87,14 +89,16 @@ test('product history can change its window or show benchmarks with no product o
       (control.props.onPress as () => void)();
     });
     const slice = () => tree.root.findByType(ChartSliceControls).props;
+    // Opens on a year with benchmarks shown, so the September observation is in range.
+    expect(slice().facts).toContainEqual({ label: 'Market median', value: '5.00%' });
+    act(() => slice().onChangeIndex(0));
+    expect(slice().valueLabel).toBe('6.00%');
+    press('Benchmarks');
+    press('30 days');
     expect(tree.root.findAllByType('AppText').some(node => node.props.children === 'No observations')).toBe(true);
     press('Benchmarks');
     expect(slice().valueLabel).toBe('Unknown');
     expect(slice().facts).toContainEqual({ label: 'Market median', value: '5.00%' });
-    press('Benchmarks');
-    press('90 days');
-    act(() => slice().onChangeIndex(0));
-    expect(slice().valueLabel).toBe('6.00%');
   } finally {
     act(() => tree.unmount());
   }

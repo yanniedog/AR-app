@@ -276,9 +276,10 @@ function BankHistoryChartView({
 }: BankHistoryChartProps) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
-  const [showComparison, setShowComparison] = useState(false);
+  // Product charts open on a year with the market benchmarks shown; the toggle still hides them.
+  const [showComparison, setShowComparison] = useState(true);
   const showBenchmarks = !productHistory || showComparison;
-  const initialWindow = (windowMemory && chosenWindows.get(windowMemory)) || '30D';
+  const initialWindow = (windowMemory && chosenWindows.get(windowMemory)) || (productHistory ? '1Y' : '30D');
   const [window, setWindowState] = useState<HistoryWindow>(() => stateKey ? chartSessions.get(stateKey)?.window ?? initialWindow : initialWindow);
   const setWindow = useCallback((next: HistoryWindow) => {
     if (windowMemory) chosenWindows.set(windowMemory, next);
