@@ -31,6 +31,13 @@ if (fs.existsSync(path.join(dir, 'audit-log.txt'))) {
 const completion = auditCompletion(decoded);
 out.push(audit.kind ? `**${auditOutcomeLine({ ...audit, completion })}**` : auditLine, '');
 if (completion) out.push(auditCoverageLine(completion), '');
+const network = decoded?.appHealth?.checks?.find(check => check.code === 'network-policy')?.metrics;
+if (network?.policyViolations > 0) {
+  const counts = [network.unattributedTransportViolations, network.untrustedExternalLinkResponses, network.untrustedNonLinkResponses];
+  if (counts.every(Number.isSafeInteger)) {
+    out.push(`Network policy: ${counts[0]} unattributed transports, ${counts[1]} untrusted external-link responses, ${counts[2]} untrusted non-link responses`, '');
+  }
+}
 if (audit.debugLog?.url) {
   out.push(`Debug log: ${audit.debugLog.url}${audit.debugLog.error ? ` (fetch failed: ${audit.debugLog.error})` : ''}`, '');
 } else if (audit.debugLog?.error) {

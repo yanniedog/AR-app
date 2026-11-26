@@ -432,6 +432,9 @@ export const APP_HEALTH_PUBLIC_METRIC_ALLOWLIST: Readonly<
     'blockedAttempts',
     'transportCalls',
     'policyViolations',
+    'unattributedTransportViolations',
+    'untrustedExternalLinkResponses',
+    'untrustedNonLinkResponses',
   ],
   [APP_HEALTH_CHECK_CODES.AUDIT_PLAN]: [
     'plannedChecks',
