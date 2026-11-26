@@ -838,7 +838,7 @@ import { auditRenderedProductDetails } from './renderedGaps';
 
 export function auditProductDetailGaps(snapshot: AppHealthDataSnapshot): {
   hasGaps: boolean;
-  metrics: Record<string, number | boolean | null>;
+  metrics: Record<string, number | string | boolean | null>;
 } | null {
   const products = snapshot.details?.products;
   if (!products) return null;

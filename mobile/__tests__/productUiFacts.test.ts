@@ -242,8 +242,10 @@ test('repeated source entries are one fact and presence-only criteria read as re
   expect(dedupeDetailItems([entry, { ...entry }, { label: 'STAFF' }])).toHaveLength(2);
   expect(uiDetailItem(entry, 0, 'Eligibility')).toMatchObject({ label: 'Individual applicants', value: 'Required' });
   expect(uiDetailItem({ label: 'OFFSET' }, 0, 'Features')).toMatchObject({ value: 'Included' });
-  // Unparsed wording on a presence-only criterion keeps it Unknown rather than an unconditional Required.
-  expect(uiDetailItem({ label: 'BUSINESS', info: 'Primary producers only' }, 0, 'Eligibility')).toMatchObject({ value: 'Unknown', conditions: 'source-review-required' });
+  // Wording beside a presence-only criterion may narrow it, so it reads Required with conditions unverified.
+  expect(uiDetailItem({ label: 'BUSINESS', info: 'Primary producers only' }, 0, 'Eligibility'))
+    .toMatchObject({ value: 'Required', conditions: 'source-review-required', conditionsUnverified: true });
+  expect(uiDetailItem(entry, 0, 'Eligibility').conditionsUnverified).toBe(false);
 });
 
 test('OTHER entries use the controlled generic label and never the source name', () => {
@@ -312,4 +314,17 @@ test('ISO duration values on published criteria read as plain durations', () => 
   expect(read('P1W2D')).toBe('P1W2D');
   expect(read('P1.5Y2M')).not.toMatch(/year|month/);
   expect(read('P1YT')).not.toMatch(/year/);
+});
+
+test('reviewed feature values read as plain lists; any unreviewed token leaves the value unknown', () => {
+  const read = (value: string) => uiDetailItem({ label: 'DIGITAL_WALLET', value }, 0, 'Features').value;
+  expect(read('Apple Pay')).toBe('Apple Pay');
+  expect(read('Apple Pay and Google Pay')).toBe('Apple Pay, Google Pay');
+  expect(read('Apple Pay, Samsung Pay or Google Pay')).toBe('Apple Pay, Samsung Pay, Google Pay');
+  expect(uiDetailItem({ label: 'BILL_PAYMENT', value: 'BPAY' }, 0, 'Features').value).toBe('BPAY');
+  expect(uiDetailItem({ label: 'CARD_ACCESS', value: 'Visa Debit Card' }, 0, 'Features').value).toBe('Visa Debit card');
+  expect(read('Apple Pay and free coffee')).toBe('Unknown');
+  expect(uiDetailItem({ label: 'NOTIFICATIONS', value: 'SMS or Email' }, 0, 'Features').value).toBe('SMS, Email');
+  // The vocabulary applies to features only.
+  expect(uiDetailItem({ label: 'OTHER', value: 'Apple Pay' }, 0, 'Eligibility').value).toBe('Unknown');
 });

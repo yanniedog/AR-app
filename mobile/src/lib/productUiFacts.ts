@@ -221,7 +221,9 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
   const residencyField = group === 'Eligibility' && item.label === 'RESIDENCY_STATUS';
   const residency = residencyField ? residencyValue(item) : null;
   const textLike = group === 'Eligibility' || group === 'Constraints';
-  const presenceOnly = textLike && PRESENCE_ONLY_CODES.has((item.label ?? '').toUpperCase()) && item.value == null && !item.info?.trim();
+  // The criterion code itself establishes the restriction. Wording beside it may narrow it, so it reads
+  // Required with conditions unverified, never an unconditional Required.
+  const presenceOnly = textLike && PRESENCE_ONLY_CODES.has((item.label ?? '').toUpperCase()) && item.value == null;
   const cashback = group === 'Features' ? cashbackRange(item) : null;
   // These published CDR constraint codes establish the unit. Older payloads
   // contain both ratios (0.8) and percentage numbers (98), like the rate DTO.
@@ -232,13 +234,13 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
     ? uiRate(toFraction(numeric), Math.max(2, Math.min(6, lvrDecimals - (numeric <= 1 ? 2 : 0)))) : uiLabel('Unknown');
   const value = group === 'Fees' ? uiFeeValue(item) : residencyField ? residency ?? uiLabel('Unknown') : lvr ? lvrValue : numeric !== null ? uiJoin(group === 'Constraints' && /^(?:MIN|MAX)_(?:LIMIT|BALANCE|AMOUNT)$/.test(item.label ?? '') ? uiMoney(numeric, Math.min(2, precision(numeric))) : uiNumber(numeric, precision(numeric)),
     ['Minimum age', 'Maximum age'].includes(controlled ?? '') ? uiJoin(' ', 'years') : null)
-    : residency ?? cashback ?? (scalar?.toLowerCase() === 'false' || scalar?.toLowerCase() === 'true' ? uiLabel(scalar.toLowerCase() === 'true' ? 'Yes' : 'No') : group === 'Features' && item.value == null ? uiLabel(item.info?.trim() ? 'Conditions apply' : 'Included') : presenceOnly ? uiLabel('Required') : scalar ? isoDurationText(scalar) ?? uiTextValue(scalar) : uiLabel('Unknown'));
+    : residency ?? cashback ?? (scalar?.toLowerCase() === 'false' || scalar?.toLowerCase() === 'true' ? uiLabel(scalar.toLowerCase() === 'true' ? 'Yes' : 'No') : group === 'Features' && item.value == null ? uiLabel(item.info?.trim() ? 'Conditions apply' : 'Included') : presenceOnly ? uiLabel('Required') : scalar ? isoDurationText(scalar) ?? (group === 'Features' ? reviewedFeatureValues(scalar) : null) ?? uiTextValue(scalar) : uiLabel('Unknown'));
   const unresolvedInfo = Boolean(item.info?.trim() && !knownInfo);
   // Unclassified eligibility prose can describe the criterion itself, rather
   // than an extra condition on a published amount or limit.
   const conditionsUnverified = unresolvedInfo && (
     group === 'Fees' || group === 'Features' && item.value == null || (group === 'Features' && item.label === 'CASHBACK_OFFER' && (cashback !== null || numeric !== null))
-    || (lvr && lvrValue !== 'Unknown')
+    || (lvr && lvrValue !== 'Unknown') || presenceOnly
   );
   return { label: label || uiJoin(group, ' ', uiCount(index + 1)), value: uiJoin(value || uiLabel('Unknown'), knownInfo && knownInfo !== residency ? uiJoin(' · ', knownInfo) : null),
     reference: uiCount(index + 1),
@@ -246,6 +248,23 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
       || group === 'Eligibility' && item.label === 'RESIDENCY_STATUS' && !!scalar && !residency
       || numeric === null && group !== 'Fees' && !item.label ? 'source-review-required' : 'none',
     conditionsUnverified, scope: [] };
+}
+/** Reviewed names for common published feature values: wallets, payment networks, cards and alert channels. */
+const REVIEWED_FEATURE_VALUES: Readonly<Record<string, UiLabel>> = {
+  'apple pay': 'Apple Pay', 'google pay': 'Google Pay', 'samsung pay': 'Samsung Pay', 'garmin pay': 'Garmin Pay', 'fitbit pay': 'Fitbit Pay',
+  'bpay': 'BPAY', 'payto': 'PayTo', 'osko': 'Osko', 'payid': 'PayID',
+  'visa debit card': 'Visa Debit card', 'visa debit': 'Visa Debit card', 'mastercard debit card': 'Mastercard Debit card',
+  'debit mastercard': 'Mastercard Debit card', 'debit card': 'Debit card', 'credit card': 'Credit card',
+  'sms': 'SMS', 'email': 'Email', 'push notifications': 'Push notifications', 'alerts': 'Alerts',
+};
+/** A list of reviewed values reads as that list; one unreviewed token leaves the whole value unknown. */
+function reviewedFeatureValues(scalar: string): UiText | null {
+  if (scalar.length > 120 || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(scalar)) return null;
+  const tokens = scalar.trim().replace(/\.$/, '').split(/\s*(?:,|&|\/|\band\b|\bor\b)\s*/i).map(token => token.trim().toLowerCase()).filter(Boolean);
+  const labels = tokens.map(token => REVIEWED_FEATURE_VALUES[token]);
+  if (!labels.length || labels.some(label => !label)) return null;
+  const distinct = [...new Set(labels as UiLabel[])];
+  return uiJoin(...distinct.flatMap((label, i) => i ? [uiLabel(', '), uiLabel(label)] : [uiLabel(label)]));
 }
 function uiTextValue(scalar: string): UiText {
   const label = humanizeEnum(scalar);

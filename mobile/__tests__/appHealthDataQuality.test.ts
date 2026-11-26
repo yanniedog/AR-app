@@ -518,6 +518,25 @@ describe('app-health data quality', () => {
     expect(metrics.feeListsWithoutUpfrontFee).toBe(1);
   });
 
+  it('breaks unknown values down by CDR code without publishing bank wording', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    const key = snapshot.core!.sections.Mortgage.rates[0].product_key;
+    snapshot.details!.products = {
+      [key]: {
+        description: 'Loan', last_updated: '2026-01-01', links: { overview: 'https://example.com/o' },
+        fees: [{ label: 'EVENT', name: 'Unreviewed courier charge' }, { label: 'EVENT', name: 'Another unreviewed charge' }],
+        eligibility: [{ label: 'OTHER', info: 'Members of the Example Club only' }, { label: 'OTHER' }, { label: 'free text code', value: 'x' }],
+      },
+    } as never;
+    const metrics = byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+      APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS).metrics;
+    expect(metrics.renderedUnknownSourceAbsent).toBe(3);
+    expect(metrics.renderedSuppressedFeeNamesDistinct).toBe(2);
+    const breakdown = JSON.parse(String(metrics.renderedUnknownByCode)) as [string, number, number, number][];
+    expect(breakdown).toEqual(expect.arrayContaining([['Eligibility:OTHER', 2, 0, 1], ['Eligibility:NONSTANDARD', 1, 1, 0], ['Fees:EVENT', 2, 0, 0]]));
+    expect(String(metrics.renderedUnknownByCode)).not.toMatch(/Example Club|courier|free text/);
+  });
+
   it('counts unverified conditions that appear only in normalized facts', () => {
     const { snapshot, contract } = makeHealthyDataFixture();
     const key = snapshot.core!.sections.Mortgage.rates[0].product_key;
