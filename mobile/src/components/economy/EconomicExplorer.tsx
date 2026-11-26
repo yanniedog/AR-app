@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { ChipStrip } from '../selectors';
 
 import type {
   EconomicIndicatorId,
@@ -350,11 +351,11 @@ export function EconomicExplorer({
       </View>
 
       {expanded && expanded !== 'momentum' ? (
-        <Row gap={6} style={{ flexWrap: 'wrap', marginTop: 12 }}>
+        <ChipStrip style={{ marginTop: 12 }}>
           {WINDOWS.map((item) => (
             <Chip key={item} label={uiChartWindow(item)} selected={window === item} onPress={() => changeWindow(item)} />
           ))}
-        </Row>
+        </ChipStrip>
       ) : null}
 
       {expanded && data.indicators.some((item) => item.id === expanded) ? (

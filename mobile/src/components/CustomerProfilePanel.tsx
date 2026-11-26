@@ -9,6 +9,7 @@ import { CurrencyInput } from './CurrencyInput';
 import { AppText, Button, Chip, Disclosure, Row } from './ui';
 import { NegotiatedTermsEditor } from './NegotiatedTermsEditor';
 import { bindCustomerQuestion, type CustomerQuestionSource } from '../lib/customerQuestionBinding';
+import { ChipStrip } from './selectors';
 const STATES: readonly (readonly [AnswerState, UiLabel])[] = [['known', 'Entered'], ['unknown', 'Unknown'], ['unavailable', 'Unavailable'], ['not_applicable', 'Not applicable']];
 export function CustomerAnswerEditor({ definition: d, answer, productKey, disabled, onSave, questionSource }: {
   definition: InputDefinition; answer?: CustomerAnswer; productKey?: string; disabled: boolean; onSave: (answer: CustomerAnswer) => void; questionSource?: CustomerQuestionSource;
@@ -30,7 +31,7 @@ export function CustomerAnswerEditor({ definition: d, answer, productKey, disabl
   return <View style={{ gap: 8 }}>
     <AppText variant="small" weight="700">{label}</AppText>
     {answer ? <AppText variant="small" color="textMuted">{uiCustomerAnswer(answer, d)}</AppText> : null}
-    <Row gap={6} style={{ flexWrap: 'wrap' }}>{STATES.map(([key, text]) => <Chip key={key} label={text} selected={state === key} onPress={disabled ? undefined : () => setState(key)} />)}</Row>
+    <ChipStrip>{STATES.map(([key, text]) => <Chip key={key} label={text} selected={state === key} onPress={disabled ? undefined : () => setState(key)} />)}</ChipStrip>
     {state === 'known' ? d.type === 'boolean' ? <Row gap={6}>{([['true', 'Yes'], ['false', 'No']] as const).map(([v, text]) => <Chip key={v} label={text} selected={value === v} onPress={disabled ? undefined : () => setValue(v)} />)}</Row>
       : d.type === 'decimal' && d.unit === 'AUD' ? <CurrencyInput label={label} value={value} onChangeText={setValue} editable={!disabled} />
         : <LedgerField label={label} accessibilityLabel={label} value={value} onChangeText={setValue} editable={!disabled} autoCorrect={false} keyboardType={d.type === 'decimal' ? 'decimal-pad' : 'default'} /> : null}

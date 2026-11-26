@@ -123,6 +123,7 @@ export function Chip({
   icon?: keyof typeof Ionicons.glyphMap;
 }) {
   const theme = useTheme();
+  // The touch target keeps the 48 dp minimum; only the visible lozenge is compact.
   return (
     <TouchTarget
       onPress={onPress}
@@ -130,41 +131,43 @@ export function Chip({
       accessibilityLabel={label}
       accessibilityState={{ selected: !!selected }}
       hitSlop={0}
-      android_ripple={androidRipple(theme.colors.primaryMuted)}
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        minWidth: 48,
-        maxWidth: '100%',
-        paddingHorizontal: 12,
-        paddingVertical: 7,
-        borderRadius: theme.radius.pill,
-        // Unselected chips still need a visible control boundary to read as tappable.
-        borderWidth: 1,
-        borderColor: selected ? theme.ledger.eucalyptus : theme.ledger.controlRule,
-        backgroundColor: selected ? theme.colors.primaryMuted : theme.colors.surfaceAlt,
-        overflow: 'hidden',
-      }}
+      style={{ minWidth: 48, maxWidth: '100%', justifyContent: 'center', alignItems: 'stretch' }}
     >
-      {icon ? (
-        <Ionicons
-          name={icon}
-          size={14}
-          color={selected ? theme.colors.primary : theme.colors.chipText}
-        />
-      ) : null}
-      <Text
+      <View
         style={{
-          color: selected ? theme.colors.primary : theme.colors.chipText,
-          ...fontStyle(selected ? '600' : '500'),
-          fontSize: theme.font.small,
-          flexShrink: 1,
-          ...(Platform.OS === 'web' ? { overflowWrap: 'anywhere' } : {}),
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
+          minHeight: 30,
+          maxWidth: '100%',
+          paddingHorizontal: 12,
+          paddingVertical: 5,
+          borderRadius: 9,
+          // A soft fill marks the control as tappable without an outline.
+          backgroundColor: selected ? theme.colors.primaryMuted : theme.colors.surfaceAlt,
+          overflow: 'hidden',
         }}
       >
-        {label}
-      </Text>
+        {icon ? (
+          <Ionicons
+            name={icon}
+            size={14}
+            color={selected ? theme.colors.primary : theme.colors.textMuted}
+          />
+        ) : null}
+        <Text
+          style={{
+            color: selected ? theme.colors.primary : theme.colors.textMuted,
+            ...fontStyle(selected ? '600' : '500'),
+            fontSize: theme.font.small,
+            flexShrink: 1,
+            ...(Platform.OS === 'web' ? { overflowWrap: 'anywhere' } : {}),
+          }}
+        >
+          {label}
+        </Text>
+      </View>
     </TouchTarget>
   );
 }

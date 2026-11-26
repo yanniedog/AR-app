@@ -1,3 +1,4 @@
+import { DEFAULT_MORTGAGE_HORIZON_YEARS } from './projectionHorizons';
 import type { DetailItem, ProductDetail, RateRow } from '../types';
 import { advertisedTermMonths, calculatorAmount, calculatorYears, computeLvr } from './calc';
 import { percentageInputFraction } from './decisionInsights';
@@ -458,7 +459,7 @@ export function buildStaySwitchProjection({
     || target.rate_type?.toLowerCase().includes('fixed') === true;
   const publishedFixedMonths = targetIsFixed ? advertisedTermMonths(target) : null;
   const projectionInputs = scenario.projections.mortgage;
-  const comparisonMonths = Math.round(Number(projectionInputs.horizonYears || '3') * 12);
+  const comparisonMonths = Math.round(Number(projectionInputs.horizonYears || DEFAULT_MORTGAGE_HORIZON_YEARS) * 12);
   const currentFixed = projectionInputs.mortgageRateStructure === 'fixed';
   const currentFixedMonths = Math.round(Number(projectionInputs.fixedPeriodMonths));
   const modelMonths = Math.min(months, comparisonMonths, targetIsFixed && publishedFixedMonths ? publishedFixedMonths : months,

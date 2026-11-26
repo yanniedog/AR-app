@@ -6,13 +6,13 @@ import { resolvePublicRate } from '../src/data/publicRateResolver';
 import { AS_OF, programme, row } from '../testUtils/publicRateJourney';
 import { mortgageComparisonScenario } from '../src/data/mortgageComparisonScenario';
 
-it('defaults to three mortgage years, twelve savings months and quoted maturity, requiring an explicit variable-rate assumption', () => {
+it('defaults to five mortgage years, twelve savings months and quoted maturity, requiring an explicit variable-rate assumption', () => {
   const initial = normalizeUserRateScenario({ mortgage: { mode: 'refi', loanBalance: '500000', currentRate: '6', years: '25' },
     savings: { balance: '10000', currentRate: '4' }, termDeposit: { balance: '10000', currentRate: '4' }, projections: { termDeposit: { termMonths: '12' } } });
   expect(initial.projections.mortgage.horizonYears).toBe(''); expect(initial.projections.savings.horizonYears).toBe('');
   expect(buildLifecycleProjection('Mortgage', initial, new Date(AS_OF)).missing).toContain('explicit assumption to hold variable rates unchanged');
   initial.projections.mortgage.holdVariableRate = true; initial.projections.savings.holdVariableRate = true;
-  expect(buildLifecycleProjection('Mortgage', initial, new Date(AS_OF)).rateSeries[1].points).toHaveLength(37);
+  expect(buildLifecycleProjection('Mortgage', initial, new Date(AS_OF)).rateSeries[1].points).toHaveLength(61);
   expect(buildLifecycleProjection('Savings', initial, new Date(AS_OF)).rateSeries[1].points).toHaveLength(13);
   expect(buildLifecycleProjection('TD', initial, new Date(AS_OF)).rateSeries[1].points).toHaveLength(13);
   expect(initial.projections.termDeposit.rollovers).toBe('0');

@@ -1,5 +1,6 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
+import { ChipStrip } from './selectors';
 
 import type { Filters } from '../data/selectors';
 import type { SearchFilterOptions } from '../data/searchFilterOptions';
@@ -187,7 +188,7 @@ function FilterSheetInner({
     );
     return (
       <>
-        <Row gap={8} style={{ flexWrap: 'wrap' }}>
+        <ChipStrip>
           {shown.map((option) => (
             <Chip
               key={option}
@@ -196,7 +197,7 @@ function FilterSheetInner({
               onPress={() => onToggle(option)}
             />
           ))}
-        </Row>
+        </ChipStrip>
         {hidden > 0 ? (
           <Button
             title={uiJoin('Show', ' ', 'All', ' ', uiCount(options.length), ' ', noun)}
@@ -301,7 +302,7 @@ function FilterSheetInner({
                   <Chip label="Matches" selected={draft.factMatchMode !== 'unknown'} onPress={() => setDraft(value => ({ ...value, factMatchMode: 'matching' }))} />
                   <Chip label="Unknown" selected={draft.factMatchMode === 'unknown'} onPress={() => setDraft(value => ({ ...value, factMatchMode: 'unknown' }))} />
                 </Row>}
-                <Row gap={8} style={{ flexWrap: 'wrap' }}>
+                <ChipStrip>
                   {publishedDetails.map((option) => (
                     <Chip
                       key={option.id}
@@ -312,7 +313,7 @@ function FilterSheetInner({
                       onPress={() => toggleFactCriterion(option.id)}
                     />
                   ))}
-                </Row>
+                </ChipStrip>
                 {draft.factCriteria.map((criterion, index) => <FactCriterionEditor key={`${index}:${criterion.canonicalKey}:${criterion.sourceType}`}
                   criterion={criterion} onChange={value => setDraft(current => ({ ...current,
                     factCriteria: current.factCriteria.map((item, at) => at === index ? value : item) }))} />)}

@@ -7,7 +7,18 @@ import type { SectionKey } from '../src/types';
 
 jest.mock('../src/data/store', () => ({ useStore: (selector: (state: unknown) => unknown) => selector({ core: null }) }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ spacing: (n: number) => n * 4 }) }));
+jest.mock('../src/components/controls', () => ({ CompactToggle: 'CompactToggle' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Chip: 'Chip', Row: 'Row', Button: 'Button' }));
+
+jest.mock('../src/components/selectors', () => ({ OptionSelect: 'OptionSelect', OptionStrip: 'OptionStrip' }));
+/** Every selectable option rendered by the editor, as simple label/selected/press records. */
+function chips(root: any): any[] {
+  const fromList = (type: string) => root.findAllByType(type).flatMap((n: any) => n.props.options.map((o: any) => ({ props: {
+    label: o.label, selected: Array.isArray(n.props.value) ? n.props.value.includes(o.value) : n.props.value === o.value,
+    onPress: () => n.props.onChange(o.value) } })));
+  return [...fromList('OptionSelect'), ...fromList('OptionStrip'), ...root.findAllByType('CompactToggle').map((n: any) => ({ props: {
+    label: n.props.label, selected: n.props.value, onPress: () => n.props.onChange(!n.props.value) } }))];
+}
 
 it('preserves a feature shared with another category while resetting Home-loan requirements', () => {
   const mortgage = PROFILE_FEATURE_OPTIONS.Mortgage;
@@ -24,7 +35,7 @@ it.each(['Mortgage', 'Savings', 'TD'] as SectionKey[])('keeps unknown saved feat
   const change = jest.fn(); let tree: any;
   act(() => { tree = TestRenderer.create(<ProfileEditor sections={[section]} value={value} onChange={change} />); });
   try {
-    const legacy = tree.root.findAllByType('Chip').find((node: any) => node.props.label === 'LEGACY_FEATURE');
+    const legacy = chips(tree.root).find((node: any) => node.props.label === 'LEGACY_FEATURE');
     expect(legacy.props.selected).toBe(true);
     act(() => legacy.props.onPress());
     expect(change).toHaveBeenCalledWith({ ...value, accountFeatures: ['DIGITAL_BANKING'] });

@@ -1,3 +1,4 @@
+import { DEFAULT_MORTGAGE_HORIZON_YEARS } from './projectionHorizons';
 import { calculatorAmount, calculatorYears, computeLvr } from './calc';
 import { estimateEnteredRate } from './publicRateLocal';
 import type { ProjectionFrequency, ProjectionInputs } from './projectionScenario';
@@ -502,7 +503,7 @@ export function buildLifecycleProjection(
     const remainingMonths = Math.round(enteredYears * 12);
     const fixedRate = inputs.mortgageRateStructure === 'fixed';
     const fixedPeriodMonths = Math.round(cleanNumber(inputs.fixedPeriodMonths));
-    const comparisonMonths = Math.round(cleanNumber(inputs.horizonYears || '3') * 12);
+    const comparisonMonths = Math.round(cleanNumber(inputs.horizonYears || DEFAULT_MORTGAGE_HORIZON_YEARS) * 12);
     const months = Math.min(remainingMonths, comparisonMonths, fixedRate ? fixedPeriodMonths : remainingMonths);
     const missing = [
       ...(balance > 0 && balance <= MAX_MORTGAGE_BALANCE ? [] : ['current loan balance up to $100 million']),

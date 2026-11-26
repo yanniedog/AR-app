@@ -5,6 +5,7 @@ import { FLASH_LIST_DRAW_DISTANCE } from '../../src/lib/flashListDefaults';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { InteractionManager, ScrollView, useWindowDimensions, View } from 'react-native';
+import { ChipStrip } from '../../src/components/selectors';
 
 import { BankHistoryStatistics } from '../../src/components/BankHistoryStatistics';
 import { ProviderRateFilters } from '../../src/components/ProviderRateFilters';
@@ -738,7 +739,7 @@ export default function BankDetail() {
             <AppText variant="small" color="textMuted" style={{ marginBottom: 8 }}>
               {uiJoin(direction(focusEvent.dir),' · ',uiSectionName(focusSection),' · ',uiDate(focusEvent.date),focusRateCtx?uiJoin(' · ','Median',': ',formatRate(focusRateCtx.before),' → ',formatRate(focusRateCtx.after)):null)}
             </AppText>
-            <Row gap={8} style={{ marginBottom: 8, flexWrap: 'wrap' }}>
+            <ChipStrip style={{ marginBottom: 8 }}>
               <Chip
                 label={uiJoin(uiCount(focusEvent.moved),' / ',uiCount(focusEvent.total),' ','Products')}
                 selected={false}
@@ -747,7 +748,7 @@ export default function BankDetail() {
                 label={uiJoin('Average',': ',bpsLabel(focusEvent.avg_bps))}
                 selected
               />
-            </Row>
+            </ChipStrip>
             {!focusedMoves.length ? <AppText variant="small" color="textMuted">
               {uiLabel(productHistory ? 'No exact matches' : productHistoryError ? 'History unavailable' : 'Loading')}
             </AppText> : null}

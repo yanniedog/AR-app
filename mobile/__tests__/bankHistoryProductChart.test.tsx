@@ -12,6 +12,7 @@ type TestNode = {
 };
 
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Chip: 'Chip', Row: 'Row' }));
+jest.mock('../src/components/selectors', () => ({ OptionStrip: 'OptionStrip' }));
 jest.mock('../src/components/icons/AppIcon', () => ({ __esModule: true, default: 'AppIcon' }));
 jest.mock('../src/hooks/useReducedMotion', () => ({ useReducedMotion: () => true }));
 jest.mock('../src/theme/ThemeProvider', () => {
@@ -87,7 +88,9 @@ test('product history can change its window or show benchmarks with no product o
   try {
     const press = (label: string) => act(() => {
       const control = tree.root.findAllByProps({ label })[0];
-      (control.props.onPress as () => void)();
+      if (control) { (control.props.onPress as () => void)(); return; }
+      const strip: any = tree.root.findAllByType('OptionStrip' as never).find((node: any) => node.props.options.some((option: { label: string }) => option.label === label))!;
+      strip.props.onChange(strip.props.options.find((option: { label: string }) => option.label === label).value);
     });
     const slice = () => tree.root.findByType(ChartSliceControls).props;
     // Opens on a year with benchmarks shown, so the July observation is in range.
