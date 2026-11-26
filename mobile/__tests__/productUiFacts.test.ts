@@ -343,7 +343,7 @@ test('reviewed feature values read as plain lists; an unreviewed value reads Con
 test('normalized feature facts read reviewed values too', () => {
   const fact = { id: 'f', kind: 'feature', canonicalKey: 'feature.digital_wallet', sourceType: 'DIGITAL_WALLET', value: 'Apple Pay', unit: 'text' } as never;
   expect(uiNormalizedProductFact(fact).value).toBe('Apple Pay');
-  expect(uiNormalizedProductFact({ ...(fact as object), value: 'Free coffee' } as never).value).toBe('Unknown');
+  expect(uiNormalizedProductFact({ ...(fact as object), value: 'Free coffee' } as never)).toMatchObject({ value: 'Conditions apply', conditionsUnverified: true });
 });
 
 test('reviewed fee names from real captures are shown and conditional names stay hidden', () => {
@@ -356,13 +356,30 @@ test('reviewed fee names from real captures are shown and conditional names stay
 test('an unreviewed value never reaches the screen and always marks the conditions unverified', () => {
   const wallet = uiDetailItem({ label: 'DIGITAL_WALLET', value: 'Apple Pay and free coffee' }, 0, 'Features');
   expect(wallet).toMatchObject({ value: 'Conditions apply', conditionsUnverified: true });
-  expect(JSON.stringify(wallet)).not.toMatch(/coffee/);
+  expect(JSON.stringify(wallet)).not.toMatch(/coffee/i);
   const person = uiDetailItem({ label: 'NATURAL_PERSON', value: 'Individuals over 18 only' }, 0, 'Eligibility');
   expect(person).toMatchObject({ value: 'Required', conditionsUnverified: true });
-  expect(JSON.stringify(person)).not.toMatch(/over 18/);
+  expect(JSON.stringify(person)).not.toMatch(/over 18/i);
   // A reviewed value and a cashback offer keep their own rules.
   expect(uiDetailItem({ label: 'DIGITAL_WALLET', value: 'Apple Pay' }, 0, 'Features')).toMatchObject({ value: 'Apple Pay', conditionsUnverified: false });
   expect(uiDetailItem({ label: 'CASHBACK_OFFER', value: 'up to 3000' }, 0, 'Features').value).toBe('Unknown');
+  // A negative value never reads as an offer or a requirement.
+  for (const negative of ['No', 'no.', 'N/A', 'Not offered', 'Not available']) {
+    expect(uiDetailItem({ label: 'CARD_ACCESS', value: negative, info: 'No' }, 0, 'Features').value).toBe('Unknown');
+    expect(uiDetailItem({ label: 'NATURAL_PERSON', value: negative }, 0, 'Eligibility').value).not.toBe('Required');
+  }
   // A value on a criterion that is not presence-only stays Unknown.
   expect(uiDetailItem({ label: 'EMPLOYMENT_STATUS', value: 'Full-time with probation complete' }, 0, 'Eligibility').value).toBe('Unknown');
+});
+
+test('normalized facts follow the same unreviewed-value rule', () => {
+  const fact = (kind: string, sourceType: string, value: string) => uiNormalizedProductFact({ id: 'n', kind, canonicalKey: `${kind}.${sourceType.toLowerCase()}`, sourceType, unit: 'text', value, evidenceState: 'observed' } as never);
+  const wallet = fact('feature', 'DIGITAL_WALLET', 'Apple Pay and free coffee');
+  expect(wallet).toMatchObject({ value: 'Conditions apply', conditionsUnverified: true });
+  expect(JSON.stringify({ value: wallet.value, label: wallet.label })).not.toMatch(/coffee/i);
+  expect(fact('eligibility', 'NATURAL_PERSON', 'Individuals over 18 only')).toMatchObject({ value: 'Required', conditionsUnverified: true });
+  expect(fact('feature', 'DIGITAL_WALLET', 'Apple Pay')).toMatchObject({ value: 'Apple Pay', conditionsUnverified: false });
+  expect(fact('feature', 'CARD_ACCESS', 'No').value).toBe('Unknown');
+  expect(fact('feature', 'CASHBACK_OFFER', 'up to 3000').value).not.toBe('Conditions apply');
+  expect(fact('eligibility', 'EMPLOYMENT_STATUS', 'Full-time').value).not.toBe('Required');
 });
