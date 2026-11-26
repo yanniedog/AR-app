@@ -74,7 +74,8 @@ test('savings product chart shows market facts and cash rate across a missing pr
 });
 
 test('product history can change its window or show benchmarks with no product observations', () => {
-  const dates = ['2026-09-17', '2026-11-17'];
+  // The first observation is 123 days old: visible on the 1-year default, not on 90 or 30 days.
+  const dates = ['2026-07-17', '2026-11-17'];
   const points = dates.map((date) => ({ date, min: 0.04, max: 0.07, mean: 0.05, median: 0.05, count: 4 }));
   let tree!: ReactTestRenderer & { root: TestNode };
   act(() => {
@@ -89,7 +90,7 @@ test('product history can change its window or show benchmarks with no product o
       (control.props.onPress as () => void)();
     });
     const slice = () => tree.root.findByType(ChartSliceControls).props;
-    // Opens on a year with benchmarks shown, so the September observation is in range.
+    // Opens on a year with benchmarks shown, so the July observation is in range.
     expect(slice().facts).toContainEqual({ label: 'Market median', value: '5.00%' });
     act(() => slice().onChangeIndex(0));
     expect(slice().valueLabel).toBe('6.00%');
