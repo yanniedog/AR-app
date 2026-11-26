@@ -4,9 +4,9 @@ This directory pins the command-line tool used by the EAS build and submission w
 
 ## Security overrides
 
-`package.json` retains scoped security overrides for the EAS CLI dependency tree. With EAS CLI 27.9.0, the lockfile resolves `nanoid` 3.3.20, `tar` 7.5.22, `joi` 17.13.9, `yaml` 2.9.1 and `diff` 8.0.3. It has both a root `ajv` 8.18.0 and an EAS-local 8.20.0, and both a root `minimatch` 5.1.8 and an EAS-local 5.1.9. The `uuid` override targets CommonJS-compatible 11.1.1 for `@expo/bunyan`, `@expo/rudder-sdk-node`, and `xcode`.
+`package.json` retains scoped security overrides for the EAS CLI dependency tree. With EAS CLI 27.11.0, the lockfile resolves `nanoid` 3.3.20, `tar` 7.5.22, `joi` 17.13.9, `yaml` 2.9.1 and `diff` 8.0.3. It has both a root `ajv` 8.18.0 and an EAS-local 8.20.0, and both a root `minimatch` 5.1.8 and an EAS-local 5.1.9. The `uuid` override targets CommonJS-compatible 11.1.1 for `@expo/bunyan`, `@expo/rudder-sdk-node`, and `xcode`.
 
-The EAS 27.9.0 project generator expects the older callable default export of `ts-deepmerge`. The guarded compatibility command adapts the caller to the named `merge` export in the patched 8.0.0 release. It checks exact versions and caller source, is safe to repeat, and rejects unexpected drift. See [the compatibility policy](../../scripts/DEPENDENCY_COMPAT.md).
+The EAS 27.11.0 project generator, like 27.9.0, expects the older callable default export of `ts-deepmerge`. The guarded compatibility command adapts the caller to the named `merge` export in the patched 8.0.0 release. It checks exact versions and caller source, is safe to repeat, and rejects unexpected drift. See [the compatibility policy](../../scripts/DEPENDENCY_COMPAT.md).
 
 Keep each override until EAS CLI selects an equal or newer patched version. Keep overrides scoped to the affected dependency ranges and consumers. The jsdiff major update and UUID consumer overrides have behavioral compatibility tests. Compatible lockfile updates also retain the patched Moment, brace-expansion and fast-uri resolutions.
 
@@ -20,6 +20,6 @@ Run `npm ci --ignore-scripts --no-audit --no-fund && npm run compat && npm test`
 
 ## Licence review
 
-EAS CLI 27.9.0 selects `@expo/logger`, `@expo/steps`, and `@expo/turtle-spawn` at 27.9.0, with BUSL-1.1 licence metadata. The [EAS Build licence for this version](https://github.com/expo/eas-cli/blob/v27.9.0/LICENSE-BUSL) grants use provided the work is not used to offer a CI/CD or application-build service to third parties. AR-app uses these packages only to build and submit its own application, which is within that additional use grant.
+EAS CLI 27.11.0 selects `@expo/logger`, `@expo/steps`, and `@expo/turtle-spawn` at 27.11.0, with the same BUSL-1.1 licence metadata as 27.9.0. The [EAS Build licence reviewed at 27.9.0](https://github.com/expo/eas-cli/blob/v27.9.0/LICENSE-BUSL) grants use provided the work is not used to offer a CI/CD or application-build service to third parties. AR-app uses these packages only to build and submit its own application, which is within that additional use grant. Confirm the [27.11.0 licence text](https://github.com/expo/eas-cli/blob/v27.11.0/LICENSE-BUSL) carries the same grant when next reviewing this toolchain.
 
 Re-review the licence before using this toolchain to expose build functionality to third parties, redistributing the toolchain, or changing its role beyond first-party AR-app release automation.
