@@ -19,7 +19,7 @@ requires Node 24, and its CI and EAS build profiles pin Node 24, so install scri
 and release tooling satisfy that requirement.
 
 The isolated EAS CLI installs the published `ts-deepmerge@8.0.0` release, which
-fixes GHSA-87mf-gv2c-c62c. The EAS 27.9.0 project generator still imports the
+fixes GHSA-87mf-gv2c-c62c. The EAS 27.11.0 project generator, like 27.9.0, still imports the
 legacy callable default export. The EAS compatibility command changes only
 that caller to use the patched library's named `merge` export. It also accepts
 the previously reviewed 23.2.0, 24.7.0, 24.12.0 and 24.14.0 callers.

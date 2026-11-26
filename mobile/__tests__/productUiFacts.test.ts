@@ -242,8 +242,10 @@ test('repeated source entries are one fact and presence-only criteria read as re
   expect(dedupeDetailItems([entry, { ...entry }, { label: 'STAFF' }])).toHaveLength(2);
   expect(uiDetailItem(entry, 0, 'Eligibility')).toMatchObject({ label: 'Individual applicants', value: 'Required' });
   expect(uiDetailItem({ label: 'OFFSET' }, 0, 'Features')).toMatchObject({ value: 'Included' });
-  // Unparsed wording on a presence-only criterion keeps it Unknown rather than an unconditional Required.
-  expect(uiDetailItem({ label: 'BUSINESS', info: 'Primary producers only' }, 0, 'Eligibility')).toMatchObject({ value: 'Unknown', conditions: 'source-review-required' });
+  // Wording beside a presence-only criterion may narrow it, so it reads Required with conditions unverified.
+  expect(uiDetailItem({ label: 'BUSINESS', info: 'Primary producers only' }, 0, 'Eligibility'))
+    .toMatchObject({ value: 'Required', conditions: 'source-review-required', conditionsUnverified: true });
+  expect(uiDetailItem(entry, 0, 'Eligibility').conditionsUnverified).toBe(false);
 });
 
 test('OTHER entries use the controlled generic label and never the source name', () => {
@@ -309,9 +311,38 @@ test('ISO duration values on published criteria read as plain durations', () => 
   expect(read('P1DT2H')).toBe('1 day, 2 hours');
   expect(read('PT1M')).toBe('1 minute');
   expect(read('P2W')).toBe('2 weeks');
-  expect(read('P1W2D')).toBe('P1W2D');
+  expect(read('P1W2D')).toBe('Unknown');
   expect(read('P1.5Y2M')).not.toMatch(/year|month/);
   expect(read('P1YT')).not.toMatch(/year/);
+});
+
+test('reviewed feature values read as plain lists; any unreviewed token leaves the value unknown', () => {
+  const read = (value: string) => uiDetailItem({ label: 'DIGITAL_WALLET', value }, 0, 'Features').value;
+  expect(read('Apple Pay')).toBe('Apple Pay');
+  expect(read('Apple Pay and Google Pay')).toBe('Apple Pay, Google Pay');
+  expect(read('Apple Pay, Samsung Pay or Google Pay')).toBe('Apple Pay, Samsung Pay or Google Pay');
+  expect(uiDetailItem({ label: 'BILL_PAYMENT', value: 'BPAY' }, 0, 'Features').value).toBe('BPAY');
+  expect(uiDetailItem({ label: 'CARD_ACCESS', value: 'Visa Debit Card' }, 0, 'Features').value).toBe('Visa Debit card');
+  expect(read('Apple Pay and free coffee')).toBe('Unknown');
+  // A code-like value outside the reviewed list never renders as the raw token.
+  expect(read('UNREVIEWED_BANK_LABEL')).toBe('Unknown');
+  expect(uiDetailItem({ label: 'NOTIFICATIONS', value: 'SMS or Email' }, 0, 'Features').value).toBe('SMS or Email');
+  expect(read('Apple Pay, Samsung Pay and Google Pay or Garmin Pay')).toBe('Unknown');
+  // Inherited object keys are not reviewed values.
+  expect(read('constructor')).toBe('Unknown');
+  expect(read('Apple Pay and __proto__')).toBe('Unknown');
+  // Unreviewed wording beside a reviewed value keeps the conditions unverified.
+  expect(uiDetailItem({ label: 'DIGITAL_WALLET', value: 'Apple Pay', info: 'Eligible cards only' }, 0, 'Features').conditionsUnverified).toBe(true);
+  // A placeholder value is no value.
+  expect(uiDetailItem({ label: 'NATURAL_PERSON', value: 'null' }, 0, 'Eligibility').value).toBe('Required');
+  // The vocabulary applies to features only.
+  expect(uiDetailItem({ label: 'OTHER', value: 'Apple Pay' }, 0, 'Eligibility').value).toBe('Unknown');
+});
+
+test('normalized feature facts read reviewed values too', () => {
+  const fact = { id: 'f', kind: 'feature', canonicalKey: 'feature.digital_wallet', sourceType: 'DIGITAL_WALLET', value: 'Apple Pay', unit: 'text' } as never;
+  expect(uiNormalizedProductFact(fact).value).toBe('Apple Pay');
+  expect(uiNormalizedProductFact({ ...(fact as object), value: 'Free coffee' } as never).value).toBe('Unknown');
 });
 
 test('reviewed fee names from real captures are shown and conditional names stay hidden', () => {
