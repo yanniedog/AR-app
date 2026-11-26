@@ -450,6 +450,7 @@ export const UI_LABELS = [
   'All product variants', 'Upfront fee', 'Best gap',
   'Variation fee', 'Exit fee', 'Ongoing fee', 'Event fee', 'Transaction fee', 'Withdrawal fee', 'Deposit fee', 'Payment fee', 'Purchase fee', 'Variable fee', 'Other fee', 'Cash advance fee', 'Dishonour fee', 'Late payment fee', 'Enquiry fee', 'Replacement fee', 'Upfront per plan fee',
   'NPP payments', 'Notifications', 'Digital wallet', 'Fraud protection', 'Relationship management', 'Complementary product discounts', 'Additional cards', 'Loyalty program', 'Bonus rewards', 'Funds availability', 'Interest free', 'Interest free transfers', 'Balance transfers', 'Insurance', 'Instalment plan', 'Donate interest', 'Free transactions allowance', 'Opening balance', 'Staff applicants', 'Minimum turnover',
+  'hour', 'hours', 'minute', 'minutes', 'second',
   'Other criterion', 'Other feature', 'None published', 'Bank updated', 'No published restriction', 'Not extracted', 'Overview', 'Fee schedule', 'Eligibility page', 'Official page',
   'Detail gaps', 'Rendered gaps', 'Raw codes', 'Duplicates', 'Suppressed names', 'Companion channels', 'Channel published', 'Channel absent', 'Browse rates', 'Trends', 'Decreases', 'Big four', 'All banks', 'Search banks', 'Full', 'Show fewer',
 ] as const;
