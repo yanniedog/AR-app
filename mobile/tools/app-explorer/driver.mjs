@@ -236,8 +236,9 @@ function shiftedBetween(prevNodes, nodes) {
  */
 async function settle(timeoutMs, since = Date.now(), before = null, { scrolling = false, until } = {}) {
   const start = since;
+  const deadline = start + timeoutMs;
   let prev = null;
-  let last = { nodes: [] };
+  let last = { xml: '', nodes: [] };
   let stableSince = null;
   let firstSeen = start;
   let responseMs = null;
@@ -247,6 +248,8 @@ async function settle(timeoutMs, since = Date.now(), before = null, { scrolling 
   let shifts = 0;
   let dumps = 0;
   let dumpTotal = 0;
+  let failedDumps = 0;
+  let finalBackSample = false;
   const metrics = () => {
     if (loadStart != null) maxLoadingMs = Math.max(maxLoadingMs, Date.now() - loadStart);
     return {
@@ -258,14 +261,27 @@ async function settle(timeoutMs, since = Date.now(), before = null, { scrolling 
       errorState: errorStateOf(last.nodes),
       waitedMs: Date.now() - start,
       dumpMs: dumps ? Math.round(dumpTotal / dumps) : 0,
+      failedDumps,
     };
   };
-  while (Date.now() - start < timeoutMs) {
+  while (Date.now() < deadline || (until && !finalBackSample)) {
     const dumpStarted = Date.now();
-    const prevNodes = last.nodes;
-    last = await dumpUi(until ? start + timeoutMs : undefined);
+    // A dump started near the deadline may spend its entire budget in adb.
+    // Allow one bounded observation to verify an explicit back destination.
+    const late = dumpStarted >= deadline;
+    if (late) finalBackSample = true;
+    const sample = await dumpUi(until ? (late ? dumpStarted + 5000 : deadline) : undefined);
     dumps += 1;
     dumpTotal += Date.now() - dumpStarted;
+    if (!sample.xml) {
+      failedDumps += 1;
+      prev = null;
+      stableSince = null;
+      if (!late) await sleep(150);
+      continue;
+    }
+    const prevNodes = last.nodes;
+    last = sample;
     if (dismissSystemDialog(last.nodes)) {
       prev = null;
       await sleep(800);
@@ -283,9 +299,12 @@ async function settle(timeoutMs, since = Date.now(), before = null, { scrolling 
       loadStart = null;
     }
     if (fp !== prev) firstSeen = dumpStarted;
+    if (until && !loading && until(last.nodes)) {
+      return { ...last, settleMs: Math.max(0, firstSeen - start), timedOut: false, ...metrics() };
+    }
     if (fp === prev && !loading && last.nodes.length > 0) {
       stableSince ??= Date.now();
-      if (Date.now() - stableSince >= 600 && (!until || until(last.nodes))) {
+      if (!until && Date.now() - stableSince >= 600) {
         return { ...last, settleMs: Math.max(0, firstSeen - start), timedOut: false, ...metrics() };
       }
     } else {
@@ -509,6 +528,7 @@ class Explorer {
       shifts: settled.shifts || undefined,
       errorState: this.sessionFlag && settled.errorState ? settled.errorState : undefined,
       dumpMs: settled.dumpMs,
+      failedUiDumps: settled.failedDumps || undefined,
       session: this.sessionFlag || undefined,
       alive: Boolean(pid),
       anr: appAnr || undefined,
@@ -884,9 +904,9 @@ class Explorer {
       for (let i = 0; i < (step.times ?? 1); i += 1) sh('input keyevent 4');
       const rec = await this.record(label, {}, undefined, t0, until);
       if (rec.alive && until && !until(this.current.nodes)) {
-        rec.error = 'Back destination was not observed';
+        rec.error = this.current.xml ? 'Back destination was not observed' : 'UI hierarchy unavailable while verifying back destination';
       }
-      if (step.session && rec.responseMs == null && rec.alive) rec.deadEnd = true;
+      if (step.session && rec.responseMs == null && rec.alive && this.current.xml) rec.deadEnd = true;
       return rec;
     }
     if (step.key) {
@@ -1007,6 +1027,7 @@ function renderMarkdown(report, baseline) {
       !s.alive && 'CRASH',
       s.anr && 'ANR',
       s.settleTimedOut && 'no settle',
+      s.failedUiDumps && `${s.failedUiDumps} UI dump failures`,
       s.error,
       s.log.errors.length && `${s.log.errors.length} errors`,
       s.activityStartMs && `start ${s.activityStartMs}ms`,
