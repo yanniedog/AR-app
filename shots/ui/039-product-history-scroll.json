@@ -1,0 +1,245 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Term Deposit",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Term deposits · 1 year · 43 Observed · 28 Nov 2026 · Term Deposit 5.35% · Leading advertised · All tiers · Min 0% · Medi",
+  "at": [
+   360,
+   201
+  ]
+ },
+ {
+  "label": "28 Nov 2026",
+  "at": [
+   360,
+   236
+  ]
+ },
+ {
+  "label": "Previous date",
+  "flags": "tap",
+  "at": [
+   80,
+   356
+  ]
+ },
+ {
+  "label": "5.35% · Leading advertised · All tiers",
+  "at": [
+   360,
+   296
+  ]
+ },
+ {
+  "label": "Market rate range · 0% – 5.80%",
+  "at": [
+   360,
+   356
+  ]
+ },
+ {
+  "label": "Market median · 4.00%",
+  "at": [
+   360,
+   396
+  ]
+ },
+ {
+  "label": "Next date",
+  "flags": "tap,off",
+  "at": [
+   640,
+   356
+  ]
+ },
+ {
+  "label": "Market mean · 3.64%",
+  "at": [
+   360,
+   436
+  ]
+ },
+ {
+  "label": "RBA cash rate · 4.85%",
+  "at": [
+   360,
+   476
+  ]
+ },
+ {
+  "label": "Missing observations: 157 · Unknown",
+  "at": [
+   360,
+   516
+  ]
+ },
+ {
+  "label": "Product rate",
+  "at": [
+   165,
+   572
+  ]
+ },
+ {
+  "label": "Market rate range",
+  "at": [
+   430,
+   572
+  ]
+ },
+ {
+  "label": "Market median",
+  "at": [
+   181,
+   636
+  ]
+ },
+ {
+  "label": "Market mean",
+  "at": [
+   436,
+   636
+  ]
+ },
+ {
+  "label": "RBA cash rate",
+  "at": [
+   175,
+   700
+  ]
+ },
+ {
+  "label": "Show Product facts",
+  "flags": "tap",
+  "at": [
+   360,
+   929
+  ]
+ },
+ {
+  "label": "Product facts",
+  "at": [
+   328,
+   929
+  ]
+ },
+ {
+  "label": "Show Documents",
+  "flags": "tap",
+  "at": [
+   360,
+   1170
+  ]
+ },
+ {
+  "label": "Documents",
+  "at": [
+   328,
+   1170
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   360,
+   1334
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   286,
+   1379
+  ]
+ },
+ {
+  "label": "Unverified",
+  "at": [
+   626,
+   1379
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

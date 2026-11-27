@@ -1,0 +1,271 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Previous date",
+  "flags": "tap",
+  "at": [
+   80,
+   268
+  ]
+ },
+ {
+  "label": "6.34% · Leading advertised · All tiers",
+  "at": [
+   360,
+   223
+  ]
+ },
+ {
+  "label": "Market rate range · 5.94% – 11.7%",
+  "at": [
+   360,
+   268
+  ]
+ },
+ {
+  "label": "Market median · 7.19%",
+  "at": [
+   360,
+   308
+  ]
+ },
+ {
+  "label": "Next date",
+  "flags": "tap,off",
+  "at": [
+   640,
+   268
+  ]
+ },
+ {
+  "label": "Market mean · 7.53%",
+  "at": [
+   360,
+   348
+  ]
+ },
+ {
+  "label": "RBA cash rate · 4.85%",
+  "at": [
+   360,
+   388
+  ]
+ },
+ {
+  "label": "Missing observations: 10 · Unknown",
+  "at": [
+   360,
+   428
+  ]
+ },
+ {
+  "label": "Product rate",
+  "at": [
+   165,
+   484
+  ]
+ },
+ {
+  "label": "Market rate range",
+  "at": [
+   430,
+   484
+  ]
+ },
+ {
+  "label": "Market median",
+  "at": [
+   181,
+   548
+  ]
+ },
+ {
+  "label": "Market mean",
+  "at": [
+   436,
+   548
+  ]
+ },
+ {
+  "label": "RBA cash rate",
+  "at": [
+   175,
+   612
+  ]
+ },
+ {
+  "label": "Hide Product facts",
+  "flags": "tap",
+  "at": [
+   360,
+   841
+  ]
+ },
+ {
+  "label": "Product facts",
+  "at": [
+   328,
+   841
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   360,
+   941
+  ]
+ },
+ {
+  "label": "Digital banking",
+  "at": [
+   190,
+   997
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   1017
+  ]
+ },
+ {
+  "label": "Early / extra repayments",
+  "at": [
+   190,
+   1097
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   1117
+  ]
+ },
+ {
+  "label": "Loyalty program",
+  "at": [
+   190,
+   1197
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   1217
+  ]
+ },
+ {
+  "label": "Other feature",
+  "at": [
+   190,
+   1297
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   1317
+  ]
+ },
+ {
+  "label": "Other feature",
+  "at": [
+   190,
+   1385
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   1385
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

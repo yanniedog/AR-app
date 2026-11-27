@@ -1,0 +1,215 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   208
+  ]
+ },
+ {
+  "label": "Other feature",
+  "at": [
+   190,
+   259
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   279
+  ]
+ },
+ {
+  "label": "Other feature",
+  "at": [
+   190,
+   359
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   379
+  ]
+ },
+ {
+  "label": "Redraw facility",
+  "at": [
+   190,
+   459
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   479
+  ]
+ },
+ {
+  "label": "Show Documents",
+  "flags": "tap",
+  "at": [
+   360,
+   728
+  ]
+ },
+ {
+  "label": "Documents",
+  "at": [
+   328,
+   728
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   360,
+   892
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   286,
+   944
+  ]
+ },
+ {
+  "label": "Unverified",
+  "at": [
+   626,
+   944
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   273,
+   996
+  ]
+ },
+ {
+  "label": "Unassessed",
+  "at": [
+   613,
+   996
+  ]
+ },
+ {
+  "label": "Show Recorded criteria",
+  "flags": "tap",
+  "at": [
+   360,
+   1161
+  ]
+ },
+ {
+  "label": "Recorded criteria",
+  "at": [
+   328,
+   1161
+  ]
+ },
+ {
+  "label": "Show Mortgage · History",
+  "flags": "tap",
+  "at": [
+   360,
+   1365
+  ]
+ },
+ {
+  "label": "Mortgage · History",
+  "at": [
+   328,
+   1385
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

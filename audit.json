@@ -1,0 +1,45 @@
+{
+  "kind": "live",
+  "url": "https://paste.c-net.org/d1e80a0c-6392-407c-724f-1cd25c83425e",
+  "outcome": null,
+  "elapsedMs": 1005690,
+  "visibleOutcome": [
+    "Navigate up",
+    "App health audit",
+    "Account",
+    "HTTP restrictions",
+    "302",
+    "HTTP redirects",
+    "0",
+    "Rejected addresses",
+    "6",
+    "HTTP not attempted",
+    "6",
+    "HTTP attempt evidence missing",
+    "0",
+    "Unverified links",
+    "625",
+    "Executed",
+    "2,881 / 2,883",
+    "Verified upload",
+    "Verified upload",
+    "Uploaded"
+  ],
+  "logStatus": 200,
+  "logContentUrl": "https://paste.c-net.org/d1e80a0c-6392-407c-724f-1cd25c83425e",
+  "logBytes": 856161,
+  "sourceDuplicateItemsRemoved": 137,
+  "completion": {
+    "outcome": "failed",
+    "collectionComplete": true,
+    "coverageComplete": false,
+    "detailsComplete": true
+  },
+  "debugLog": {
+    "url": "https://paste.c-net.org/338ca767-2586-61fa-d618-c98352e5a5c6",
+    "uploadMs": 29240,
+    "status": 200,
+    "contentUrl": "https://paste.c-net.org/338ca767-2586-61fa-d618-c98352e5a5c6",
+    "bytes": 5658735
+  }
+}

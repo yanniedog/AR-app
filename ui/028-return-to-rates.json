@@ -1,0 +1,577 @@
+[
+ {
+  "label": "Rates",
+  "at": [
+   361,
+   149
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   673,
+   149
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   277
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "sel",
+  "at": [
+   133,
+   275
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   277
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   275
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   277
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   275
+  ]
+ },
+ {
+  "label": "Search",
+  "flags": "tap",
+  "at": [
+   386,
+   399
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "flags": "tap",
+  "at": [
+   80,
+   521
+  ]
+ },
+ {
+  "label": "Filter",
+  "at": [
+   80,
+   543
+  ]
+ },
+ {
+  "label": "Sort · Comparison rate",
+  "flags": "tap",
+  "at": [
+   223,
+   521
+  ]
+ },
+ {
+  "label": "Comparison",
+  "at": [
+   223,
+   543
+  ]
+ },
+ {
+  "label": "Compare",
+  "flags": "tap",
+  "at": [
+   386,
+   521
+  ]
+ },
+ {
+  "label": "Compare",
+  "at": [
+   386,
+   543
+  ]
+ },
+ {
+  "label": "Lenders",
+  "flags": "tap",
+  "at": [
+   524,
+   521
+  ]
+ },
+ {
+  "label": "Lenders",
+  "at": [
+   524,
+   543
+  ]
+ },
+ {
+  "label": "Search actions",
+  "flags": "tap",
+  "at": [
+   640,
+   521
+  ]
+ },
+ {
+  "label": "More",
+  "at": [
+   640,
+   543
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   989
+  ]
+ },
+ {
+  "label": "View Virgin Money · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   362
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.36%, Advertised rate 6.34% · Variable · Principal & interes",
+  "flags": "tap",
+  "at": [
+   384,
+   362
+  ]
+ },
+ {
+  "label": "Virgin · Virgin Money Lite Home Loan",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   320
+  ]
+ },
+ {
+  "label": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.36%, Listed LVR >70.0%–80.0%",
+  "id": "rate-save:Virgin%20Money%7C5bc12280-2272-ee11-8179-6045bd3d38f0%7CRESIDENTIAL_MORTGAGES%7CVirgin%20Money%20Lite%20Home%20Loan:151",
+  "flags": "tap",
+  "at": [
+   640,
+   354
+  ]
+ },
+ {
+  "label": "View MoveBank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   434
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I No Offset Mortgage, MoveBank, Comparison rate 6.39%, Advertised rate 6.64% · Fixed · 5 yrs · Principa",
+  "flags": "tap",
+  "at": [
+   384,
+   434
+  ]
+ },
+ {
+  "label": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   392
+  ]
+ },
+ {
+  "label": "Save, Owner Occupier P&I No Offset Mortgage, MoveBank, Comparison rate 6.39%",
+  "id": "rate-save:MoveBank%7Cc97be183-2fcb-4743-954a-91d9e7fe461c%7CRESIDENTIAL_MORTGAGES%7COwner%20Occupier%20P%26I%20No%20Offset%20Mortgage:11",
+  "flags": "tap",
+  "at": [
+   640,
+   426
+  ]
+ },
+ {
+  "label": "View MoveBank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   506
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I With Offset Mortgage, MoveBank, Comparison rate 6.39%, Advertised rate 6.69% · Fixed · 1 yr · Princip",
+  "flags": "tap",
+  "at": [
+   384,
+   506
+  ]
+ },
+ {
+  "label": "MoveBank · Owner Occupier P&I With Offset Mortgage",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   464
+  ]
+ },
+ {
+  "label": "Save, Owner Occupier P&I With Offset Mortgage, MoveBank, Comparison rate 6.39%",
+  "id": "rate-save:MoveBank%7C1dd4df6f-8930-40a8-978e-ab9077898480%7CRESIDENTIAL_MORTGAGES%7COwner%20Occupier%20P%26I%20With%20Offset%20Mortgage:3",
+  "flags": "tap",
+  "at": [
+   640,
+   498
+  ]
+ },
+ {
+  "label": "View Unity Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   578
+  ]
+ },
+ {
+  "label": "Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Comparison rate 6.39%, Advertised rate 6.3",
+  "flags": "tap",
+  "at": [
+   384,
+   578
+  ]
+ },
+ {
+  "label": "Unity Bank · Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   536
+  ]
+ },
+ {
+  "label": "Save, Momentum Home Loan 60-80LVR - Owner Occupier - Variable - P&I SO, Unity Bank, Comparison rate 6.39%",
+  "id": "rate-save:Unity%20Bank%7CL23_60-80LVR_OCC_PRIN%7CRESIDENTIAL_MORTGAGES%7CMomentum%20Home%20Loan%2060-80LVR%20-%20Owner%20Occupier%20-%20Variable%20-%20P%26I%20SO:1",
+  "flags": "tap",
+  "at": [
+   640,
+   570
+  ]
+ },
+ {
+  "label": "View Virgin Money · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   651
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.41%, Advertised rate 6.89% · Fixed · 1 yr · Principal & int",
+  "flags": "tap",
+  "at": [
+   384,
+   651
+  ]
+ },
+ {
+  "label": "Virgin · Virgin Money Lite Home Loan",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   610
+  ]
+ },
+ {
+  "label": "Save, Virgin Money Lite Home Loan, Virgin Money, Comparison rate 6.41%, Listed LVR >70.0%–80.0%",
+  "id": "rate-save:Virgin%20Money%7C5bc12280-2272-ee11-8179-6045bd3d38f0%7CRESIDENTIAL_MORTGAGES%7CVirgin%20Money%20Lite%20Home%20Loan:7",
+  "flags": "tap",
+  "at": [
+   640,
+   651
+  ]
+ },
+ {
+  "label": "View MoveBank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   795
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I With Offset Mortgage, MoveBank, Comparison rate 6.43%, Advertised rate 6.69% · Fixed · 2 yrs · Princi",
+  "flags": "tap",
+  "at": [
+   384,
+   795
+  ]
+ },
+ {
+  "label": "MoveBank · Owner Occupier P&I With Offset Mortgage",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   754
+  ]
+ },
+ {
+  "label": "Save, Owner Occupier P&I With Offset Mortgage, MoveBank, Comparison rate 6.43%",
+  "id": "rate-save:MoveBank%7C1dd4df6f-8930-40a8-978e-ab9077898480%7CRESIDENTIAL_MORTGAGES%7COwner%20Occupier%20P%26I%20With%20Offset%20Mortgage:2",
+  "flags": "tap",
+  "at": [
+   640,
+   795
+  ]
+ },
+ {
+  "label": "1–20 / 1,191 rates",
+  "at": [
+   148,
+   911
+  ]
+ },
+ {
+  "label": "Rates per page",
+  "at": [
+   125,
+   967
+  ]
+ },
+ {
+  "label": "10",
+  "flags": "tap",
+  "at": [
+   190,
+   1051
+  ]
+ },
+ {
+  "label": "10",
+  "at": [
+   190,
+   1049
+  ]
+ },
+ {
+  "label": "20",
+  "flags": "tap,sel",
+  "at": [
+   530,
+   1051
+  ]
+ },
+ {
+  "label": "20",
+  "at": [
+   530,
+   1049
+  ]
+ },
+ {
+  "label": "Page 1",
+  "flags": "tap,sel,off",
+  "at": [
+   138,
+   1165
+  ]
+ },
+ {
+  "label": "1",
+  "at": [
+   138,
+   1165
+  ]
+ },
+ {
+  "label": "Page 2",
+  "flags": "tap",
+  "at": [
+   242,
+   1165
+  ]
+ },
+ {
+  "label": "2",
+  "at": [
+   242,
+   1166
+  ]
+ },
+ {
+  "label": "Page 3",
+  "flags": "tap",
+  "at": [
+   346,
+   1165
+  ]
+ },
+ {
+  "label": "3",
+  "at": [
+   346,
+   1166
+  ]
+ },
+ {
+  "label": "Page 4",
+  "flags": "tap",
+  "at": [
+   450,
+   1165
+  ]
+ },
+ {
+  "label": "4",
+  "at": [
+   450,
+   1166
+  ]
+ },
+ {
+  "label": "Page 60",
+  "flags": "tap",
+  "at": [
+   583,
+   1165
+  ]
+ },
+ {
+  "label": "60",
+  "at": [
+   583,
+   1166
+  ]
+ },
+ {
+  "label": "First page",
+  "flags": "tap,off",
+  "at": [
+   84,
+   1278
+  ]
+ },
+ {
+  "label": "First",
+  "at": [
+   84,
+   1279
+  ]
+ },
+ {
+  "label": "Previous page",
+  "flags": "tap,off",
+  "at": [
+   279,
+   1278
+  ]
+ },
+ {
+  "label": "Previous",
+  "at": [
+   279,
+   1279
+  ]
+ },
+ {
+  "label": "Next page",
+  "flags": "tap",
+  "at": [
+   474,
+   1278
+  ]
+ },
+ {
+  "label": "Next",
+  "at": [
+   474,
+   1279
+  ]
+ },
+ {
+  "label": "Last page",
+  "flags": "tap",
+  "at": [
+   638,
+   1278
+  ]
+ },
+ {
+  "label": "Last",
+  "at": [
+   638,
+   1279
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

@@ -1,0 +1,398 @@
+[
+ {
+  "label": "Rates",
+  "at": [
+   361,
+   149
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   673,
+   149
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap",
+  "at": [
+   134,
+   277
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   275
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap,sel",
+  "at": [
+   360,
+   277
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "sel",
+  "at": [
+   360,
+   275
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   277
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   275
+  ]
+ },
+ {
+  "label": "Search",
+  "flags": "tap",
+  "at": [
+   386,
+   399
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "flags": "tap",
+  "at": [
+   80,
+   521
+  ]
+ },
+ {
+  "label": "Filter",
+  "at": [
+   80,
+   543
+  ]
+ },
+ {
+  "label": "Sort · Ongoing rate",
+  "flags": "tap",
+  "at": [
+   211,
+   521
+  ]
+ },
+ {
+  "label": "Ongoing",
+  "at": [
+   211,
+   543
+  ]
+ },
+ {
+  "label": "Compare",
+  "flags": "tap",
+  "at": [
+   363,
+   521
+  ]
+ },
+ {
+  "label": "Compare",
+  "at": [
+   363,
+   543
+  ]
+ },
+ {
+  "label": "Lenders",
+  "flags": "tap",
+  "at": [
+   512,
+   521
+  ]
+ },
+ {
+  "label": "Lenders",
+  "at": [
+   512,
+   543
+  ]
+ },
+ {
+  "label": "Search actions",
+  "flags": "tap",
+  "at": [
+   640,
+   521
+  ]
+ },
+ {
+  "label": "More",
+  "at": [
+   640,
+   543
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   989
+  ]
+ },
+ {
+  "label": "View Bank First · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   657
+  ]
+ },
+ {
+  "label": "Strong Start Saver, Bank First, Rate 5.90%, Ongoing · $0–$50k, Tier #1, Best advertised ↑ 25 bps · 2 days ago, Freshness",
+  "flags": "tap",
+  "at": [
+   384,
+   657
+  ]
+ },
+ {
+  "label": "BFirst · Strong Start Saver",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   616
+  ]
+ },
+ {
+  "label": "Save, Strong Start Saver, Bank First, Rate 5.90%",
+  "id": "rate-save:Bank%20First%7Cf1d7c8a4-9e63-4b2f-8a71-c5e904d2b6ef%7CTRANS_AND_SAVINGS_ACCOUNTS%7CStrong%20Start%20Saver:1",
+  "flags": "tap",
+  "at": [
+   640,
+   657
+  ]
+ },
+ {
+  "label": "View AMP Bank GO · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   801
+  ]
+ },
+ {
+  "label": "AMP Bank GO Save, AMP Bank GO, Rate 5.75%, Ongoing · $0–$50k, Tier #1, Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   384,
+   801
+  ]
+ },
+ {
+  "label": "AMP Go · AMP Bank GO Save",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   760
+  ]
+ },
+ {
+  "label": "Save, AMP Bank GO Save, AMP Bank GO, Rate 5.75%",
+  "id": "rate-save:AMP%20Bank%20GO%7C3886c579-2875-4c1d-99ae-03ab10b2d4ae%7CTRANS_AND_SAVINGS_ACCOUNTS%7CAMP%20Bank%20GO%20Save:1",
+  "flags": "tap",
+  "at": [
+   640,
+   801
+  ]
+ },
+ {
+  "label": "View Easy Street · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   945
+  ]
+ },
+ {
+  "label": "Flex Saver, Easy Street, Rate 5.55%, Ongoing · $0–$3m · Conditions: Unverified, Tier #1, Best advertised ↑ 25 bps · 20 N",
+  "flags": "tap",
+  "at": [
+   384,
+   945
+  ]
+ },
+ {
+  "label": "Easy Street · Flex Saver",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   904
+  ]
+ },
+ {
+  "label": "Save, Flex Saver, Easy Street, Rate 5.55%",
+  "id": "rate-save:Easy%20Street%7CS37-FS%7CTRANS_AND_SAVINGS_ACCOUNTS%7CFlex%20Saver:1",
+  "flags": "tap",
+  "at": [
+   640,
+   945
+  ]
+ },
+ {
+  "label": "View Revolut · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1089
+  ]
+ },
+ {
+  "label": "Revolut Instant Access Savings, Revolut, Rate 5.55%, Ongoing · $0–$250k · Conditions: Unverified, Tier #7, Best advertis",
+  "flags": "tap",
+  "at": [
+   384,
+   1089
+  ]
+ },
+ {
+  "label": "Revolut · Revolut Instant Access Savings",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1048
+  ]
+ },
+ {
+  "label": "Save, Revolut Instant Access Savings, Revolut, Rate 5.55%",
+  "id": "rate-save:Revolut%7C550e8400-e29b-41d4-a716-446655440003%7CTRANS_AND_SAVINGS_ACCOUNTS%7CRevolut%20Instant%20Access%20Savings:7",
+  "flags": "tap",
+  "at": [
+   640,
+   1089
+  ]
+ },
+ {
+  "label": "View Bankwest · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1233
+  ]
+ },
+ {
+  "label": "Bankwest Easy Saver, Bankwest, Rate 5.50%, Ongoing · $0–$250k · Conditions: Unverified, Tier #4, Best advertised ↑ 575 b",
+  "flags": "tap",
+  "at": [
+   384,
+   1233
+  ]
+ },
+ {
+  "label": "BW · Bankwest Easy Saver",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1192
+  ]
+ },
+ {
+  "label": "Save, Bankwest Easy Saver, Bankwest, Rate 5.50%",
+  "id": "rate-save:Bankwest%7Cd10438974ab8417bab388149da5053bb%7CTRANS_AND_SAVINGS_ACCOUNTS%7CBankwest%20Easy%20Saver:4",
+  "flags": "tap",
+  "at": [
+   640,
+   1233
+  ]
+ },
+ {
+  "label": "View Macquarie Bank Limited · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1353
+  ]
+ },
+ {
+  "label": "Macquarie Savings Account, Macquarie Bank Limited, Rate 5.50%, Ongoing · $0–$25k, Tier #1, Best advertised ↑ 25 bps · 20",
+  "flags": "tap",
+  "at": [
+   384,
+   1353
+  ]
+ },
+ {
+  "label": "Macq · Macquarie Savings Account",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1336
+  ]
+ },
+ {
+  "label": "Save, Macquarie Savings Account, Macquarie Bank Limited, Rate 5.50%, Balance $0–$25k",
+  "id": "rate-save:Macquarie%20Bank%20Limited%7CSV001MBLSAV001%7CTRANS_AND_SAVINGS_ACCOUNTS%7CMacquarie%20Savings%20Account:1",
+  "flags": "tap",
+  "at": [
+   640,
+   1361
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
