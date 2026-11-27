@@ -6,17 +6,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { appNodes, bottomBarTop, keyboardTop } from './ux-checks.mjs';
+import { isShotRoute } from './shot-route.cjs';
 
 const out = process.argv[2] || 'explorer-out/shots';
 const here = path.dirname(new URL(import.meta.url).pathname);
 const manifest = JSON.parse(fs.readFileSync(path.join(here, 'shots.json'), 'utf8')).slice(0, 20);
 // Manifest values reach adb and the issue body, so only plain, bounded values are accepted.
 const validLabel = label => typeof label === 'string' && /^[a-z0-9 &-]{1,60}$/i.test(label);
-const plainRoute = /^\/[a-z0-9-]+(\/[a-z0-9-]+)*(\?[a-z0-9=&_-]*)?$/i;
-const historyRoute = /^\/(?:bank|product)\/(?:[a-z0-9_-]|%20|%7c)+$/i;
 for (const s of manifest) {
   if (!/^[a-z0-9-]{1,40}$/.test(s.name)) throw new Error(`bad shot name: ${s.name}`);
-  if (!plainRoute.test(s.open) && !historyRoute.test(s.open)) throw new Error(`bad shot route: ${s.open}`);
+  if (!isShotRoute(s.open)) throw new Error(`bad shot route: ${s.open}`);
   if (s.scroll !== undefined && !(Number.isInteger(s.scroll) && s.scroll >= 0 && s.scroll <= 10)) throw new Error(`bad shot scroll: ${s.scroll}`);
   if (s.taps !== undefined && (!Array.isArray(s.taps) || s.taps.length > 3 || !s.taps.every(validLabel))) throw new Error(`bad shot taps: ${s.name}`);
   if (s.visibleAction !== undefined && !validLabel(s.visibleAction)) throw new Error(`bad shot action: ${s.name}`);
