@@ -72,9 +72,14 @@ export function appNodes(nodes, pkg) {
  */
 function clippedByScroller(n, scrollers, app) {
   const h = n.bounds[3] - n.bounds[1];
-  return scrollers.some(c => c !== n && contains(c.bounds, n.bounds, 0)
-    && (Math.abs(n.bounds[1] - c.bounds[1]) <= 2 || Math.abs(n.bounds[3] - c.bounds[3]) <= 2)
-    && app.some(o => o !== n && o.cls === n.cls && o.bounds[3] - o.bounds[1] > h + 2 && contains(c.bounds, o.bounds, 0)));
+  const w = n.bounds[2] - n.bounds[0];
+  // Cut off at a vertical scroller's top or bottom edge, or a sideways strip's left or right
+  // edge: the sliver is reported, while unclipped siblings of the same kind show the full size.
+  return scrollers.some(c => c !== n && contains(c.bounds, n.bounds, 0) && (
+    (Math.abs(n.bounds[1] - c.bounds[1]) <= 2 || Math.abs(n.bounds[3] - c.bounds[3]) <= 2)
+      && app.some(o => o !== n && o.cls === n.cls && o.bounds[3] - o.bounds[1] > h + 2 && contains(c.bounds, o.bounds, 0))
+    || (Math.abs(n.bounds[0] - c.bounds[0]) <= 2 || Math.abs(n.bounds[2] - c.bounds[2]) <= 2)
+      && app.some(o => o !== n && o.cls === n.cls && o.bounds[2] - o.bounds[0] > w + 2 && contains(c.bounds, o.bounds, 0))));
 }
 
 const TAB_LABELS = /^(Rates|Saved|Market)$/;

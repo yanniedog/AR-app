@@ -130,6 +130,15 @@ describe('app explorer UX review', () => {
     expect(r.findings.filter(f => f.check === 'crowded-targets')).toEqual([]);
   });
 
+  it('ignores a chip cut off at the edge of a sideways strip but keeps a genuinely small one', () => {
+    const strip = { scrollable: true, cls: 'HorizontalScrollView', bounds: [32, 600, 688, 696] };
+    const full = { text: 'LVR 60-70%', cls: 'ViewGroup', clickable: true, bounds: [200, 600, 400, 696] };
+    const sliver = { text: 'LVR ≤17.5%', cls: 'ViewGroup', clickable: true, bounds: [678, 600, 688, 696] };
+    const tiny = { text: 'Tiny', cls: 'ViewGroup', clickable: true, bounds: [420, 600, 460, 696] };
+    const r = review({ filters: [strip, full, sliver, tiny] });
+    expect(r.findings.filter(f => f.check === 'tap-target').map(f => f.text)).toEqual(['Tiny']);
+  });
+
   it('keeps small controls near the bottom when there is no tab bar, and edge-aligned children that are not clipped', () => {
     const small = { text: 'Tiny', clickable: true, bounds: [20, 1400, 100, 1440] };
     const scroller = { scrollable: true, cls: 'ScrollView', bounds: [0, 585, 720, 1392] };
