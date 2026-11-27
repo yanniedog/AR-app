@@ -430,9 +430,13 @@ export default function RatesWorkspace() {
   const indexedPricing = useMemo(() => suitabilityReady ? activeMortgageIndex?.select(sectionScenario, effectiveMortgageInputs) ?? null : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [suitabilityReady, activeMortgageIndex, indexedScenarioKey, indexedInputsKey]);
-  // If a ready index can answer the request, a closed gate should not start the fallback pricing pass.
-  const indexedPricingBlocked = !suitabilityReady && activeMortgageIndex != null;
-  const needsCooperativePricing = pricingActive && !task.intentError && !indexedPricing && !indexedPricingBlocked;
+  // The closed gate prevents even the leading page from painting. The pricing
+  // request also depends on the gate's revision, so opening it discards that pass.
+  const pricingBlockedBySuitability = pricingActive && !suitabilityReady;
+  const needsCooperativePricing = pricingActive && !task.intentError && !indexedPricing && !pricingBlockedBySuitability;
+  useEffect(() => {
+    if (core && isFocused && pricingBlockedBySuitability) bootMark('pricing-wait-suitability');
+  }, [core, isFocused, pricingBlockedBySuitability]);
   // Default rate ranking: scope the leading rows first so page one can paint
   // before the whole book has been scoped. Anything else waits for the full pass.
   const leadingScope = useMemo((): LeadingScopeRequest | null => section === 'Mortgage' && sortKey === 'rate' && task.page === 1
@@ -469,7 +473,11 @@ export default function RatesWorkspace() {
     mortgageScope: indexedPricing.rawScope, ready: true, error: null,
     work: { ...cooperativePricing.work, pricingStage: 'ready' as const, sourceRowCount: sourceRates.length,
       candidateCount: indexedPricing.candidates.length, pricedRowCount: indexedPricing.priced.length },
-  } : indexedPricingBlocked ? { ...cooperativePricing, ready: false } : cooperativePricing;
+  } : pricingBlockedBySuitability ? {
+    ...cooperativePricing, ready: false,
+    work: { ...cooperativePricing.work, pricingStage: 'queued' as const, sourceRowCount: sourceRates.length,
+      candidateCount: null, pricedRowCount: null },
+  } : cooperativePricing;
   useEffect(() => {
     if (isFocused && section === 'Mortgage' && mortgagePricingReady && needsCooperativePricing && cooperativePricing.ready) {
       setSettledMortgageWork(mortgageWorkKey);

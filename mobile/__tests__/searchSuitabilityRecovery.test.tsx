@@ -13,6 +13,7 @@ import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { rateConditionFixture } from '../testUtils/rateConditions';
 import { router } from 'expo-router';
 import * as searchPreparation from '../src/hooks/usePreparedSearchRows';
+import * as pricing from '../src/hooks/useResolvedPublicRankingRows';
 const originalRatesSession = captureRatesSession();
 let mockParams: Record<string, string | string[]> = { section: 'TD' };
 
@@ -162,8 +163,9 @@ function chooseBankSort(tree: any) {
   act(() => option.props.onPress());
 }
 
-test('a closed suitability gate defers row preparation and offers recovery', () => {
+test('a closed suitability gate defers pricing and row preparation and offers recovery', () => {
   const preparer = jest.spyOn(searchPreparation, 'usePreparedSearchRows');
+  const pricingHook = jest.spyOn(pricing, 'useResolvedPublicRankingRows');
   let tree: any;
   act(() => { tree = TestRenderer.create(<Search />); });
   try {
@@ -172,6 +174,9 @@ test('a closed suitability gate defers row preparation and offers recovery', () 
       expect(args[0]).toHaveLength(0);
       expect(args[9]).toBe(false);
     }
+    expect(pricingHook).toHaveBeenCalled();
+    expect(pricingHook.mock.calls.every(([request]) => !request.focused && request.candidates?.length === 0)).toBe(true);
+    expect(mockSurfaces.get('rates.results').work).toMatchObject({ pricingStage: 'queued', candidateCount: null, pricedRowCount: null });
     expect(tree.root.findByType('EmptyState' as any).props.title).toBe('Rates unavailable');
     expect(tree.root.findAllByProps({ title: 'Reset Rates view' })).toHaveLength(0);
     expect(tree.root.findByType('SearchReportExport' as any).props.disabled).toBe(true);
@@ -179,6 +184,7 @@ test('a closed suitability gate defers row preparation and offers recovery', () 
     act(() => tree.root.findByProps({ title: 'Retry' }).props.onPress());
     expect(mockEnsureDetails).toHaveBeenCalledWith({ force: true, abandonInFlight: true });
     act(() => setSuitabilityAllowed(new Set([mockState.productKey])));
+    expect(pricingHook.mock.calls.some(([request]) => request.focused && !!request.sourceRows?.length && request.candidates === null)).toBe(true);
     expect(preparer.mock.lastCall?.[0].length).toBeGreaterThan(0);
     expect(preparer.mock.lastCall?.[9]).toBe(true);
     expect(tree.root.findByType('FlashList' as any).props.data.length).toBeGreaterThan(0);
