@@ -1,0 +1,158 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "RBA",
+  "at": [
+   186,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "View ASX market expectations",
+  "flags": "tap",
+  "at": [
+   360,
+   264
+  ]
+ },
+ {
+  "label": "View ASX market expectations",
+  "at": [
+   361,
+   264
+  ]
+ },
+ {
+  "label": "Outlook",
+  "at": [
+   360,
+   429
+  ]
+ },
+ {
+  "label": "Refresh outlook",
+  "flags": "tap",
+  "at": [
+   177,
+   529
+  ]
+ },
+ {
+  "label": "Refresh outlook",
+  "at": [
+   177,
+   529
+  ]
+ },
+ {
+  "label": "Economists’ cash-rate forecast",
+  "at": [
+   360,
+   718
+  ]
+ },
+ {
+  "label": "4.85%",
+  "at": [
+   118,
+   818
+  ]
+ },
+ {
+  "label": "Dec 26",
+  "at": [
+   343,
+   790
+  ]
+ },
+ {
+  "label": "Cash rate · 0.0 bps",
+  "at": [
+   343,
+   830
+  ]
+ },
+ {
+  "label": "Economists’ cash-rate forecast · Dec 26 · 4.85% · Jun 27 · 4.85% · Dec 27 · 4.60% · Jun 28 · 4.10% · Dec 28 · 4.10% · ",
+  "at": [
+   360,
+   1102
+  ]
+ },
+ {
+  "label": "Cash rate · 4.85%",
+  "at": [
+   360,
+   1366
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap,sel",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "sel",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

@@ -1,0 +1,236 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Save",
+  "flags": "tap",
+  "at": [
+   190,
+   293
+  ]
+ },
+ {
+  "label": "Save",
+  "at": [
+   217,
+   294
+  ]
+ },
+ {
+  "label": "Calculate",
+  "flags": "tap",
+  "at": [
+   530,
+   293
+  ]
+ },
+ {
+  "label": "Calculate",
+  "at": [
+   531,
+   293
+  ]
+ },
+ {
+  "label": "Hide Rate details",
+  "flags": "tap",
+  "at": [
+   360,
+   519
+  ]
+ },
+ {
+  "label": "Rate details",
+  "at": [
+   328,
+   519
+  ]
+ },
+ {
+  "label": "Rate type",
+  "at": [
+   315,
+   619
+  ]
+ },
+ {
+  "label": "Fixed",
+  "at": [
+   655,
+   619
+  ]
+ },
+ {
+  "label": "Term",
+  "at": [
+   326,
+   671
+  ]
+ },
+ {
+  "label": "1 yr",
+  "at": [
+   666,
+   671
+  ]
+ },
+ {
+  "label": "Repayment",
+  "at": [
+   232,
+   723
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "at": [
+   572,
+   723
+  ]
+ },
+ {
+  "label": "Loan purpose",
+  "at": [
+   248,
+   775
+  ]
+ },
+ {
+  "label": "Owner occupied",
+  "at": [
+   588,
+   775
+  ]
+ },
+ {
+  "label": "Listed LVR",
+  "at": [
+   256,
+   827
+  ]
+ },
+ {
+  "label": ">70.0%–80.0%",
+  "at": [
+   596,
+   827
+  ]
+ },
+ {
+  "label": "Annual fee",
+  "at": [
+   291,
+   879
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   879
+  ]
+ },
+ {
+  "label": "$150 · Conditions: Unverified · $750 · Conditions: Unverified · $0 · Conditions: Unverified",
+  "at": [
+   372,
+   951
+  ]
+ },
+ {
+  "label": "Offset account",
+  "at": [
+   291,
+   1378
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   1378
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
