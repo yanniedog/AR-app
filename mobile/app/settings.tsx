@@ -5,6 +5,7 @@ import { useScrollToTop } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, useWindowDimensions, View } from 'react-native';
+import { ChipStrip } from '../src/components/selectors';
 
 import { SegmentedControl } from '../src/components/controls';
 import { Screen, ScreenScrollView } from '../src/components/Screen';
@@ -451,7 +452,7 @@ export default function Settings() {
             <>
               <SettingsGap size={8} />
               <Label text="Add section" />
-              <Row gap={8} style={{ flexWrap: 'wrap' }}>
+              <ChipStrip>
                 {hiddenSections.map((key) => (
                   <Chip
                     key={key}
@@ -460,13 +461,13 @@ export default function Settings() {
                     onPress={() => setPref('interests', toggleInterest(prefs.interests, key))}
                   />
                 ))}
-              </Row>
+              </ChipStrip>
             </>
           ) : null}
         </DisclosureGroup>
         <SettingsGap size={12} />
         <Label text="Default type" />
-        <Row gap={8} style={{ flexWrap: 'wrap' }}>
+        <ChipStrip>
           {orderedInterests.map((key) => (
             <Chip
               key={key}
@@ -475,7 +476,7 @@ export default function Settings() {
               onPress={() => setPref('defaultSection', key)}
             />
           ))}
-        </Row>
+        </ChipStrip>
       </Section>
 
       <Section title="Features">
@@ -506,7 +507,7 @@ export default function Settings() {
           <>
             <SettingsGap size={12} />
             <Label text="Alert threshold" />
-            <Row gap={8} style={{ flexWrap: 'wrap' }}>
+            <ChipStrip>
               {THRESHOLDS.map((bps) => (
                 <Chip
                   key={bps}
@@ -515,7 +516,7 @@ export default function Settings() {
                   onPress={() => setPref('rateMoveThresholdBps', bps)}
                 />
               ))}
-            </Row>
+            </ChipStrip>
             <SettingsGap size={12} />
             <Label text={uiJoin('Subscriptions', ' ', '(', uiCount(subscriptions.length), ')')} />
             {subscriptions.length ? (

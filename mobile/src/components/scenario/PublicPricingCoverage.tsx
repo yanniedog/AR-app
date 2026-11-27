@@ -1,5 +1,6 @@
 import type { RateScenario } from '../../data/publicRateModel';
 import React, { useEffect, useMemo, useState } from 'react';
+import { publicProductMatches } from '../../data/publicProductSearch';
 import { View } from 'react-native';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
 import { eligiblePublicProductKeys } from '../../data/publicProductEligibility';
@@ -94,7 +95,7 @@ export const PublicProductDiscovery = React.memo(function PublicProductDiscovery
   const represented = useMemo(() => new Set(rows.map(row => row.product_key)), [rows]);
   const needle = query.trim().toLocaleLowerCase('en-AU');
   const products = useMemo(() => catalogue.products.filter(product => product.section === section && eligible.has(product.productKey) && !represented.has(product.productKey)
-    && (!needle || (product.name + ' ' + product.providerName + ' ' + product.aliases.map(alias => alias.name).join(' ')).toLocaleLowerCase('en-AU').includes(needle))),
+    && (!needle || publicProductMatches(product, needle))),
   [catalogue.products, section, eligible, represented, needle]);
   if (!products.length) return null;
   return <Card style={{ marginVertical: 12, gap: 8 }}>
@@ -107,3 +108,4 @@ export const PublicProductDiscovery = React.memo(function PublicProductDiscovery
     {products.length > limit ? <Button title="More" variant="secondary" onPress={() => setLimit(value => value + 20)} /> : null}
   </Card>;
 });
+

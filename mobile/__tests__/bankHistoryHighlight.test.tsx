@@ -25,6 +25,7 @@ jest.mock('react-native-reanimated', () => ({
 jest.mock('../src/hooks/useFirstMountDrawIn', () => ({ useFirstMountDrawIn: () => ({ value: 1 }) }));
 jest.mock('../src/hooks/useReducedMotion', () => ({ useReducedMotion: () => true }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Chip: 'Chip', Row: 'Row' }));
+jest.mock('../src/components/selectors', () => ({ OptionStrip: 'OptionStrip', OptionSelect: 'OptionSelect', ChipStrip: 'ChipStrip' }));
 jest.mock('../src/components/charts/ChartSliceControls', () => ({ ChartSliceControls: 'ChartSliceControls' }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ dark: false, colors: {
   primary: '#2563eb', border: '#cccccc', textFaint: '#666666', rateLoan: '#0000aa',
@@ -139,8 +140,8 @@ test('captured lender observations and Unknown counts follow the selected window
     const facts = () => tree.root.findAllByType('AppText').map(node => node.props.children);
     expect(chart().props.accessibilityLabel).toContain('27 Observed');
     expect(facts()).toContain('Missing observations: 4 · Unknown');
-    const all = tree.root.findAllByType('Chip').find(node => node.props.label === 'All')!;
-    act(() => all.props.onPress());
+    const windows: any = tree.root.findAllByType('OptionStrip' as never)[0];
+    act(() => windows.props.onChange('All'));
     expect(chart().props.accessibilityLabel).toContain('126 Observed');
     expect(facts()).toContain('Missing observations: 37 · Unknown');
   } finally { act(() => tree.unmount()); }

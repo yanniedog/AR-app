@@ -25,7 +25,9 @@ import { ProjectionSummary } from '../../components/scenario/ProjectionSummary';
 import { StaySwitchChart } from '../../components/scenario/StaySwitchChart';
 import { ScreenScrollView } from '../../components/Screen';
 import { CompactToggle, SegmentedControl } from '../../components/controls';
-import { AppText, Badge, Button, Card, Chip, Row } from '../../components/ui';
+import { AppText, Badge, Button, Card, Row } from '../../components/ui';
+import { OptionSelect, OptionStrip } from '../../components/selectors';
+import { DEFAULT_MORTGAGE_HORIZON_YEARS, PROJECTION_HORIZONS, projectionHorizonValue, termDepositRolloversFor } from '../../data/projectionHorizons';
 import { calculatorAmount, computeLvr, type CalcInputs } from '../../data/calc';
 import type { ProjectionFrequency, ProjectionInputs } from '../../data/projectionScenario';
 import {
@@ -207,16 +209,7 @@ function FrequencyField({
   return (
     <View style={{ gap: 8 }}>
       <NumericField label={label} value={amount} onChangeText={onAmount} prefix="$" editable={editable} error={error} />
-      <Row gap={8} style={{ flexWrap: 'wrap' }}>
-        {FREQUENCY_OPTIONS.map((opt) => (
-          <Chip
-            key={opt.value}
-            label={opt.label}
-            selected={value === opt.value}
-            onPress={() => { if (editable) onFrequency(opt.value); }}
-          />
-        ))}
-      </Row>
+      <OptionStrip options={FREQUENCY_OPTIONS} value={value} onChange={next => { if (editable) onFrequency(next); }} />
     </View>
   );
 }
@@ -379,6 +372,37 @@ export function ProjectionWorkspace() {
     : String(Math.round(computeLvr(scenario.mortgage).loan ?? 0) || '');
   const activeSeries = dimension === 'offsets' ? result.offsetSeries : result.rateSeries;
   const inputsEditable = storageStatus === 'ready';
+  const tdTermMonths = Number(projectionInputs.termMonths);
+  const tdRollovers = Number(projectionInputs.rollovers || '0');
+  const timeframeOptions = useMemo(() => PROJECTION_HORIZONS.map(option => {
+    if (section !== 'TD') return { label: uiLabel(option.label), value: option.value };
+    const rollovers = termDepositRolloversFor(option.months, tdTermMonths);
+    // Term deposits run in whole terms: a timeframe is offered only when it is an exact
+    // number of terms within the renewals the model allows, so the label is the modelled duration.
+    return { label: uiLabel(option.label), value: option.value,
+      disabled: rollovers == null || option.months % tdTermMonths !== 0 || rollovers > 10 };
+  }), [section, tdTermMonths]);
+  const timeframe = section === 'TD'
+    ? PROJECTION_HORIZONS.find(option => Number.isInteger(tdTermMonths) && tdTermMonths > 0 && Number.isInteger(tdRollovers)
+      && option.months === tdTermMonths * (tdRollovers + 1))?.value ?? null
+    : projectionHorizonValue(projectionInputs.horizonYears, section === 'Mortgage' ? DEFAULT_MORTGAGE_HORIZON_YEARS : '1');
+  // A saved horizon outside the listed timeframes is shown as its own selected option.
+  const tdMonths = Number.isInteger(tdTermMonths) && tdTermMonths > 0 && Number.isInteger(tdRollovers) && tdRollovers >= 0 ? tdTermMonths * (tdRollovers + 1) : null;
+  const savedYears = Number(projectionInputs.horizonYears.trim() || (section === 'Mortgage' ? DEFAULT_MORTGAGE_HORIZON_YEARS : '1'));
+  const customTimeframe = timeframe != null ? null
+    : section === 'TD' ? tdMonths != null ? { value: `custom-${tdMonths}`, label: uiDuration(tdMonths, 'months') } : null
+      : Number.isFinite(savedYears) && savedYears > 0 && savedYears <= MAX_PROJECTION_YEARS
+        ? { value: `custom-${savedYears}`, label: Number.isInteger(savedYears) ? uiDuration(savedYears, 'years') : uiDuration(Math.round(savedYears * 12), 'months') }
+        : null;
+  const shownTimeframeOptions = useMemo(() => customTimeframe ? [customTimeframe, ...timeframeOptions] : timeframeOptions,
+    [customTimeframe?.value, timeframeOptions]); // eslint-disable-line react-hooks/exhaustive-deps
+  const changeTimeframe = useCallback((next: string) => {
+    if (!inputsEditable || next.startsWith('custom-')) return;
+    if (section !== 'TD') { updateProjection({ horizonYears: next }); return; }
+    const months = PROJECTION_HORIZONS.find(option => option.value === next)?.months ?? 0;
+    const rollovers = termDepositRolloversFor(months, tdTermMonths);
+    if (rollovers != null && months % tdTermMonths === 0) updateProjection({ rollovers: String(rollovers) });
+  }, [inputsEditable, section, tdTermMonths, updateProjection]);
   // Conditional savings has two intentionally separate rates: the conditional
   // rate field is validated below as currentRate, while future range scenarios
   // are centred on the ongoing rate shown in its own validated field.
@@ -416,7 +440,7 @@ export function ProjectionWorkspace() {
         || enteredNumber(projectionInputs.fixedPeriodMonths)! > (enteredNumber(scenario.mortgage.years) ?? 0) * 12)
       ? uiJoin('Fixed period',': ','>',0,'–','Remaining term')
       : undefined,
-    horizon: section === 'Savings' && projectionInputs.horizonYears.trim()
+    horizon: section !== 'TD' && projectionInputs.horizonYears.trim()
       && (!(enteredNumber(projectionInputs.horizonYears)! > 0) || enteredNumber(projectionInputs.horizonYears)! > MAX_PROJECTION_YEARS)
       ? uiJoin('Projection horizon',': ','>',0,'–',uiDuration(MAX_PROJECTION_YEARS,'years'))
       : undefined,
@@ -801,26 +825,17 @@ export function ProjectionWorkspace() {
               error={errors.mortgageBalance}
             />
             <NumericField label="Years remaining" value={scenario.mortgage.years} onChangeText={(years) => updateMortgage({ years })} suffix="years" editable={inputsEditable} error={errors.years} />
-            <NumericField label="Comparison period" value={projectionInputs.horizonYears} onChangeText={horizonYears => updateProjection({ horizonYears })} suffix="years" editable={inputsEditable} error={errors.horizon} />
           </Row>
           {scenario.mortgage.mode === 'buy' ? (
             <Button title="Purchase details" variant="secondary" onPress={() => {
               void flush().then(saved => { if (saved) router.setParams({ mode: 'check' }); });
             }} />
           ) : null}
-          <Row gap={8} style={{ flexWrap: 'wrap' }}>
-            {([
-              { label: uiLabel("Variable rate"), value: 'variable' },
-              { label: uiLabel("Fixed rate"), value: 'fixed' },
-            ] as const).map((opt) => (
-              <Chip
-                key={opt.value}
-                label={opt.label}
-                selected={projectionInputs.mortgageRateStructure === opt.value}
-                onPress={() => { if (inputsEditable) updateProjection({ mortgageRateStructure: opt.value }); }}
-              />
-            ))}
-          </Row>
+          <OptionStrip
+            options={[{ label: uiLabel('Variable rate'), value: 'variable' }, { label: uiLabel('Fixed rate'), value: 'fixed' }] as const}
+            value={projectionInputs.mortgageRateStructure}
+            onChange={mortgageRateStructure => { if (inputsEditable) updateProjection({ mortgageRateStructure }); }}
+          />
           {projectionInputs.mortgageRateStructure === 'fixed' ? (
             <NumericField
               label="Fixed period remaining"
@@ -844,36 +859,22 @@ export function ProjectionWorkspace() {
             <NumericField label="Current offset balance" value={projectionInputs.offsetBalance} onChangeText={(offsetBalance) => updateProjection({ offsetBalance })} prefix="$" editable={inputsEditable} error={errors.offsetBalance} />
             <NumericField label="Amount added to offset" value={projectionInputs.offsetContributionAmount} onChangeText={(offsetContributionAmount) => updateProjection({ offsetContributionAmount })} prefix="$" editable={inputsEditable} error={errors.offsetContributionAmount} />
           </Row>
-          <Row gap={8} style={{ flexWrap: 'wrap' }}>
-            {FREQUENCY_OPTIONS.map((opt) => (
-              <Chip
-                key={opt.value}
-                label={opt.label}
-                selected={projectionInputs.offsetContributionFrequency === opt.value}
-                onPress={() => { if (inputsEditable) updateProjection({ offsetContributionFrequency: opt.value }); }}
-              />
-            ))}
-          </Row>
+          <OptionStrip
+            options={FREQUENCY_OPTIONS}
+            value={projectionInputs.offsetContributionFrequency}
+            onChange={offsetContributionFrequency => { if (inputsEditable) updateProjection({ offsetContributionFrequency }); }}
+          />
         </>
       ) : section === 'Savings' ? (
         <>
           <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
             <NumericField label="Current balance" value={scenario.savings.balance} onChangeText={(balance) => updateDeposit({ balance })} prefix="$" editable={inputsEditable} error={errors.savingsBalance} />
-            <NumericField label="Projection horizon" value={projectionInputs.horizonYears} onChangeText={(horizonYears) => updateProjection({ horizonYears })} suffix="years" editable={inputsEditable} error={errors.horizon} />
           </Row>
-          <Row gap={8} style={{ flexWrap: 'wrap' }}>
-            {([
-              { label: uiLabel("Ongoing rate"), value: 'ongoing' },
-              { label: uiLabel("Conditional bonus"), value: 'conditional-bonus' },
-            ] as const).map((opt) => (
-              <Chip
-                key={opt.value}
-                label={opt.label}
-                selected={projectionInputs.savingsRateStructure === opt.value}
-                onPress={() => { if (inputsEditable) updateProjection({ savingsRateStructure: opt.value }); }}
-              />
-            ))}
-          </Row>
+          <OptionStrip
+            options={[{ label: uiLabel('Ongoing rate'), value: 'ongoing' }, { label: uiLabel('Conditional bonus'), value: 'conditional-bonus' }] as const}
+            value={projectionInputs.savingsRateStructure}
+            onChange={savingsRateStructure => { if (inputsEditable) updateProjection({ savingsRateStructure }); }}
+          />
           {projectionInputs.savingsRateStructure === 'conditional-bonus' ? (
             <>
               <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -992,6 +993,17 @@ export function ProjectionWorkspace() {
           <Badge label="Illustrative" tone="primary" />
         </Row>
       </View>
+      {/* Always available, so a saved horizon outside the listed timeframes can be repaired. */}
+      <View style={{ gap: 2 }}>
+        <OptionStrip
+          label={uiLabel('Timeframe')}
+          auditId="projection-timeframe"
+          options={shownTimeframeOptions}
+          value={timeframe ?? customTimeframe?.value ?? null}
+          onChange={changeTimeframe}
+        />
+        {errors.horizon ? <AppText variant="tiny" color="danger">{errors.horizon}</AppText> : null}
+      </View>
       {!result.ready ? (
         <View style={{ gap: 12 }}>
           <AppText variant="body" color="textMuted">{uiLabel("Inputs incomplete")}</AppText>
@@ -1003,28 +1015,29 @@ export function ProjectionWorkspace() {
         </View>
       ) : (
         <>
-          {section === 'Mortgage' ? (
-            <Row gap={8} style={{ flexWrap: 'wrap' }}>
-              {([
-                { label: uiLabel("Rate scenarios"), value: 'rates' },
-                { label: uiLabel("Offset scenarios"), value: 'offsets' },
-              ] as const).map((opt) => (
-                <Chip
-                  key={opt.value}
-                  label={opt.label}
-                  selected={dimension === opt.value}
-                  onPress={() => changeDimension(opt.value)}
+          <View style={{ gap: 2 }}>
+            <Row gap={8} style={{ marginTop: 4 }}>
+              {section === 'Mortgage' ? (
+                <OptionSelect
+                  variant="button"
+                  icon="layers"
+                  auditId="projection-dimension"
+                  label={uiLabel('Scenarios')}
+                  options={[{ label: uiLabel('Rate scenarios'), value: 'rates' }, { label: uiLabel('Offset scenarios'), value: 'offsets' }] as const}
+                  value={dimension}
+                  onChange={changeDimension}
                 />
-              ))}
+              ) : null}
+              <OptionSelect
+                variant="button"
+                icon="pulse"
+                auditId="projection-metric"
+                label={uiLabel('Y-axis')}
+                options={result.availableMetrics.map(item => ({ label: projectionMetricLabel(section, item), value: item }))}
+                value={metric}
+                onChange={changeMetric}
+              />
             </Row>
-          ) : null}
-          <View>
-            <AppText variant="tiny" color="textFaint" weight="700" style={{ marginBottom: 8 }}>{uiLabel('Y-axis')}</AppText>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-              {result.availableMetrics.map((item) => (
-                <Chip key={item} label={projectionMetricLabel(section, item)} selected={metric === item} onPress={() => changeMetric(item)} />
-              ))}
-            </View>
           </View>
           <LifecycleChart
             section={section}

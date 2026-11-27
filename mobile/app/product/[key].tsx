@@ -74,6 +74,8 @@ import { useBankRateHistory } from '../../src/hooks/useBankRateHistory';
 import { useDeferredHistorySurface } from '../../src/hooks/useDeferredHistorySurface';
 import { useUserRateScenario } from '../../src/hooks/useUserRateScenario';
 import { StaySwitchChart } from '../../src/components/scenario/StaySwitchChart';
+import { OptionStrip } from '../../src/components/selectors';
+import { DEFAULT_MORTGAGE_HORIZON_YEARS, PROJECTION_HORIZONS, projectionHorizonValue } from '../../src/data/projectionHorizons';
 import { buildStaySwitchProjection } from '../../src/data/staySwitchProjection';
 import { NOT_LISTED_PROVIDER } from '../../src/data/userRateScenario';
 import { openBank, openRateReceipt } from '../../src/lib/nav';
@@ -331,19 +333,26 @@ export default function ProductDetail() {
     ? selectedTargetConstraint(row, found.section, scenario,
       { core, details: detailsPayload, manifest: rateConditionManifest, coreIntegrity })
     : null, [row, found, fromRatesComparison, scenario, core, detailsPayload, rateConditionManifest, coreIntegrity]);
+  // Timeframe chosen on this page; the saved scenario keeps its own.
+  const [switchHorizon, setSwitchHorizon] = useState<string | null>(null);
   const staySwitchProjection = useMemo(() => {
     // This legacy model compares the persisted current account and principal.
     // Its assumptions cannot consume a target priced for exploratory inputs.
     if (fromRatesComparison || !row || found?.section !== 'Mortgage' || !detail || !detailsProducts) return null;
     if (selectedConstraint && targetConstraintContradicted(selectedConstraint)) return null;
     const currentRef = scenario.currentProducts.mortgage;
+    const horizonScenario = switchHorizon == null ? calculationScenario : {
+      ...calculationScenario,
+      projections: { ...calculationScenario.projections,
+        mortgage: { ...calculationScenario.projections.mortgage, horizonYears: switchHorizon } },
+    };
     return buildStaySwitchProjection({
-      scenario: calculationScenario,
+      scenario: horizonScenario,
       target: row,
       currentDetail: currentRef?.productKey && mandatoryProductAllowed(currentRef.productKey) ? detailsProducts[currentRef.productKey] : null,
       targetDetail: detail,
     });
-  }, [fromRatesComparison, detail, detailsProducts, found?.section, row, scenario, calculationScenario, selectedConstraint]);
+  }, [fromRatesComparison, detail, detailsProducts, found?.section, row, scenario, calculationScenario, selectedConstraint, switchHorizon]);
   const currentBankLabel = (!scenario.currentProducts.mortgage.productKey || mandatoryProductAllowed(scenario.currentProducts.mortgage.productKey)) && scenario.currentProducts.mortgage.provider
     && scenario.currentProducts.mortgage.provider !== NOT_LISTED_PROVIDER
     ? scenario.currentProducts.mortgage.provider
@@ -859,7 +868,14 @@ export default function ProductDetail() {
         <SavedRateActions key={`${productKey}:${row.rate_index ?? 'product'}`} row={row} section={section} />
 
         {staySwitchProjection?.ready ? (
-          <View style={{ marginBottom: 16 }}>
+          <View style={{ marginBottom: 16, gap: 4 }}>
+            <OptionStrip
+              label={uiLabel('Timeframe')}
+              auditId="stay-switch-timeframe"
+              options={PROJECTION_HORIZONS.map(option => ({ label: uiLabel(option.label), value: option.value }))}
+              value={projectionHorizonValue(switchHorizon ?? calculationScenario.projections.mortgage.horizonYears, DEFAULT_MORTGAGE_HORIZON_YEARS)}
+              onChange={setSwitchHorizon}
+            />
             <StaySwitchChart
               projection={staySwitchProjection}
               currentBank={currentBankLabel}
@@ -902,6 +918,8 @@ export default function ProductDetail() {
                 </AppText>
                 <ChartErrorBoundary name="ProductHistoryChart">
                   <BankHistoryChart
+                    // Each product opens on its own defaults (1 year, benchmarks shown).
+                    key={productKey}
                     auditActionsRef={historyAuditActionsRef}
                     contentRevision={historyContentRevision}
                     dates={historyModel.dates}

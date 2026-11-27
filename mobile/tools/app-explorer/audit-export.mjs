@@ -23,6 +23,12 @@ export function decodeAuditExport(body) {
   return report;
 }
 
+export function sourceDuplicateCount(exported) {
+  const checks = exported.appHealth?.checks?.filter(check => check.metrics?.renderedGapsAudited === true);
+  const count = checks?.length === 1 ? checks[0].metrics.sourceDuplicateItemsRemoved : null;
+  return Number.isSafeInteger(count) && count >= 0 ? count : null;
+}
+
 export function auditCompletion(report) {
   const completion = report?.completion;
   if (!OUTCOMES.has(completion?.outcome)) return null;

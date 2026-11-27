@@ -1,3 +1,4 @@
+import { providerMatchesSearch } from '../data/bankBrand';
 /** Chips shown per filter group before a "Show all" control. */
 export const FILTER_OPTION_LIMIT = 24;
 
@@ -24,10 +25,7 @@ export function matchingLenders(
   query: string,
   selected: readonly string[],
 ): string[] {
-  const needle = query.trim().toLocaleLowerCase('en-AU');
-  if (!needle) return [...providers];
+  if (!query.trim()) return [...providers];
   const chosen = new Set(selected);
-  return providers.filter(
-    (provider) => chosen.has(provider) || provider.toLocaleLowerCase('en-AU').includes(needle),
-  );
+  return providers.filter((provider) => chosen.has(provider) || providerMatchesSearch(provider, query));
 }

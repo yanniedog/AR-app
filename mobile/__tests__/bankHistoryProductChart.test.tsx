@@ -12,6 +12,7 @@ type TestNode = {
 };
 
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Chip: 'Chip', Row: 'Row' }));
+jest.mock('../src/components/selectors', () => ({ OptionStrip: 'OptionStrip' }));
 jest.mock('../src/components/icons/AppIcon', () => ({ __esModule: true, default: 'AppIcon' }));
 jest.mock('../src/hooks/useReducedMotion', () => ({ useReducedMotion: () => true }));
 jest.mock('../src/theme/ThemeProvider', () => {
@@ -43,10 +44,12 @@ test('savings product chart shows market facts and cash rate across a missing pr
     const plot = () => tree.root.findAllByProps({ accessibilityRole: 'image' })[0];
     act(() => (plot().props.onLayout as (event: unknown) => void)({ nativeEvent: { layout: { width: 320 } } }));
     const slice = () => tree.root.findByType(ChartSliceControls).props;
+    // Benchmarks are on by default; the toggle hides and restores them.
+    const benchmarks = tree.root.findAllByProps({ label: 'Benchmarks' })[0];
+    act(() => (benchmarks.props.onPress as () => void)());
     expect(slice().valueLabel).toBe('Unknown');
     expect(slice().facts).toBeUndefined();
     expect(plot().props.accessibilityLabel).not.toContain('RBA cash rate');
-    const benchmarks = tree.root.findAllByProps({ label: 'Benchmarks' })[0];
     act(() => (benchmarks.props.onPress as () => void)());
     expect(slice().valueLabel).toBe('Unknown');
     expect(slice().facts).toEqual([
@@ -72,7 +75,8 @@ test('savings product chart shows market facts and cash rate across a missing pr
 });
 
 test('product history can change its window or show benchmarks with no product observations', () => {
-  const dates = ['2026-09-17', '2026-11-17'];
+  // The first observation is 123 days old: visible on the 1-year default, not on 90 or 30 days.
+  const dates = ['2026-07-17', '2026-11-17'];
   const points = dates.map((date) => ({ date, min: 0.04, max: 0.07, mean: 0.05, median: 0.05, count: 4 }));
   let tree!: ReactTestRenderer & { root: TestNode };
   act(() => {
@@ -84,17 +88,21 @@ test('product history can change its window or show benchmarks with no product o
   try {
     const press = (label: string) => act(() => {
       const control = tree.root.findAllByProps({ label })[0];
-      (control.props.onPress as () => void)();
+      if (control) { (control.props.onPress as () => void)(); return; }
+      const strip: any = tree.root.findAllByType('OptionStrip' as never).find((node: any) => node.props.options.some((option: { label: string }) => option.label === label))!;
+      strip.props.onChange(strip.props.options.find((option: { label: string }) => option.label === label).value);
     });
     const slice = () => tree.root.findByType(ChartSliceControls).props;
+    // Opens on a year with benchmarks shown, so the July observation is in range.
+    expect(slice().facts).toContainEqual({ label: 'Market median', value: '5.00%' });
+    act(() => slice().onChangeIndex(0));
+    expect(slice().valueLabel).toBe('6.00%');
+    press('Benchmarks');
+    press('30 days');
     expect(tree.root.findAllByType('AppText').some(node => node.props.children === 'No observations')).toBe(true);
     press('Benchmarks');
     expect(slice().valueLabel).toBe('Unknown');
     expect(slice().facts).toContainEqual({ label: 'Market median', value: '5.00%' });
-    press('Benchmarks');
-    press('90 days');
-    act(() => slice().onChangeIndex(0));
-    expect(slice().valueLabel).toBe('6.00%');
   } finally {
     act(() => tree.unmount());
   }

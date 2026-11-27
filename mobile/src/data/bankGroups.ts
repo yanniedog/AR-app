@@ -1,3 +1,4 @@
+import { providerMatchesSearch } from './bankBrand';
 import type { CorePayload } from '../types';
 import { SECTION_KEYS } from '../types';
 import type { SavedRateRef } from './savedRates';
@@ -35,8 +36,7 @@ export function orderProviders<T>(
   saved: ReadonlySet<string>,
   query = '',
 ): T[] {
-  const needle = query.trim().toLowerCase();
-  const matches = needle ? items.filter((item) => provider(item).toLowerCase().includes(needle)) : items.slice();
+  const matches = query.trim() ? items.filter((item) => providerMatchesSearch(provider(item), query)) : items.slice();
   return matches.sort((a, b) => {
     const savedDelta = Number(saved.has(provider(b))) - Number(saved.has(provider(a)));
     return savedDelta || provider(a).localeCompare(provider(b));

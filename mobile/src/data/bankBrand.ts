@@ -10,26 +10,28 @@ const SAFE_REMOTE_LOGO_PATH_RE = /\.(?:png|jpe?g|gif|webp|svg)$/i;
 
 type BrandEntry = {
   short: string;
+  /** ASX code of the listed issuer, where it differs from or adds to the short name. */
+  ticker?: string;
   icon?: string;
   aliases?: string[];
 };
 
 const BRAND_MAP: Record<string, BrandEntry> = {
-  'amp bank': { short: 'AMP', icon: 'amp-bank.png', aliases: ['amp', 'amp - my amp'] },
+  'amp bank': { short: 'AMP', ticker: 'AMP', icon: 'amp-bank.png', aliases: ['amp', 'amp - my amp'] },
   'amp bank go': { short: 'AMP Go', icon: 'amp-bank.png', aliases: ['amp go'] },
-  anz: { short: 'ANZ', icon: 'anz.png', aliases: ['australia and new zealand'] },
+  anz: { short: 'ANZ', ticker: 'ANZ', icon: 'anz.png', aliases: ['australia and new zealand'] },
   'anz plus': { short: 'ANZ+', aliases: [] },
   'bank of melbourne': { short: 'BoM', icon: 'bank-of-melbourne.png', aliases: ['bom'] },
-  'bank of queensland': { short: 'BOQ', icon: 'bank-of-queensland.png', aliases: ['boq'] },
+  'bank of queensland': { short: 'BOQ', ticker: 'BOQ', icon: 'bank-of-queensland.png', aliases: ['boq'] },
   'boq specialist': { short: 'BOQS', aliases: [] },
   bankwest: { short: 'BW', icon: 'bankwest.png', aliases: ['bw'] },
   'bendigo and adelaide bank': {
-    short: 'Bendigo',
+    short: 'Bendigo', ticker: 'BEN',
     icon: 'bendigo-and-adelaide-bank.png',
     aliases: ['bendigo', 'bendigo bank'],
   },
   'commonwealth bank of australia': {
-    short: 'CBA',
+    short: 'CBA', ticker: 'CBA',
     icon: 'commonwealth-bank-of-australia.png',
     aliases: ['commonwealth bank', 'commbank'],
   },
@@ -51,9 +53,9 @@ const BRAND_MAP: Record<string, BrandEntry> = {
     aliases: ['hsbc wholesale banking'],
   },
   ing: { short: 'ING', icon: 'ing.png', aliases: [] },
-  'macquarie bank': { short: 'Macq', icon: 'macquarie-bank.png', aliases: ['macquarie'] },
+  'macquarie bank': { short: 'Macq', ticker: 'MQG', icon: 'macquarie-bank.png', aliases: ['macquarie'] },
   'national australia bank': {
-    short: 'NAB',
+    short: 'NAB', ticker: 'NAB',
     icon: 'national-australia-bank.png',
     aliases: ['nab'],
   },
@@ -66,14 +68,14 @@ const BRAND_MAP: Record<string, BrandEntry> = {
   'suncorp bank': { short: 'Sun', icon: 'suncorp-bank.png', aliases: ['suncorp'] },
   ubank: { short: 'ubank', icon: 'ubank.png', aliases: ['u bank', '86 400', '86400'] },
   'westpac banking corporation': {
-    short: 'WBC',
+    short: 'WBC', ticker: 'WBC',
     icon: 'westpac-banking-corporation.png',
     aliases: ['westpac', 'wbc'],
   },
   'alex bank': { short: 'Alex', aliases: ['alex.bank'] },
   'arab bank australia': { short: 'Arab', aliases: ['arab bank'] },
   'australian military bank': { short: 'AMB', aliases: [] },
-  'auswide bank': { short: 'Auswide', aliases: [] },
+  'auswide bank': { short: 'Auswide', ticker: 'ABA', aliases: [] },
   'bnk bank': { short: 'BNK', aliases: ['goldfields money'] },
   'bank australia': { short: 'BAus', aliases: ['mecu'] },
   'bank first': { short: 'BFirst', aliases: [] },
@@ -88,16 +90,16 @@ const BRAND_MAP: Record<string, BrandEntry> = {
   'defence bank': { short: 'Def', aliases: [] },
   'family first': { short: 'FFirst', aliases: [] },
   'greater bank': { short: 'Greater', aliases: [] },
-  heartland: { short: 'Heart', aliases: ['heartland australia'] },
+  heartland: { short: 'Heart', ticker: 'HGH', aliases: ['heartland australia'] },
   'hume bank': { short: 'Hume', aliases: [] },
   'imb bank': { short: 'IMB', aliases: [] },
   in1bank: { short: 'in1', aliases: [] },
-  'judo bank': { short: 'Judo', aliases: [] },
-  'liberty financial': { short: 'Lib', aliases: ['liberty'] },
+  'judo bank': { short: 'Judo', ticker: 'JDO', aliases: [] },
+  'liberty financial': { short: 'Lib', ticker: 'LFG', aliases: ['liberty'] },
   'maitland mutual': { short: 'MML', aliases: [] },
   'me bank': { short: 'ME', aliases: [] },
   'me bank me go': { short: 'ME Go', aliases: ['me go'] },
-  'mystate bank': { short: 'MyState', aliases: [] },
+  'mystate bank': { short: 'MyState', ticker: 'MYS', aliases: [] },
   'newcastle permanent': { short: 'NPBS', aliases: ['newcastle'] },
   'police bank': { short: 'Police', aliases: [] },
   'qudos bank': { short: 'Qudos', aliases: [] },
@@ -106,7 +108,7 @@ const BRAND_MAP: Record<string, BrandEntry> = {
   'southern cross credit union': { short: 'SCCU', aliases: [] },
   'the capricornian': { short: 'Capric', aliases: ['capricornian'] },
   'traditional credit union': { short: 'TCU', aliases: [] },
-  tyro: { short: 'Tyro', aliases: ['tyro banking', 'tyro payments'] },
+  tyro: { short: 'Tyro', ticker: 'TYR', aliases: ['tyro banking', 'tyro payments'] },
   up: { short: 'Up', aliases: ['up bank'] },
   'virgin money': { short: 'Virgin', aliases: ['virgin'] },
 };
@@ -135,7 +137,7 @@ export function lookupProvider(value: string): string {
   if (raw.includes('amp bank go') || raw === 'amp go') return 'amp bank go';
   if (/\bamp\b/.test(raw)) return 'amp bank';
   if (raw.includes('anz plus')) return 'anz plus';
-  if (/\banz\b/.test(raw)) return 'anz';
+  if (/\banz\b/.test(raw) || raw.includes('australia and new zealand')) return 'anz';
   if (raw.includes('unloan')) return 'unloan';
   if (raw.includes('commonwealth') || raw.includes('commbank') || raw === 'cba') {
     return 'commonwealth bank of australia';
@@ -223,13 +225,31 @@ export function brandKeyForProvider(provider: string): string | null {
 // Search terms: canonical names, aliases and short names (CBA, NAB, WBC ...).
 const SEARCH_TERM_TO_KEY = new Map<string, string>(ALIAS_TO_KEY);
 for (const [key, entry] of Object.entries(BRAND_MAP)) {
-  const short = normalize(entry.short);
-  if (short.length >= 2 && !SEARCH_TERM_TO_KEY.has(short)) SEARCH_TERM_TO_KEY.set(short, key);
+  for (const term of [entry.short, entry.ticker]) {
+    const value = normalize(term ?? '');
+    if (value.length >= 2 && !SEARCH_TERM_TO_KEY.has(value)) SEARCH_TERM_TO_KEY.set(value, key);
+  }
 }
 
 /** Exact lender name, alias or short name typed as a search term. */
 export function brandKeyForSearchTerm(term: string): string | null {
   return SEARCH_TERM_TO_KEY.get(normalize(term)) ?? null;
+}
+
+function initials(provider: string): string {
+  return provider.replace(/[^A-Za-z0-9 ]+/g, ' ').split(/\s+/).filter(Boolean)
+    .filter(word => !/^(?:pty|ltd|limited|the|of|and)$/i.test(word)).map(word => word[0]).join('').toLowerCase();
+}
+
+/** A lender matches its name, an alias, its short name or ASX ticker (NAB, CBA,
+ * WBC, BEN ...), or the initials of its name (AFC). */
+export function providerMatchesSearch(provider: string, query: string): boolean {
+  const needle = normalize(query);
+  if (!needle) return true;
+  if (provider.toLocaleLowerCase('en-AU').includes(needle)) return true;
+  const key = brandKeyForSearchTerm(needle);
+  if (key && brandKeyForProvider(provider) === key) return true;
+  return needle.length >= 2 && !needle.includes(' ') && initials(provider) === needle;
 }
 
 export function resolveBrandShort(provider: string, payloadShort?: string): string {
