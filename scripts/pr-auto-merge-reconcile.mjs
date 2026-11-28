@@ -69,6 +69,16 @@ function reconcilePull(number) {
       console.log(`#${number}: behind main; branch update needs BOT_GATE_TOKEN, left for the author`);
     }
   }
+  // GitHub timestamps the pull on branch updates, review activity and ready-for-review.
+  // Reconcile again after the review window; external reviewers remain advisory.
+  const activity = Date.parse(pr.updated_at);
+  if (!Number.isFinite(activity) || Date.now() - activity < 10 * 60_000) {
+    if (enabled) {
+      gh(['pr', 'merge', String(number), '--repo', REPO, '--disable-auto'], { json: false });
+    }
+    console.log(`#${number}: waiting for ten minutes after the latest PR activity`);
+    return;
+  }
   if (process.env.OWNER_TOKEN_CONFIGURED === 'true') {
     if (!enabled) {
       gh(['pr', 'merge', String(number), '--repo', REPO, '--auto', '--squash', '--delete-branch'], { json: false });
@@ -88,7 +98,7 @@ function reconcilePull(number) {
   if (!MERGEABLE_STATES.has(pr.mergeable_state)) { console.log(`#${number}: waiting for required gates (${pr.mergeable_state})`); return; }
   // Re-read just before merging so a hold, draft or new push since the decision wins.
   const fresh = api(`repos/${REPO}/pulls/${number}`);
-  if (fresh.head.sha !== pr.head.sha || decidePullRequest(fresh, { owner: OWNER, repo: REPO, trustedAuthors: TRUSTED_AUTHORS,
+  if (fresh.updated_at !== pr.updated_at || fresh.head.sha !== pr.head.sha || decidePullRequest(fresh, { owner: OWNER, repo: REPO, trustedAuthors: TRUSTED_AUTHORS,
     commitAuthors: authored.map(commit => commit.author?.login ?? null) }).action !== 'enable' || !MERGEABLE_STATES.has(fresh.mergeable_state)) {
     console.log(`#${number}: changed since evaluation; retrying on the next run`);
     return;
