@@ -39,6 +39,13 @@ async function main() {
     console.log('Diagnostic · PR self-test against an existing release');
     return;
   }
+  const jobs = await fetchJson('https://api.github.com/repos/' + repo + '/actions/runs/' + id + '/jobs?per_page=100');
+  const explore = jobs.jobs?.find(job => job.name === 'explore');
+  if (explore?.conclusion === 'skipped' || explore?.conclusion === 'cancelled') {
+    console.log('Diagnostic · No completed emulator exploration for this run');
+    return;
+  }
+  if (!explore) throw Error('Expected App Explorer job missing from completed workflow');
   const path = 'https://raw.githubusercontent.com/' + repo + '/explorer/run-' + id + '/';
   const [run, report, releases] = await Promise.all([
     fetchJson(path + 'run.json'), fetchJson(path + 'report.json'),
