@@ -6,6 +6,8 @@ import { auditCompletion, auditCoverageLine, auditOutcomeLine, decodeAuditExport
 import { renderOutcome, renderSessionCoverage } from './session-verdict.mjs';
 import { groupAuditFailures, renderAuditFailureGroups } from './audit-findings.mjs';
 
+import { rateSummary } from './rate-summary.mjs';
+
 const [dir, runId] = process.argv.slice(2);
 const read = f => { try { return fs.readFileSync(path.join(dir, f), 'utf8'); } catch { return ''; } };
 const json = f => { try { return JSON.parse(read(f)); } catch { return {}; } };
@@ -18,6 +20,7 @@ const reportData = json('report.json');
 const sessionVerdict = reportData.session;
 const auditLine = (report.match(/^\*\*Audit.*$/m) || report.match(/^Mode .*$/m) || ['no run summary'])[0];
 out.push(`explorer run ${runId} on ${run.tag || '?'} (${run.mode || '?'})`, '');
+if (['session', 'full', 'audit'].includes(run.mode)) out.push(...rateSummary(dir));
 if (sessionVerdict) out.push(...renderOutcome(sessionVerdict));
 out.push(...renderSessionCoverage(reportData));
 let decoded;
@@ -49,7 +52,7 @@ if ((audit.kind || /audit|full/.test(run.mode || '')) && !audit.url) out.push(`A
 {
   const repo = process.env.GITHUB_REPOSITORY || 'yanniedog/AR-app';
   const raw = f => `https://github.com/${repo}/blob/explorer/run-${runId}/${f}?raw=true`;
-  const files = ['logcat.txt', 'report.md', 'audit.json', 'audit-log.txt', 'ux-review.md'].filter(f => fs.existsSync(path.join(dir, f)));
+  const files = ['rate-evidence.json', 'logcat.txt', 'report.md', 'audit.json', 'audit-log.txt', 'ux-review.md'].filter(f => fs.existsSync(path.join(dir, f)));
   if (files.length) out.push(`Run files: ${files.map(f => `[${f}](${raw(f)})`).join(' | ')}`, '');
 }
 

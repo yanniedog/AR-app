@@ -57,4 +57,10 @@ if [ "$ux_status" -ne 0 ]; then
   echo "ux-review failed with status $ux_status" >&2
   echo "$ux_status" > explorer-out/ux-review-failed
 fi
+case "${MODE:-crawl}" in
+  session|full|audit)
+    python3 mobile/tools/app-explorer/rate_evidence.py explorer-out
+    node mobile/tools/app-explorer/rate-summary.mjs explorer-out >> explorer-out/report.md
+    ;;
+esac
 exit "$status"

@@ -508,6 +508,7 @@ class Explorer {
       waitedMs: settled.waitedMs,
       shifts: settled.shifts || undefined,
       errorState: this.sessionFlag && settled.errorState ? settled.errorState : undefined,
+      deviceDay: this.sessionFlag ? sh('date +%F', { allowFail: true })?.trim() : undefined,
       dumpMs: settled.dumpMs,
       session: this.sessionFlag || undefined,
       alive: Boolean(pid),
@@ -570,7 +571,8 @@ class Explorer {
 
   async find(sel, timeoutMs = 8000) {
     const start = Date.now();
-    let nodes = this.current.nodes;
+    const initialNodes = this.current.nodes;
+    let nodes = initialNodes;
     while (true) {
       const hit = findNode(nodes, sel);
       if (hit) return hit;
@@ -929,10 +931,21 @@ class Explorer {
     const required = [step.then ?? []].flat();
     const forbidden = [step.gone ?? []].flat();
     const deadline = Date.now() + (step.thenTimeoutMs ?? 8000);
-    let nodes = this.current.nodes;
+    const initialNodes = this.current.nodes;
+    let nodes = initialNodes;
     while (true) {
       const { available, matched, missing, present } = uiConditions(nodes, required, forbidden);
-      if (matched) return;
+      if (matched) {
+        // Retain the exact hierarchy that satisfied a delayed assertion.
+        if (nodes !== initialNodes) {
+          Object.assign(rec, this.captureScreen(rec.slug));
+          const screen = summarize(nodes);
+          fs.writeFileSync(path.join(this.out, 'ui', `${rec.slug}.json`), JSON.stringify(screen, null, 1));
+          fs.writeFileSync(path.join(this.out, 'ui', `${rec.slug}.nodes.json`), JSON.stringify(rawNodes(nodes, this.size)));
+          rec.visible = screen.slice(0, 40).map(item => item.label).filter(Boolean);
+        }
+        return;
+      }
       const remaining = deadline - Date.now();
       if (remaining <= 0) {
         rec.error = available

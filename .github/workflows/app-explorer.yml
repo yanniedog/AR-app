@@ -241,6 +241,24 @@ jobs:
           retention-days: 3
           if-no-files-found: error
 
+  rate-evidence:
+    needs: explore
+    if: >-
+      always() && needs.explore.result != 'skipped' && needs.explore.result != 'cancelled' &&
+      (github.event_name == 'pull_request' || github.event_name == 'schedule' ||
+       github.event_name == 'workflow_run' || contains(fromJSON('["session","full","audit"]'), inputs.mode))
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: explorer-out
+          path: explorer-out
+      - name: Check rate findings and evidence coverage
+        run: |
+          jq '{outcome, error, rowStates, movementStates, bankProductStates, bankRowStates}' explorer-out/rate-evidence.json
+          jq -e '.outcome == "sample_matched"' explorer-out/rate-evidence.json
+
   # Publishes results as data only: no repository code is checked out or run here.
   publish:
     needs: explore
