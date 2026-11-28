@@ -193,14 +193,18 @@ test('bundle-rate chip labels preserve the exact raw selections and filter membe
     for (const label of ['Fixed · bundle', 'Variable · bundle']) {
       expect(chip(label)).toBeDefined();
       expect(chip(label).props.selected).toBe(false);
-      act(() => chip(label).props.onPress!());
-      expect(chip(label).props.selected).toBe(true);
     }
+    act(() => chip('Fixed · bundle').props.onPress!());
+    expect(chip('Fixed · bundle').props.selected).toBe(true);
+    // Rate type takes one value: the second pick replaces the first.
+    act(() => chip('Variable · bundle').props.onPress!());
+    expect(chip('Variable · bundle').props.selected).toBe(true);
+    expect(chip('Fixed · bundle').props.selected).toBe(false);
     expect(chip('Fixed').props.selected).toBe(false);
     act(() => tree.root.findAll(node => node.type === 'Button' && node.props.title === 'Apply')[0].props.onPress!());
     expect(onApply).toHaveBeenCalledTimes(1);
-    expect(onApply.mock.calls[0][0].rateTypes).toEqual(codes.slice(0, 2));
-    expect(filterRows(rows, onApply.mock.calls[0][0]).map(row => row.rate_type)).toEqual(codes.slice(0, 2));
+    expect(onApply.mock.calls[0][0].rateTypes).toEqual([codes[1]]);
+    expect(filterRows(rows, onApply.mock.calls[0][0]).map(row => row.rate_type)).toEqual([codes[1]]);
     expect(JSON.stringify(rows)).toBe(original);
   } finally { act(() => tree.unmount()); }
 });

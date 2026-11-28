@@ -1,3 +1,4 @@
+import { chooseFilterValue, isSingleChoiceFilter } from '../data/filterChoice';
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
 import { ChipStrip } from './selectors';
@@ -141,9 +142,7 @@ function FilterSheetInner({
 
   const toggle = (key: keyof Filters, value: string) => {
     setDraft((d) => {
-      const list = (d[key] as string[]) ?? [];
-      const next = list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
-      return { ...d, [key]: next };
+      return { ...d, [key]: chooseFilterValue((d[key] as string[]) ?? [], value, isSingleChoiceFilter(key)) };
     });
   };
 
