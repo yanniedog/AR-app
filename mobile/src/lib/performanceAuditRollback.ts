@@ -394,7 +394,15 @@ export async function retryPerformanceAuditRollback(
   let latest: PerformanceAuditRollbackRestoreResult = { restored: false };
   for (let attemptNumber = 1; attemptNumber <= limit; attemptNumber += 1) {
     if (attemptNumber > 1) await beforeRetry?.(attemptNumber);
-    latest = await attempt(attemptNumber);
+    try {
+      latest = await attempt(attemptNumber);
+    } catch (cause) {
+      latest = {
+        restored: false,
+        error: cause instanceof Error ? cause.message : String(cause),
+        cause,
+      };
+    }
     if (latest.error) errors.push(latest.error);
     if (latest.restored) return { ...latest, attempts: attemptNumber };
   }
