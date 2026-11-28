@@ -136,7 +136,7 @@ const rowToken = (r: RateRow) => r.public_offer_id ? publicOfferSelectionToken(r
 
 const SearchProductRow = React.memo(function SearchProductRow({ row, section, selectMode, selected, selectionToken, onToggleSelect,
   onLogoRenderStateChange, comparisonUnverified, rateScenario, quoteOwner, auditCell, auditRevision, onAuditCellCommit, repaymentAmount }: {
-  row: RateRow; section: SectionKey; selectMode: boolean; selected: boolean; selectionToken: string; repaymentAmount: number | null;
+  row: RateRow; section: SectionKey; selectMode: boolean; selected: boolean; selectionToken: string; repaymentAmount: number | 'pending' | null;
   onToggleSelect: (token: string) => void;
   onLogoRenderStateChange?: (id: string, state: LogoRenderState) => void;
   comparisonUnverified: boolean; rateScenario: RateScenario; quoteOwner?: object | null;
@@ -1178,7 +1178,7 @@ export default function RatesWorkspace() {
   const { refFor: physicalCellRef, measure: measurePhysicalCells } = physicalVisibility;
   const { amount: enteredLoanAmount, invalid: repaymentInputsInvalid, incompleteFunds } = mortgageComparisonValues(mortgageInputs);
   const repaymentAmount = section === 'Mortgage' && availability === 'listed' && !repaymentInputsInvalid
-    && !incompleteFunds && enteredLoanAmount !== null && enteredLoanAmount > 0 ? enteredLoanAmount : null;
+    && !incompleteFunds && enteredLoanAmount !== null && enteredLoanAmount > 0 ? displayedProvisional ? 'pending' : enteredLoanAmount : null;
   const renderProduct = useCallback(({ item, target }: { item: ResultRow; target?: string }) => <View collapsable={false}
     ref={target === 'Cell' && !displayedProvisional ? physicalCellRef(item) : undefined}
     onLayout={target === 'Cell' && !displayedProvisional ? measurePhysicalCells : undefined}>{'product_key' in item ? (

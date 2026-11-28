@@ -1,4 +1,4 @@
-import { matchesMortgageFacet } from './mortgageFacets';
+import { rowRepaymentType, matchesMortgageFacet } from './mortgageFacets';
 import { SECTIONS } from '../constants';
 import { getMandatoryEligibilityRevision, mandatoryEligibleRows } from './eligibilityGate';
 import { getSuitabilityRevision } from './suitabilityGate';
@@ -578,7 +578,7 @@ export function prepareRowFilter(
     if (!inList(row.provider, filters.providers)) return false;
     if (!inList(row.rate_type, filters.rateTypes)) return false;
     if (!matchesLvrTier(row.lvr_tier, filters.lvrTiers)) return false;
-    if (!matchesMortgageFacet(row.ribbon_repayment_type ?? row.repayment_type, filters.repaymentTypes, 'repayment')) return false;
+    if (!matchesMortgageFacet(rowRepaymentType(row), filters.repaymentTypes, 'repayment')) return false;
     if (!matchesMortgageFacet(row.loan_purpose ?? row.security_purpose, filters.loanPurposes, 'purpose')) return false;
     if (!inList(row.ribbon_deposit_kind, filters.depositKinds)) return false;
     if (!inList(row.interest_payment, filters.interestPayments)) return false;

@@ -1,3 +1,4 @@
+import { rowRepaymentType } from '../data/mortgageFacets';
 import type { ConditionalRateFact, ConditionalRatePresentation } from '../data/rateConditionalFacts';
 import type { EvidenceFact, EvidencePresentation } from '../data/displayEvidenceFacts';
 import type { NumericConditionBoundary, PublishedNumericConditionFact } from '../data/scopedFinancialConditionFacts';
@@ -111,7 +112,7 @@ export function uiRateStructure(row: RateRow): UiText {
   return uiLabel(value === 'fixed' ? 'Fixed' : value === 'variable' ? 'Variable' : value === 'base' ? 'Ongoing' : value === 'bonus' ? 'Bonus rate' : ['intro', 'introductory'].includes(value) ? 'Introductory' : 'Unknown');
 }
 export function uiRepayment(row: RateRow): UiText {
-  const value = (row.ribbon_repayment_type ?? row.repayment_type ?? '').toUpperCase();
+  const value = (rowRepaymentType(row) ?? '').toUpperCase();
   return uiLabel(['PI', 'P&I', 'PRINCIPAL_AND_INTEREST', 'PRINCIPAL_INTEREST'].includes(value) ? 'Principal & interest'
     : ['IO', 'INTEREST_ONLY'].includes(value) ? 'Interest only' : 'Unknown');
 }

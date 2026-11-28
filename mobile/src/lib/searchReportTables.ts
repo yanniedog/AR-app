@@ -1,3 +1,4 @@
+import { rowRepaymentType } from '../data/mortgageFacets';
 import type { FilteredSearchSnapshot, SearchCoverageFact } from '../data/filteredSearchSnapshot';
 import type { DetailItem, NormalizedProductFact, ProductDetail, RateRow } from '../types';
 import type { ProfileFilters } from '../data/profile';
@@ -126,7 +127,7 @@ export function searchReportTables(snapshot: FilteredSearchSnapshot): ReportShee
     const numerical: readonly [UiLabel, unknown, UiCopy][] = [['Advertised rate', row.rate, humanizeEnum('FRACTION')], ['Comparison rate', row.comparison_rate, humanizeEnum('FRACTION')], ['Ongoing rate', row.ongoing_rate, humanizeEnum('FRACTION')], ['Minimum balance', row.balance_min, humanizeEnum('AUD')], ['Maximum balance', row.balance_max, humanizeEnum('AUD')], ['Term', row.term_months, 'months']];
     numerical.forEach(([label, value, unit]) => record(rates, prefix, label, value === undefined ? null : decimal(value), unit));
     record(rates, prefix, 'Term', formatTerm(row) || uiLabel('Unknown')); if (row.term) record(rates, prefix, 'Reference', uiIdentifier(row.term));
-    const enumFields: readonly [UiLabel, string | undefined][] = [['Rate type', row.rate_type], ['Rate structure', row.ribbon_rate_structure], ['Repayment', row.ribbon_repayment_type ?? row.repayment_type], ['Loan purpose', row.loan_purpose], ['Rate kind', row.ribbon_deposit_kind], ['Interest paid', row.interest_payment], ['Account class', row.account_class], ['Account type', row.account_type], ['Security', row.security_purpose], ['Features', row.feature_set]];
+    const enumFields: readonly [UiLabel, string | undefined][] = [['Rate type', row.rate_type], ['Rate structure', row.ribbon_rate_structure], ['Repayment', rowRepaymentType(row)], ['Loan purpose', row.loan_purpose], ['Rate kind', row.ribbon_deposit_kind], ['Interest paid', row.interest_payment], ['Account class', row.account_class], ['Account type', row.account_type], ['Security', row.security_purpose], ['Features', row.feature_set]];
     enumFields.forEach(([label, value]) => record(rates, prefix, label, value === undefined ? null : humanizeEnum(value)));
     const qualifier = rateConditionalFacts(row, snapshot.request.section);
     if (qualifier.facts.length) record(rates, prefix, 'Conditions', uiConditionalRateFacts(qualifier));

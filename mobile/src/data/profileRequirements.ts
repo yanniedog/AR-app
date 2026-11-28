@@ -1,3 +1,4 @@
+import { rowRepaymentType } from './mortgageFacets';
 import type { CorePayload, ProductDetail, RateRow, SectionKey } from '../types';
 import { compareLvrTiers } from './lvrTier';
 import {
@@ -10,7 +11,7 @@ export function profileAttributeOptions(rows: readonly RateRow[], field: keyof R
   const counts = new Map<string, number>();
   for (const row of rows) {
     const raw = field === 'loan_purpose' ? row.loan_purpose ?? row.security_purpose
-      : field === 'ribbon_repayment_type' ? row.ribbon_repayment_type ?? row.repayment_type : row[field];
+      : field === 'ribbon_repayment_type' ? rowRepaymentType(row) : row[field];
     if (typeof raw !== 'string' || !raw.trim()) continue;
     counts.set(raw, (counts.get(raw) ?? 0) + 1);
   }

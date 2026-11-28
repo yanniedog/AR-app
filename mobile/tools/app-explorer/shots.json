@@ -3,7 +3,7 @@
     "name": "browse",
     "open": "/browse",
     "scroll": 0,
-    "why": "home rates list, incl. early first page after eligibility is ready, then the settled page (rows must not shift); stacked product rows sit 8 dp apart; TD term and payment frequency are checked in the real-use session"
+    "why": "home rates list, incl. early first page after eligibility is ready, then the settled page (rows must not shift); stacked product rows sit 8 dp apart; mortgage estimates show the repayment basis and P&I term beside the amount; TD term and payment frequency are checked in the real-use session"
   },
   {
     "name": "watchlist",

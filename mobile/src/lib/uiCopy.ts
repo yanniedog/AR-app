@@ -88,7 +88,7 @@ export const UI_LABELS = [
   'Online', 'Live', 'Local', 'Partial', 'Complete', 'Coverage', 'Core', 'Details', 'History', 'Data',
   'LVR', 'Balance', 'Minimum', 'Maximum', 'Term', 'Months', 'Years', 'months', 'years',
   'month', 'year', 'mo', 'yr', 'days', 'bps', 'AUD', 'per month', 'per year', 'at maturity',
-  'Variable', 'Fixed', 'Principal & interest', 'Interest only', 'Owner occupied', 'Investor',
+  'Variable', 'Fixed', 'P&I', 'Principal & interest', 'Interest only', 'Owner occupied', 'Investor',
   'Buying', 'Refinancing', 'Loan needed', 'Property price ($)', 'Property value ($)',
   'Your savings ($)', 'Upfront costs ($)', 'Loan balance ($)', 'Years left', 'Deposit amount ($)',
   'Current balance ($)', 'Current mortgage bank', 'Select bank', 'Current product',

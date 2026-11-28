@@ -425,3 +425,23 @@ test('holds measured icons in the fixed-row coordinate space and ignores stale g
     expect(mockShow).toHaveBeenLastCalledWith('Details');
   } finally { act(() => tree.unmount()); }
 });
+
+test.each([
+  ['NAB Base Variable Rate Home Loan', 'PRINCIPAL_AND_INTEREST', '0.0694', '$4,298/month · P&I · 30 yr'],
+  ['NAB Tailored Home Loan', 'INTEREST_ONLY', '0.0774', '$3,759/month · Interest only'],
+])('shows the monthly amount and basis together for %s', (product_name, repayment_type, comparison_rate, expected) => {
+  const tree = render({ product_name, product_key: product_name, provider: 'NATIONAL AUSTRALIA BANK',
+    rate: '0.0694', comparison_rate, repayment_type }, { repaymentAmount: 650000 });
+  try {
+    expect(tree.root.findByProps({ testID: 'compact-repayment' }).props.children).toBe(expected);
+    expect(mainTarget(tree).props.accessibilityLabel).toContain(expected);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('provisional mortgage rows retain their repayment line without showing a stale amount', () => {
+  const tree = render({ ...row, repayment_type: 'INTEREST_ONLY' }, { repaymentAmount: 'pending' });
+  try {
+    expect(tree.root.findByProps({ testID: 'compact-repayment' }).props.children).toBe('Updating');
+    expect(tree.root.findByProps({ testID: 'compact-product-row' }).props.style.height).toBeUndefined();
+  } finally { act(() => tree.unmount()); }
+});

@@ -25,7 +25,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { BankAvatar } from './BankAvatar';
 import { RateFreshnessSymbol } from './RateFreshnessSymbol';
 import { rateFreshness, rowVerificationReceipt } from '../data/rateFreshness';
-import { mortgageMonthlyRepayment } from '../data/mortgageRepayment';
+import { LIST_REPAYMENT_TERM_YEARS, mortgageMonthlyRepayment, mortgageRepaymentBasis } from '../data/mortgageRepayment';
 import { productHasAllFeatures } from '../data/featuresCore';
 import {
   productRateChangeText,
@@ -35,12 +35,12 @@ import { androidRipple, AppText } from './ui';
 import { PressFeedback } from './PressFeedback';
 import { IconAction } from './IconAction';
 import { useWordBubble, type IconWord } from './WordBubble';
-import { COMPACT_ROW, compactFactWidth, compactProductFacet, compactProductRowLayout, compactTierIndex } from './product/compactProductRow';
+import { COMPACT_ROW, compactProductFacet, compactProductRowLayout, compactTierIndex } from './product/compactProductRow';
 import { sourceRowForPublicRow } from '../data/publicRateIntegration';
 import { scopedRateConditions } from '../data/rateConditions';
 import { scopedFinancialConditionFacts, type ScopedFinancialConditionPresentation } from '../data/scopedFinancialConditionFacts';
 import { uiAccessBadge, uiConditionTag, uiListedLvr, uiLoanPurpose } from '../lib/financialUiCopy';
-import { uiJoin, uiLabel, uiMoney, uiProductName, uiProviderName, uiProviderShort, type UiChild, type UiCopy, type UiText } from '../lib/uiCopy';
+import { uiCount, uiJoin, uiLabel, uiMoney, uiProductName, uiProviderName, uiProviderShort, type UiChild, type UiCopy, type UiText } from '../lib/uiCopy';
 import { productSaveIdentity } from '../lib/productSaveIdentity';
 
 function chips(row: RateRow, section: SectionKey, conditional: boolean, conditions: ScopedFinancialConditionPresentation): UiText[] {
@@ -52,8 +52,8 @@ function chips(row: RateRow, section: SectionKey, conditional: boolean, conditio
     if (row.ribbon_rate_structure) out.push(humanizeEnum(row.ribbon_rate_structure));
     const term = formatTerm(row);
     if (term) out.push(term);
-    if (row.ribbon_repayment_type ?? row.repayment_type)
-      out.push(humanizeEnum(row.ribbon_repayment_type ?? row.repayment_type));
+    if (row.repayment_type ?? row.ribbon_repayment_type)
+      out.push(humanizeEnum(row.repayment_type ?? row.ribbon_repayment_type));
     if (row.loan_purpose) out.push(uiLoanPurpose(row));
     out.push(...(sourceLvr.length ? sourceLvr.map(uiConditionTag) : [uiListedLvr(row)]));
   } else if (section === 'TD') {
@@ -131,7 +131,7 @@ function ProductCardView({
   /** Pricing assumptions supplied by the ephemeral comparison surface. */
   rateScenario?: RateScenario;
   /** Entered Mortgage loan amount; shows the monthly repayment at the payable rate. */
-  repaymentAmount?: number | null;
+  repaymentAmount?: number | 'pending' | null;
 }) {
   const theme = useTheme();
   const { width, fontScale } = useWindowDimensions();
@@ -187,11 +187,14 @@ function ProductCardView({
     : resolution ? resolution.status === 'exact' && resolution.payableRate != null ? toFraction(resolution.payableRate) : null
       : toFraction(row.rate);
   const enteredOffset = Number(rateScenario?.offsetBalance ?? 0);
-  const applicableOffset = section === 'Mortgage' && repaymentAmount !== null && enteredOffset > 0
+  const applicableOffset = section === 'Mortgage' && typeof repaymentAmount === 'number' && enteredOffset > 0
     && productHasAllFeatures(row.product_key, ['OFFSET'], details?.products, boundRow, section) ? enteredOffset : 0;
-  const monthlyRepayment = section === 'Mortgage'
+  const monthlyRepayment = section === 'Mortgage' && typeof repaymentAmount === 'number'
     ? mortgageMonthlyRepayment(row, repaymentAmount, payableFraction, applicableOffset) : null;
-  const repaymentText = monthlyRepayment === null ? null : uiJoin(uiMoney(monthlyRepayment), '/', 'month');
+  const pendingRepayment = repaymentAmount === 'pending' && section === 'Mortgage' && mortgageRepaymentBasis(row) !== null;
+  const repaymentText = pendingRepayment ? uiLabel('Updating') : monthlyRepayment === null ? null : uiJoin(
+    uiMoney(monthlyRepayment), '/', 'month', ' · ', mortgageRepaymentBasis(row) === 'INTEREST_ONLY'
+      ? 'Interest only' : uiJoin('P&I', ' · ', uiCount(LIST_REPAYMENT_TERM_YEARS), ' ', 'yr'));
   const metadata = [
     ...(secondaryLabel
       ? [uiJoin(secondaryLabel, ' ', secondaryRate === null ? uiLabel('Unknown') : formatRate(secondaryRate))]
@@ -240,8 +243,7 @@ function ProductCardView({
   const detailWidths = compactProductRowLayout(measuredWidth, fontScale, rateText, secondaryText,
     facet, statusIcons.length, 0, 0, tierIndex);
   const scrollFacts = !enlargedText && Math.max(
-    detailWidths.primary + detailWidths.secondary + (secondaryText ? 6 : 0)
-      + (repaymentText ? compactFactWidth(repaymentText, fontScale) + 6 : 0), detailWidths.facet + 4,
+    detailWidths.primary + detailWidths.secondary + (secondaryText ? 6 : 0), detailWidths.facet + 4,
   ) > availableTextWidth;
   const factsOffset = React.useRef(0);
   const onRowLayout = (event: LayoutChangeEvent) => {
@@ -324,7 +326,7 @@ function ProductCardView({
         flexDirection: 'row',
         alignItems: 'center',
         minHeight: COMPACT_ROW.minHeight,
-        height: enlargedText ? undefined : COMPACT_ROW.minHeight,
+        height: enlargedText || repaymentText ? undefined : COMPACT_ROW.minHeight,
         gap: COMPACT_ROW.gap,
         paddingVertical: COMPACT_ROW.rowInset,
         paddingHorizontal: 0,
@@ -401,8 +403,6 @@ function ProductCardView({
                   <AppText testID="compact-secondary-rate" variant="small" color="textMuted"
                     style={{ fontVariant: ['tabular-nums'] }}>{secondaryText}</AppText>
                 </View> : null}
-                {repaymentText ? <AppText testID="compact-repayment" variant="small" weight="600"
-                  style={{ fontVariant: ['tabular-nums'] }}>{repaymentText}</AppText> : null}
               </View>
               <View testID="compact-product-facts" onLayout={recordRegion('facts')}
                 style={{ flexDirection: 'row', flexWrap: enlargedText ? 'wrap' : 'nowrap', alignItems: 'center', minHeight: COMPACT_ROW.lineHeight, gap: 6 }}>
@@ -420,6 +420,8 @@ function ProductCardView({
               </View>
             </ProductFactViewport>
           </View>
+          {repaymentText ? <AppText testID="compact-repayment" variant="small" weight="600"
+            style={{ fontVariant: ['tabular-nums'] }}>{repaymentText}</AppText> : null}
         </PressFeedback>
       </View>
       <View style={{ width: COMPACT_ROW.action }}>
