@@ -57,7 +57,14 @@ if [ "$ux_status" -ne 0 ]; then
   echo "ux-review failed with status $ux_status" >&2
   echo "$ux_status" > explorer-out/ux-review-failed
 fi
-if [[ "${AUDIT:-live}" == live && ( "${MODE:-crawl}" == full || "${MODE:-crawl}" == audit ) ]]; then
+if [[ ( "${MODE:-crawl}" == session && "${AUDIT:-live}" == rate-changes ) || ( "${AUDIT:-live}" == live && ( "${MODE:-crawl}" == full || "${MODE:-crawl}" == audit ) ) ]]; then
   python3 mobile/tools/app-explorer/rate-change-audit.py explorer-out 2>&1 | tee explorer-out/rate-change-audit.txt || status=1
 fi
+case "${MODE:-crawl}" in
+  session|full|audit)
+    PYTHONDONTWRITEBYTECODE=1 python3 mobile/tools/app-explorer/test_rate_evidence.py
+    python3 mobile/tools/app-explorer/rate_evidence.py explorer-out
+    node mobile/tools/app-explorer/rate-summary.mjs explorer-out >> explorer-out/report.md
+    ;;
+esac
 exit "$status"

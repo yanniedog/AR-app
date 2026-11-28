@@ -116,14 +116,25 @@ def audit(directory):
         nodes = json.loads(file.read_text())["nodes"]
         heroes = {}
         observed = {}
+        # Each deposit card keeps its stable button ID. Its native parent carries the
+        # exact offer identity and spans that button, including in a clipped list.
+        card_offers = [n for n in nodes if n.get("id", "").startswith('["rate-move",')
+                       and not (n.get("text") or n.get("desc")) and n.get("bounds")]
         for node in nodes:
-            marker = node.get("rateEvidence") or node.get("id", "")
+            marker = node.get("id", "")
             label = node.get("text") or node.get("desc") or ""
             match = re.search(r"(?:Best advertised|Advertised rate) [↑↓] ", label)
             if marker.startswith('["rate-evidence",'):
                 _, tag, digest, section, product, index = json.loads(marker)
                 heroes[tag, digest, section, product, index] = node
             if match:
+                if marker in ("rate-card-Savings", "rate-card-TD") and node.get("bounds"):
+                    left, top, right, bottom = node["bounds"]
+                    parents = {n["id"] for n in card_offers if n["bounds"][0] <= left
+                               and n["bounds"][1] <= top and n["bounds"][2] >= right
+                               and n["bounds"][3] >= bottom}
+                    if len(parents) == 1:
+                        marker = parents.pop()
                 if not marker.startswith('["rate-move",'):
                     raise ValueError(f"{file.name}: movement without offer identity: {label}")
                 key = tuple(json.loads(marker)[1:])

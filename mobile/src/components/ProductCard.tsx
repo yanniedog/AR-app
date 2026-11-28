@@ -207,7 +207,6 @@ function ProductCardView({
   const rateChangeText = productRateChangeText(rateChange, true);
   const cardId = section === 'Mortgage' ? undefined : `rate-card-${section}`;
   const movementId = rateChangeText ? rateEvidenceId('rate-move', manifest, section, row) : undefined;
-  const cardTestId = cardId && movementId ? `${cardId}|${movementId}` : movementId ?? cardId;
   const receipt = rowVerificationReceipt(row);
   const freshnessLabel = ({ current: 'Current', overdue: 'Overdue', stale: 'Stale', unknown: 'Unknown' } as const)
   [rateFreshness(row, receipt, Date.now())];
@@ -364,9 +363,10 @@ function ProductCardView({
           </PressFeedback>
         </View>
       ) : null}
-      <View ref={detailsBubble.anchorRef} collapsable={false} style={{ flex: 1, minWidth: 0 }}>
+      <View ref={detailsBubble.anchorRef} collapsable={false} testID={cardId ? movementId : undefined}
+        importantForAccessibility={cardId && movementId ? 'yes' : 'auto'} style={{ flex: 1, minWidth: 0 }}>
         <PressFeedback
-          testID={cardTestId}
+          testID={cardId ?? movementId}
           auditControlId={`rate-details:${row.product_key}:${row.rate_index ?? ''}`}
           onPressIn={() => { held.current = false; }}
           onPress={() => { if (!held.current) { detailsBubble.dismiss(); onPress?.(); } held.current = false; }}
