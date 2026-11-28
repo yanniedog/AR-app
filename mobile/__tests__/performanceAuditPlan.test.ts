@@ -746,17 +746,25 @@ describe('scenario re-entry gate', () => {
     }
   });
 
-  test('resumes at the next scenario rather than discarding the rest of the pass', () => {
-    const steps = allSteps().filter((step) => step.passId === 'first-pass');
-    const searchIndex = steps.findIndex(
+  test('keeps recovery armed across scenario changes until a route-entry step', () => {
+    const steps = searchSteps();
+    const filtersOpen = steps.findIndex(
       (step) => step.semanticActionId === 'search.filters.open',
     );
+    const dependent = steps.slice(filtersOpen + 1).find((step) => !routeEntry(step));
+    expect(dependent).toBeDefined();
     const gate = new ScenarioReentryGate();
-    gate.markRecovered(steps[searchIndex]);
+    gate.markRecovered(steps[filtersOpen]);
 
-    const next = steps.slice(searchIndex + 1).find((step) => step.scenarioId !== 'route.rates');
-    expect(next).toBeDefined();
-    expect(gate.takeRestore(next!, routeEntry(next!))).toBe(false);
+    const differentScenarioControl = {
+      ...dependent!,
+      scenarioId: 'route.synthetic-mounted-control',
+    };
+    expect(gate.takeRestore(differentScenarioControl, false)).toBe(false);
+    expect(gate.takeRestore(dependent!, false)).toBe(true);
+
+    expect(gate.takeRestore({ ...dependent!, scenarioId: 'route.entry' }, true)).toBe(false);
+    expect(gate.takeRestore(dependent!, false)).toBe(false);
   });
 
   test('a step that navigates to its own route clears the gate', () => {
