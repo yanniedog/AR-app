@@ -377,11 +377,15 @@ function briefFromCohort(input: BriefInput, sorted: CohortRate[]): NegotiationBr
       : selectedRate - scenarioData.currentRateFraction;
     if (delta > 0) {
       const annualDifference = Math.round(scenarioData.balance * delta * 100) / 100;
-      const periodDifference = receipt.ratePeriodMonths == null
+      const years = receipt.section === 'Mortgage' && scenario.mortgage.years.trim()
+        ? calculatorYears(scenario.mortgage.years) : null;
+      const months = years != null && receipt.ratePeriodMonths != null
+        ? Math.min(receipt.ratePeriodMonths, years * 12) : receipt.ratePeriodMonths;
+      const periodDifference = months == null
         ? annualDifference
-        : Math.round((annualDifference * receipt.ratePeriodMonths / 12) * 100) / 100;
-      const periodLabel = receipt.ratePeriodMonths == null ? uiLabel('per year')
-        : uiJoin(uiDuration(receipt.ratePeriodMonths, 'months'), ' · ', receipt.section === 'TD' ? 'at maturity' : 'Published period');
+        : Math.round((annualDifference * months / 12) * 100) / 100;
+      const periodLabel = months == null ? uiLabel('per year')
+        : uiJoin(uiDuration(months, 'months'), ' · ', receipt.section === 'TD' ? 'at maturity' : months !== receipt.ratePeriodMonths ? 'Remaining term' : 'Published period');
 
       illustration = {
         balance: scenarioData.balance,
