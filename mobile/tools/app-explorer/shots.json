@@ -3,7 +3,7 @@
     "name": "browse",
     "open": "/browse",
     "scroll": 0,
-    "why": "home rates list, incl. early first page after eligibility is ready, then the settled page (rows must not shift); stacked product rows sit 8 dp apart"
+    "why": "home rates list, incl. early first page after eligibility is ready, then the settled page (rows must not shift); monthly estimates show the repayment basis and P&I term beside the amount"
   },
   {
     "name": "watchlist",
