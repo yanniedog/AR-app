@@ -172,8 +172,8 @@ export async function reviewRun(dir, { sample } = {}) {
     const r = checkScreen({ screen: s.name, nodes: s.nodes, size: s.size, density, pkg: PKG, settleTimedOut: !!s.step.settleTimedOut, allowProse: legal });
     const list = [...r.findings];
     const png = loadPng(path.join(dir, 'screens', `${s.slug}.png`));
-    if (png && ['unavailable', 'unstable'].includes(s.step.keyboardMeasurement)) keyboardMeasurementGaps += 1;
-    if (png && s.step.keyboardMeasurement !== 'unstable') {
+    if (png && s.step.keyboardMeasurement !== 'measured') keyboardMeasurementGaps += 1;
+    if (png && s.step.keyboardMeasurement === 'measured') {
       list.push(...contrastFindings({ screen: s.name, nodes: s.nodes, png, pkg: PKG, density, size: s.size, keyboardBounds: s.step.keyboardBounds }));
       contrastMeasured += 1;
     }
