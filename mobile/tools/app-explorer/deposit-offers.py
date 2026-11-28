@@ -162,19 +162,25 @@ def audit(report):
                 raise ValueError("ambiguous CDR offer")
             represented.add(key)
             bank_rate = website.get(key)
-            row = product_rows.pop(index, {})
+            row = product_rows.pop(index, None)
             report["bankRows"] += 1
             # A stable CDR revision is needed to attach today's occurrence index.
             # A changed feed or absent occurrence is an unverified join.
-            if row and row.get("last_updated") != provider["lastUpdated"]:
+            if row is None:
+                report["unverified"].append(dict(product=product, index=index, reason="catalogue occurrence missing"))
+                continue
+            if not row.get("last_updated") or row["last_updated"] != provider["lastUpdated"]:
                 report["unverified"].append(dict(product=product, index=index, reason="CDR revision changed"))
                 continue
-            app_rate = decimal.Decimal(row["rate"]) if row else None
+            if bank_rate is None or row.get("rate") is None or raw.get("rate") is None:
+                report["unverified"].append(dict(product=product, index=index, reason="offer rate unavailable"))
+                continue
+            app_rate = decimal.Decimal(row["rate"])
             if bank_rate != decimal.Decimal(raw["rate"]) or app_rate != bank_rate or row.get("term") != raw["additionalValue"] or row.get("interest_payment") != payment:
                 report["discrepancies"].append(dict(source="Bank website and CDR", product=product, index=index, balance=band, termMonths=months,
                     bankPayment=payment, appPayment=row.get("interest_payment"), bankRate=str(bank_rate), cdrRate=raw["rate"], appRate=row.get("rate")))
         for index in product_rows:
-            report["discrepancies"].append(dict(product=product, index=index, reason="app-only occurrence"))
+            report["unverified"].append(dict(product=product, index=index, reason="provider occurrence missing"))
     for key in sorted(website.keys() - represented):
         report["discrepancies"].append(dict(websiteOnly=key))
 
