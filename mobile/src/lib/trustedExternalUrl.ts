@@ -28,7 +28,18 @@ export type TrustedExternalUrlResult =
     };
 
 const MAX_EXTERNAL_URL_LENGTH = 2_048;
-const AUSTRALIAN_LENDER_SUFFIXES = ['.au', '.bank'] as const;
+// Verified brand and official source domains from the AR-local public CDR register.
+const REGISTERED_LENDER_HOSTS = [
+  'anz.com.au',
+  'arabbank.com.au',
+  'bankaust.com.au',
+  'bankofmelbourne.com.au',
+  'commbank.com.au',
+  'ing.com.au',
+  'nab.com.au',
+  'up.com.au',
+  'westpac.com.au',
+] as const;
 const APPROVED_GLOBAL_LENDER_HOSTS = [
   'anz.com',
   'bankofchina.com',
@@ -117,7 +128,7 @@ function purposeAllowsUrl(parsed: InstanceType<typeof StandardUrl>, purpose: Tru
   // that purpose separate and constrain it to Australian financial domains or
   // the small explicit set of global CDR providers used by the catalogue.
   return (
-    AUSTRALIAN_LENDER_SUFFIXES.some((suffix) => host.endsWith(suffix)) ||
+    REGISTERED_LENDER_HOSTS.some((approved) => isHostOrSubdomain(host, approved)) ||
     APPROVED_GLOBAL_LENDER_HOSTS.some((approved) => isHostOrSubdomain(host, approved)) ||
     LENDER_DOCUMENT_PATHS[host]?.test(parsed.pathname) === true
   );
