@@ -59,7 +59,7 @@ describe('real-use session verdict', () => {
 
   it('flags what frustrates people as friction, not a crash', () => {
     const v = verdict(report([
-      step(1, 'slow tap', { responseMs: 3500 }),
+      step(1, 'slow tap', { responseMs: 3500, responseLowerBoundMs: 3000 }),
       step(2, 'empty wait', { responseMs: 400, firstContentMs: 6400 }),
       step(3, 'second tap', { retapped: true }),
       step(4, 'jumpy', { shifts: 3 }),
