@@ -114,7 +114,6 @@ def audit(directory):
     verified_income_plus = set()
     for file in Path(directory).rglob("*.nodes.json"):
         nodes = json.loads(file.read_text())["nodes"]
-        labels = [n.get("text") or n.get("desc") or "" for n in nodes]
         heroes = {}
         observed = {}
         for node in nodes:
@@ -160,7 +159,7 @@ def audit(directory):
                         if core["run_date"] == "2026-11-28" and move != ("2026-11-23", 5.3, "2026-11-24", 5.5):
                             raise ValueError(f"Unexpected November Income Plus archive endpoints: {move}")
                         verified_income_plus.add((tag, banner))
-            if hero and move and 'Rate' in labels and hero.get("text") == percent(move[3]) and not banners:
+            if hero and move and hero.get("text") == percent(move[3]) and not banners:
                 raise ValueError(f"{key}: missing advertised change {move}")
     if not verified_income_plus:
         raise ValueError("Income Plus regression screen was not verified")

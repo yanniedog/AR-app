@@ -94,7 +94,8 @@ import {
 } from '../../src/lib/performanceAuditActionParams';
 import { ratePresentation } from '../../src/data/ratePresentation';
 import { usePublicRateCatalogue } from '../../src/data/publicRateCatalogue';
-import { bindCurrentPublicRow, publicOfferDedupKey, publicProductOfferRows, publicRateScenario, publicScenarioForRow, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../../src/data/publicRateIntegration';
+import { matchesPublishedRate, rateEvidenceId } from '../../src/data/exactRateMove';
+import { sourceRowForPublicRow, bindCurrentPublicRow, publicOfferDedupKey, publicProductOfferRows, publicRateScenario, publicScenarioForRow, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../../src/data/publicRateIntegration';
 import { publicRateOriginLabel, publicRateText } from '../../src/data/publicRatePresentation';
 import { PublicRateEvidence } from '../../src/components/scenario/PublicRateEvidence';
 import { PublicCostComparison } from '../../src/components/scenario/PublicCostComparison';
@@ -721,6 +722,9 @@ export default function ProductDetail() {
   );
   const qualifier = rateQualifier(row, section);
   const presentation = ratePresentation(row, section, mortgageRateMetric);
+  const displayedAdvertisedRate = publicResolution ? row.rate : presentation.primaryLabel === 'Comparison rate' ? null : presentation.primary;
+  const priceEvidenceId = matchesPublishedRate(core, section, sourceRowForPublicRow(boundRow ?? row), displayedAdvertisedRate)
+    ? rateEvidenceId('rate-evidence', manifest, section, row) : undefined;
 
   const observedProductPoints = countFiniteSeriesPoints(seededProductValues);
   const selectedHistoryContext = !plotSelectedOnly && currentBest !== null && toFraction(row.rate) !== currentBest
@@ -798,7 +802,7 @@ export default function ProductDetail() {
           <AppText variant="small" color="textMuted">
             {publicResolution ? publicRateOriginLabel(publicResolution) : presentation.primaryLabel}
           </AppText>
-          <AppText testID={JSON.stringify(['rate-evidence', manifest?.tag, coreSha, section, productKey, row.rate_index])} variant="rateHero" weight="700" style={{ color: theme.colors.text }}>
+          <AppText testID={priceEvidenceId} variant="rateHero" weight="700" style={{ color: theme.colors.text }}>
             {publicResolution ? publicRateText(publicResolution) : formatRate(presentation.primary)}
           </AppText>
           {presentation.secondary !== null && presentation.secondaryLabel ? (
@@ -809,7 +813,7 @@ export default function ProductDetail() {
           <ProductRateChangeLine
             row={boundRow ?? row}
             section={section}
-            displayed={publicResolution ? row.rate : presentation.primaryLabel === 'Comparison rate' ? null : presentation.primary}
+            displayed={displayedAdvertisedRate}
           />
           <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
             {row.last_updated ? uiJoin('Bank updated', ' ', uiDate(row.last_updated), ' · ', 'Checked', ' ', uiDate(core?.run_date)) : uiJoin('Checked', ' ', uiDate(core?.run_date))}
