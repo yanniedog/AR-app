@@ -5,7 +5,7 @@
     {
       "sha256": "ca69028e7cdfd1f35b5eda00e354e64cfe4bcddf154ff7bc0dca8763daaf9269",
       "pinned_by": "fbf87608b60251364e83c14cd550175eab7f7db2",
-      "note": "The successor changes live mortgage repayment filters. Prepared history has the same cohort dimensions, events and product histories."
+      "note": "Earlier snapshots retain their recorded repayment classification. The successor uses source-first repayment classification for newly compiled mortgage cohorts. The wire format and product histories remain compatible."
     },
     {
       "sha256": "ee91ff248a3afc6b6e99cbe45f588ee621a210a01efdea1f5c197a52e6233ab3",

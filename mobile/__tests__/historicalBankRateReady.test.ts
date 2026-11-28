@@ -1,3 +1,4 @@
+import { rowRepaymentType } from '../src/data/mortgageFacets';
 import { gunzipSync } from 'node:zlib';
 import snapshot from '../src/data/historicalBankRateCatalogue.snapshot.json';
 import compiler from '../contracts/history-ready/compiler-manifest.json';
@@ -35,7 +36,7 @@ test('every curated feature and observed structural dimension retain exact raw p
   const dimensions: [keyof ProfileFilters, string[]][] = [
     ['loanPurposes', raw.sections.Mortgage.map(tier => tier.row.loan_purpose ?? tier.row.security_purpose ?? '')],
     ['rateTypes', raw.sections.Mortgage.map(tier => tier.row.rate_type ?? '')],
-    ['repaymentTypes', raw.sections.Mortgage.map(tier => tier.row.ribbon_repayment_type ?? tier.row.repayment_type ?? '')],
+    ['repaymentTypes', raw.sections.Mortgage.map(tier => rowRepaymentType(tier.row) ?? '')],
     ['lvrTiers', raw.sections.Mortgage.map(tier => tier.row.lvr_tier ?? '')],
     ['depositKinds', raw.sections.Savings.map(tier => tier.row.ribbon_deposit_kind ?? '')],
     ['interestPayments', raw.sections.TD.map(tier => tier.row.interest_payment ?? '')],

@@ -1,3 +1,4 @@
+import { rowRepaymentType } from './mortgageFacets';
 import { SECTION_KEYS, type RateRow } from '../types';
 import { validateHistoricalBankRateCatalogue, type HistoricalBankRateCatalogue } from './historicalBankRateCatalogueWire';
 import { isBroadlyAvailable, isConditionalDepositRate, isNonStandard } from './rateClassification';
@@ -23,7 +24,7 @@ export function compileHistoricalBankRateReady(input: unknown, compilerSha: stri
       const row = tier.row as RateRow;
       if (section === 'Savings' && isExplicitTermDepositProduct(row)) { ready.quarantined_tier_count++; continue; }
       const dims = section === 'Mortgage' ? [row.loan_purpose ?? row.security_purpose ?? null, row.rate_type ?? null,
-        row.ribbon_repayment_type ?? row.repayment_type ?? null, row.lvr_tier ?? null] :
+        rowRepaymentType(row) ?? null, row.lvr_tier ?? null] :
         section === 'Savings' ? [row.ribbon_deposit_kind ?? null] : [row.interest_payment ?? null];
       for (const [start, count, rates, id] of tier.spans) {
         const evidence = catalogue.evidence[id]; let broad = false, mask = 0;
