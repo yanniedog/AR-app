@@ -9,10 +9,10 @@ import AppIcon from '../icons/AppIcon';
 import { TOUCH_TARGET_MIN } from '../TouchTarget';
 import { AppText, Button, Row } from '../ui';
 import type { NormalizedProductFact, ProductDetail } from '../../types';
-import { factDocumentActions, type ProductDocumentAction } from '../../data/productDocuments';
+import { prepareFactDocumentActions, type ProductDocumentAction } from '../../data/productDocuments';
 import { uiJoin, type UiLabel } from '../../lib/uiCopy';
 
-const ProductPageContext = createContext<ProductDetail | null>(null);
+const ProductPageContext = createContext<(fact: NormalizedProductFact) => ProductDocumentAction | undefined>(() => undefined);
 type ProductWebTarget = { url: string; kind: 'provider' | 'source' };
 const ProductWebContext = createContext<ProductWebTarget | null>(null);
 
@@ -74,8 +74,12 @@ export function ProductPageLinks({ overview, productDetails, fallbackUrl, childr
     const source = productSourceUrl(fallbackUrl);
     return source ? { url: source, kind: 'source' } : null;
   }, [productDetails?.links, overview, link, fallbackUrl]);
+  const factLink = useMemo(() => {
+    const documentActions = prepareFactDocumentActions(productDetails);
+    return (fact: NormalizedProductFact) => documentActions(fact).find(action => action.url);
+  }, [productDetails]);
   useAuditExternalLinks(target ? [{ url: target.url, purpose: 'lender_source', label: 'Product' }] : []);
-  return <ProductPageContext.Provider value={productDetails ?? null}><ProductWebContext.Provider value={target}>{children}</ProductWebContext.Provider></ProductPageContext.Provider>;
+  return <ProductPageContext.Provider value={factLink}><ProductWebContext.Provider value={target}>{children}</ProductWebContext.Provider></ProductPageContext.Provider>;
 }
 
 /** Opens the lender's product page, or the page its rate was read from. Hidden only when neither is usable. */
@@ -102,8 +106,12 @@ function LinkedFact({ url, action, label, children }: { url: string; action: Pro
   </Pressable>;
 }
 
+export function useProductFactLink() {
+  return useContext(ProductPageContext);
+}
+
 export function ProductPageLink({ label, fact, children }: { label: UiCopy; fact?: NormalizedProductFact; children: UiChild }) {
-  const detail = useContext(ProductPageContext);
-  const action = fact && factDocumentActions(detail, fact).find(value => value.url);
+  const factLink = useProductFactLink();
+  const action = fact && factLink(fact);
   return action?.url ? <LinkedFact url={action.url} action={action} label={label}>{children}</LinkedFact> : <>{children}</>;
 }

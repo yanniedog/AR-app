@@ -1,4 +1,5 @@
-import { factDocumentActions, productDocumentActions } from '../src/data/productDocuments';
+import retained from './fixtures/product-criteria-retained-20260519.json';
+import { factDocumentActions, prepareFactDocumentActions, productDocumentActions } from '../src/data/productDocuments';
 import { trustedExternalUrl } from '../src/lib/trustedExternalUrl';
 import type { ProductDetail, NormalizedProductFact } from '../src/types';
 
@@ -36,4 +37,13 @@ test('merged document actions open the locator associated with the selected raw 
   ] }] };
   expect(factDocumentActions(sources, { id: 'control', kind: 'constraint', canonicalKey: 'constraint.max_lvr',
     sourcePath: '/constraints/0/additionalValue', sourcePathBasis: 'raw-cdr' })[0]).toMatchObject({ page: 7 });
+});
+
+test('reuses the same first matching citation for the published fact and its exact field', () => {
+  const fact = retained.products['up-home'].facts.find(value => value.sourcePath === '/constraints/0') as NormalizedProductFact;
+  const lookup = prepareFactDocumentActions(detail);
+  const [match] = lookup(fact);
+  expect(match).toMatchObject({ url, page: 3 });
+  expect(lookup({ ...fact, sourcePath: detail.sourceDocuments![0].citations![0].sourcePath })[0]).toBe(match);
+  expect(lookup({ ...fact, sourcePath: '/constraints' })).toEqual([]);
 });
