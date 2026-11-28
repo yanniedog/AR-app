@@ -808,6 +808,7 @@ describe('economic outlook', () => {
     clock += 5_000; // the second refresh is queued behind the first write for 5 s
     finishFirstWrite();
     await Promise.all([first, second]);
+    expect(write).toHaveBeenCalledTimes(2);
     expect(warn.mock.calls.filter(([tag, message]) => tag === 'economic-outlook' && String(message).startsWith('slow save'))).toHaveLength(1);
     expect(warn).toHaveBeenCalledWith('economic-outlook', 'slow save: 5000 ms');
   });
@@ -817,7 +818,7 @@ describe('economic outlook', () => {
     jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
     const yielded = jest.spyOn(yieldModule, 'yieldToUi').mockResolvedValue();
     jest.spyOn(global, 'fetch').mockImplementation(async (input) => mockCsvResponse(String(input)));
-    await loadEconomicOutlook(true);
+    const smallOutlook = await loadEconomicOutlook(true);
     expect(yielded).not.toHaveBeenCalled();
 
     resetEconomicOutlookRuntimeCacheForTests();
@@ -832,7 +833,15 @@ describe('economic outlook', () => {
         text: async () => (large ? `${padding}\n${body}` : body),
       } as unknown as Response;
     });
-    await loadEconomicOutlook(true);
+    const parseModule = jest.requireActual('../src/data/economicOutlookParse') as typeof import('../src/data/economicOutlookParse');
+    const cashParse = jest.spyOn(parseModule, 'parseCashRateTargetCsv');
+    const largeOutlook = await loadEconomicOutlook(true);
+    expect(largeOutlook.cashRateHistory).toEqual(smallOutlook.cashRateHistory);
+    expect(largeOutlook.indicators.find(item => item.id === 'unemployment')?.points)
+      .toEqual(smallOutlook.indicators.find(item => item.id === 'unemployment')?.points);
+    expect(largeOutlook.refreshErrors).toEqual(smallOutlook.refreshErrors);
+    expect(cashParse).toHaveBeenCalled();
+    expect(yielded.mock.invocationCallOrder[0]).toBeLessThan(cashParse.mock.invocationCallOrder[0]);
     // f1 once for the cash rate history, h5 once per labour indicator (three).
     expect(yielded).toHaveBeenCalledTimes(4);
   });

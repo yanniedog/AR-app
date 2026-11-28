@@ -124,14 +124,38 @@ function quotedLineCells(line: string): string[] | null {
   return parseCsvQuoted(line)[0] ?? [];
 }
 
+/** Scan quoted data without allocating cells for unrelated series. */
+function quotedObservation(line: string, column: number): [string, string] | null {
+  let quoted = false;
+  let index = 0;
+  let date = '';
+  let value = '';
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    if (char === '"') {
+      if (quoted && line[i + 1] === '"') i += 1;
+      else { quoted = !quoted; continue; }
+    } else if (char === ',' && !quoted) {
+      index += 1;
+      continue;
+    }
+    if (index === 0) date += char;
+    else if (index === column) value += char;
+  }
+  return quoted ? null : [date, value];
+}
+
+export function splitRbaLines(text: string): string[] {
+  return text.replace(/^\uFEFF/, '').split(/\r\n|\r|\n/);
+}
+
 /**
  * Read one series from an RBA table. Only the date and the requested column are
  * extracted from each data row, so the wide tables (cash rate history has dozens
  * of columns) are not split into every cell. Quoted lines use the character parser,
  * and a quote that spans lines falls back to parsing the whole table.
  */
-export function parseRbaSeriesCsv(text: string, seriesId: string): ParsedSeries {
-  const lines = text.replace(/^\uFEFF/, '').split(/\r\n|\r|\n/);
+export function parseRbaSeriesCsv(text: string, seriesId: string, lines = splitRbaLines(text)): ParsedSeries {
 
   let ids: string[] | undefined;
   let publicationRow: string[] | undefined;
@@ -159,10 +183,9 @@ export function parseRbaSeriesCsv(text: string, seriesId: string): ParsedSeries 
     let dateText: string;
     let valueText: string;
     if (line.includes('"')) {
-      const cells = quotedLineCells(line);
-      if (!cells) return parseRbaSeriesCsvFull(text, seriesId);
-      dateText = cells[0] ?? '';
-      valueText = cells[column] ?? '';
+      const fields = quotedObservation(line, column);
+      if (!fields) return parseRbaSeriesCsvFull(text, seriesId);
+      [dateText, valueText] = fields;
     } else {
       const first = line.indexOf(',');
       if (first < 0) continue;
