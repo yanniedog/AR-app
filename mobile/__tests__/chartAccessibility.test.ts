@@ -1,5 +1,8 @@
 import { CHART_CONTROL_TARGET_PX } from '../src/components/charts/ChartSliceControls';
-import { holdDatesWithinSeriesWindow } from '../src/components/economy/EconomicChartFrame';
+import {
+  extendSteppedSeriesThroughDate,
+  holdDatesWithinSeriesWindow,
+} from '../src/components/economy/EconomicChartFrame';
 import {
   plotLocalX,
   rbaSeriesThroughDate,
@@ -32,10 +35,21 @@ describe('chart accessibility contracts', () => {
     ]);
   });
 
-  it('keeps policy hold meetings inside the selected series window', () => {
+  it('keeps policy holds inside the chart domain, including holds after the last change', () => {
     expect(holdDatesWithinSeriesWindow(
-      [{ date: '2025-08-01', value: 4.1 }, { date: '2026-08-01', value: 3.6 }],
-      ['2024-06-01', '2025-10-15', '2027-02-01'],
-    )).toEqual(['2025-10-15']);
+      [{ date: '2025-08-01', value: 4.1 }, { date: '2026-05-06', value: 3.85 }],
+      ['2024-06-01', '2025-10-15', '2026-06-16', '2027-02-01'],
+      '2026-12-01',
+    )).toEqual(['2025-10-15', '2026-06-16']);
+  });
+
+  it('extends the actual policy step through the latest qualifying hold', () => {
+    expect(extendSteppedSeriesThroughDate(
+      [{ date: '2026-05-06', value: 3.85 }],
+      '2026-06-16',
+    )).toEqual([
+      { date: '2026-05-06', value: 3.85 },
+      { date: '2026-06-16', value: 3.85 },
+    ]);
   });
 });
