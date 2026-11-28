@@ -43,12 +43,11 @@
   {"journey": "Saved Savings matches", "name": "require Bill payment", "freshOnly": true, "tap": {"label": "Bill payment", "checked": false}, "then": {"label": "Bill payment", "checked": true}},
   {"journey": "Saved Savings matches", "name": "save four savings features", "freshOnly": true, "tap": "Done", "gone": "Done"},
   {"journey": "Saved Savings matches", "name": "open savings rate kinds", "freshOnly": true, "tap": {"id": "profile:Savings:depositKinds:open"}, "then": "Ongoing"},
-  {"journey": "Saved Savings matches", "name": "choose ongoing savings", "freshOnly": true, "tap": {"label": "Ongoing", "checked": false}, "then": {"label": "Ongoing", "checked": true}},
-  {"journey": "Saved Savings matches", "name": "save savings rate kind", "freshOnly": true, "tap": "Done", "gone": "Done"},
-  {"journey": "Saved Savings matches", "name": "reconcile saved savings matches", "freshOnly": true, "open": "/search?section=Savings", "then": {"contains": "After saved requirements:"}},
+  {"journey": "Saved Savings matches", "name": "choose ongoing savings", "freshOnly": true, "tap": {"label": "Ongoing", "checked": false}, "then": ["Savings · Saved requirements 5", {"id": "profile:Savings:depositKinds:open", "label": "Account type: Ongoing"}], "thenTimeoutMs": 15000},
+  {"journey": "Saved Savings matches", "name": "reconcile saved savings matches", "freshOnly": true, "open": "/browse?section=Savings", "then": [{"label": "Savings", "selected": true}, {"contains": "After saved requirements:"}], "thenTimeoutMs": 15000},
   {"journey": "Saved Savings matches", "name": "show saved savings matches if hidden", "freshOnly": true, "tap": "Show saved matches", "optional": true, "gone": "Show saved matches"},
-  {"journey": "Saved Savings matches", "name": "open a priced matching account", "freshOnly": true, "tap": {"id": "rate-card-Savings", "contains": "%"}, "scroll": true, "gone": {"id": "rate-card-Savings"}},
+  {"journey": "Saved Savings matches", "name": "open a priced matching account", "freshOnly": true, "tap": {"id": "rate-card-Savings", "contains": "%"}, "scroll": true, "then": "Savings accounts", "gone": {"id": "rate-card-Savings"}, "thenTimeoutMs": 15000},
   {"journey": "Restore Savings profile", "name": "restore audit profile", "freshOnly": true, "open": "/profile"},
   {"journey": "Restore Savings profile", "name": "clear audit requirements", "freshOnly": true, "tap": {"contains": "Clear all saved requirements"}, "scroll": true, "gone": {"contains": "Clear all saved requirements"}},
-  {"journey": "Restore Savings profile", "name": "leave savings profile", "freshOnly": true, "open": "/search?section=Mortgage"}
+  {"journey": "Restore Savings profile", "name": "leave savings profile", "freshOnly": true, "open": "/browse?section=Mortgage", "then": {"label": "Home loans", "selected": true}, "thenTimeoutMs": 15000}
 ]
