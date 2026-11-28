@@ -1,0 +1,222 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I No Offset Mortgage",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Market median",
+  "at": [
+   181,
+   203
+  ]
+ },
+ {
+  "label": "Market mean",
+  "at": [
+   436,
+   203
+  ]
+ },
+ {
+  "label": "RBA cash rate",
+  "at": [
+   175,
+   253
+  ]
+ },
+ {
+  "label": "Hide Product facts",
+  "flags": "tap",
+  "at": [
+   360,
+   482
+  ]
+ },
+ {
+  "label": "Product facts",
+  "at": [
+   328,
+   482
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   360,
+   582
+  ]
+ },
+ {
+  "label": "Early / extra repayments",
+  "at": [
+   190,
+   638
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   658
+  ]
+ },
+ {
+  "label": "Redraw facility",
+  "at": [
+   190,
+   738
+  ]
+ },
+ {
+  "label": "Included",
+  "at": [
+   530,
+   738
+  ]
+ },
+ {
+  "label": "Show Documents",
+  "flags": "tap",
+  "at": [
+   360,
+   967
+  ]
+ },
+ {
+  "label": "Documents",
+  "at": [
+   328,
+   967
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   360,
+   1131
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   286,
+   1183
+  ]
+ },
+ {
+  "label": "Unverified",
+  "at": [
+   626,
+   1183
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   273,
+   1235
+  ]
+ },
+ {
+  "label": "Unassessed",
+  "at": [
+   613,
+   1235
+  ]
+ },
+ {
+  "label": "Show Recorded criteria",
+  "flags": "tap",
+  "at": [
+   360,
+   1364
+  ]
+ },
+ {
+  "label": "Recorded criteria",
+  "at": [
+   328,
+   1384
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
