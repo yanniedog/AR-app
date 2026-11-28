@@ -288,6 +288,9 @@ def run(directory, result):
     steps = {s['name']: s for s in report['steps'] if s.get('session')}
     observed = set()
     checkpoints = dict(CHECKPOINTS)
+    if 'switch to savings and see a priced account' in steps:
+        checkpoints['switch to savings and see a priced account'] = checkpoints.pop('switch to savings')
+        checkpoints['switch to term deposits and see a priced offer'] = ('TD', 'Term deposits')
     # Other known Rates destinations supply extra visible products and movement
     # claims. A skipped optional destination cannot replace a required capture.
     for name in ('open app', 'scroll rates 1', 'scroll rates 2', 'scroll rates back', 'switch to home loans'):

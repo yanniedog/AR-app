@@ -1,7 +1,7 @@
 import { scenarioForPublicProgramme } from './publicRateAlternatives';
 import { canonicalPurpose, canonicalRepayment } from './mortgageFacets';
 import type { CorePayload, RateRow, SectionKey } from '../types';
-import { calculatorAmount, computeLvr, MAX_CALCULATOR_MORTGAGE_AMOUNT } from './calc';
+import { advertisedTermMonths, calculatorAmount, computeLvr, MAX_CALCULATOR_MORTGAGE_AMOUNT } from './calc';
 import type { ProfileFilters } from './profile';
 import type { PublicProduct, PublicProgramme, PublicReferenceRate, RateResolution, RateScenario } from './publicRateModel';
 import { resolvePublicRate } from './publicRateResolver';
@@ -417,8 +417,11 @@ export function publicRateScenario(
   }
   if (section === 'Mortgage' && input?.mortgageRateStructure === 'fixed' && input.fixedPeriodMonths?.trim()) result.termMonths = input.fixedPeriodMonths;
   else if (input?.termMonths?.trim()) result.termMonths = input.termMonths;
-  else if (row?.term_months != null) result.termMonths = String(row.term_months);
-  if (row?.term && /^P\d+D$/.test(row.term)) result.termDays = row.term.slice(1, -1);
+  else if (row?.term && /^P\d+D$/.test(row.term)) result.termDays = row.term.slice(1, -1);
+  else if (row) {
+    const months = advertisedTermMonths(row);
+    if (months != null) result.termMonths = String(months);
+  }
   if (input?.bonusQualification === 'met') result.qualification = true;
   if (input?.bonusQualification === 'unmet') result.qualification = false;
   for (const key of ['monthlyDeposit', 'withdrawals', 'balanceGrowth', 'cardTransactions'] as const) {

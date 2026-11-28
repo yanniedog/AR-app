@@ -10,6 +10,7 @@ import type {
   SectionKey,
 } from '../types';
 import {
+  advertisedTermMonths,
   calculatorAmount,
   calculatorYears,
   computeLvr,
@@ -22,7 +23,6 @@ import {
   formatRate,
   formatTerm,
   humanizeEnum,
-  isoDurationMonths,
   isNonStandard,
   toFraction,
   visibleAccountRows,
@@ -221,18 +221,13 @@ export function buildRateReceipt(input: {
   }
 
   const officialSources = officialReceiptSources(detail?.links);
-  const explicitTermMonths = Number(row.term_months);
   const publishedRateType = `${row.rate_type ?? ''} ${row.ribbon_rate_structure ?? ''}`.toUpperCase();
   const hasPublishedRatePeriod = section === 'TD' ||
     qualifier.kind === 'intro' ||
     (section === 'Savings' && /\b(?:INTRODUCTORY|INTRO)\b/.test(publishedRateType)) ||
     (section === 'Mortgage' && /\b(?:FIXED|INTRODUCTORY|INTRO)\b/.test(publishedRateType));
-  const ratePeriodMonths = !hasPublishedRatePeriod
-    ? null
-    : Number.isFinite(explicitTermMonths) && explicitTermMonths > 0
-      ? explicitTermMonths
-      : isoDurationMonths(row.term);
-  const ratePeriodLabel = ratePeriodMonths == null ? null : formatTerm(row) || uiDuration(ratePeriodMonths, 'months');
+  const ratePeriodMonths = hasPublishedRatePeriod ? advertisedTermMonths(row) : null;
+  const ratePeriodLabel = hasPublishedRatePeriod ? formatTerm(row) || null : null;
   const facts: ReceiptStatusFact[] = [{ kind: 'quote', state: 'unavailable' }, { kind: 'eligibility', state: 'unverified' }, { kind: 'costs', state: 'unverified' }];
   if (!officialSources.length) facts.push({ kind: 'source', state: 'unavailable' });
   if (!detail?.eligibility?.length && !detail?.constraints?.length) facts.push({ kind: 'detailed-eligibility', state: 'unavailable' });

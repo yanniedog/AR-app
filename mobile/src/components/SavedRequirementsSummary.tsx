@@ -16,7 +16,8 @@ function countFacts(label: UiLabel, counts: ReturnType<typeof catalogueCounts> |
 }
 
 /** Saved scope stays visible even when temporary filters return zero products. */
-export const SavedRequirementsSummary = React.memo(function SavedRequirementsSummary({ section, onEdit, catalogueRows }: {
+export const SavedRequirementsSummary = React.memo(function SavedRequirementsSummary({ section, onEdit, catalogueRows, visibleRates, onShowMatches, onResetView }: {
+  visibleRates?: number; onShowMatches?: () => void; onResetView?: () => void;
   section: SectionKey; onEdit?: () => void; catalogueRows?: readonly RateRow[] | null;
 }) {
   const core = useStore(state => state.core);
@@ -34,8 +35,12 @@ export const SavedRequirementsSummary = React.memo(function SavedRequirementsSum
       <AppText variant="tiny" color="textMuted">{uiJoin('Scope', ': ', 'All screens')}</AppText>
       <AppText variant="tiny" color="textMuted">{countFacts('Catalogue', impact?.catalogue ?? null)}</AppText>
       <AppText variant="tiny" color="textMuted">{countFacts('After saved requirements', impact?.matching ?? null)}</AppText>
+      {visibleRates !== undefined ? <AppText variant="tiny" color="textMuted">{uiJoin('Visible rates', ': ', uiCount(visibleRates))}</AppText> : null}
     </> : null}
     <Row gap={8} style={{ flexWrap: 'wrap' }}>
+      {visibleRates === 0 && (impact?.matching?.rates ?? 0) > 0 && onShowMatches
+        ? <Button title="Show saved matches" onPress={onShowMatches} /> : null}
+      {onResetView && visibleRates !== 0 ? <Button title="Reset Rates view" variant="ghost" onPress={onResetView} /> : null}
       <Button title="Edit saved requirements" variant="ghost" onPress={onEdit ?? (() => router.push('/profile'))} />
       {section === 'Mortgage' && count > 0 ? <Button title="Clear Home loans requirements" variant="ghost"
         onPress={() => {
