@@ -4,7 +4,7 @@ import { PublicPricingCoverage } from '../scenario/PublicPricingCoverage';
 import { PublicCostComparison } from '../scenario/PublicCostComparison';
 import { SavingsQualificationEditor } from '../scenario/SavingsQualificationEditor';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
-import { publicRateScenario, resolveLocalCurrentRate, scenarioWithLocalCurrentRate, resolveRowPublicRate, payableRateForRow } from '../../data/publicRateIntegration';
+import { sourceRowForPublicRow, publicRateScenario, resolveLocalCurrentRate, scenarioWithLocalCurrentRate, resolveRowPublicRate, payableRateForRow } from '../../data/publicRateIntegration';
 import { useResolvedPublicRankingRows } from '../../hooks/useResolvedPublicRankingRows';
 import { uiCount, uiDuration, uiInputNumber, uiJoin, uiLabel, uiMoney, uiPercentage, uiProductName, uiProviderName, uiSectionName, type UiCopy, type UiText } from "../../lib/uiCopy";
 import { resolveSwitchCosts } from '../../data/staySwitchProjection';
@@ -45,7 +45,7 @@ import {
 } from '../../data/calc';
 import { formatRate, visibleAccountRows } from '../../data/format';
 import type { CurrentProductReference, MortgageSwitchInputs } from '../../data/userRateScenario';
-import { exactRateMove } from '../../data/exactRateMove';
+import { exactRateMove, rateEvidenceId } from '../../data/exactRateMove';
 import {
   lvrTierForValue,
   parseLvrTier,
@@ -953,7 +953,7 @@ export function RateCheckWorkspace() {
           details?.products?.[c.row.product_key] ?? null,
           c.row.provider,
         );
-        const rateChange = exactRateMove(core, section, c.row,
+        const rateChange = exactRateMove(core, section, sourceRowForPublicRow(c.row),
           section === 'Savings' && depositRankMetric === 'base' ? null : c.projectionRate);
         const rateDescriptor = section === 'Mortgage'
           ? uiJoin(formatRate(c.projectionRate),' ','Advertised',c.rate !== c.projectionRate ? uiJoin(' · ',formatRate(c.rate),' ','Comparison'):null)
@@ -983,6 +983,7 @@ export function RateCheckWorkspace() {
                      {uiJoin(uiProductName(c.row)," · ",rateDescriptor)}
                    </AppText>
                    <ProductRateChangeSummaryLine
+                     evidenceId={rateChange ? rateEvidenceId('rate-move', manifest, section, c.row) : undefined}
                      model={rateChange}
                      section={section}
                      compact

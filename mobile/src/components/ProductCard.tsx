@@ -36,6 +36,7 @@ import { PressFeedback } from './PressFeedback';
 import { IconAction } from './IconAction';
 import { useWordBubble, type IconWord } from './WordBubble';
 import { COMPACT_ROW, compactFactWidth, compactProductFacet, compactProductRowLayout, compactTierIndex } from './product/compactProductRow';
+import { rateEvidenceId } from '../data/exactRateMove';
 import { sourceRowForPublicRow } from '../data/publicRateIntegration';
 import { scopedRateConditions } from '../data/rateConditions';
 import { scopedFinancialConditionFacts, type ScopedFinancialConditionPresentation } from '../data/scopedFinancialConditionFacts';
@@ -368,6 +369,7 @@ function ProductCardView({
           onLongPress={showRowWord}
           delayLongPress={350}
           accessibilityRole="button"
+          testID={rateChangeText ? rateEvidenceId('rate-move', manifest, section, row) : undefined}
           accessibilityLabel={cardA11yLabel}
           accessibilityState={selectMode ? { selected: !!selected } : undefined}
           android_ripple={androidRipple(theme.colors.primaryMuted)}

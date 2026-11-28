@@ -1,9 +1,13 @@
-import type { CorePayload, RateRow, SectionKey } from '../types';
+import type { CorePayload, Manifest, RateRow, SectionKey } from '../types';
 import { isValidCalendarDate } from '../lib/calendarDate';
 import { toFraction } from './rateNumbers';
 import type { ProductBestRateSummary } from './productHistoryModel';
 
 export type ExactRateMove = [priorDay: string, priorRate: number, firstSeen: string, rate: number];
+export function rateEvidenceId(kind: 'rate-move' | 'rate-evidence', manifest: Manifest | null | undefined,
+  section: SectionKey, row: RateRow): string {
+  return JSON.stringify([kind, manifest?.tag, manifest?.files.core.sha256, section, row.product_key, row.rate_index]);
+}
 const members = new WeakMap<readonly RateRow[], WeakSet<RateRow>>();
 
 export function exactRateMove(core: CorePayload | null, section: SectionKey, source: RateRow,

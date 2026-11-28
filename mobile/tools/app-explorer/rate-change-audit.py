@@ -32,7 +32,10 @@ def archive_moves(core, catalogue):
     days = catalogue["run_dates"]
     result = {}
     for section, tiers in catalogue["sections"].items():
-        indexed = {signature(t["row"]): t["spans"] for t in tiers}
+        indexed = {}
+        for tier in tiers:
+            descriptor = signature(tier["row"])
+            indexed[descriptor] = [] if descriptor in indexed else tier["spans"]
         for row in core["sections"][section]["rates"]:
             spans = indexed.get(signature(row), [])
             last = move = None
@@ -101,45 +104,58 @@ def publication(tag, digest):
 
 def audit(directory):
     device_day = date.fromisoformat(subprocess.check_output(
-        ["adb", "shell", "date", "+%Y-%m-%d"], text=True).strip())
+        ["adb", "shell", "date", "+%Y-%m-%d"], text=True, timeout=10).strip())
     covered = set()
     verified_income_plus = set()
     for file in Path(directory).rglob("*.nodes.json"):
         nodes = json.loads(file.read_text())["nodes"]
         labels = [n.get("text") or n.get("desc") or "" for n in nodes]
-        banners = [s for s in labels if re.search(r"(Best advertised|Advertised rate) [↑↓].* → ", s)]
-        heroes = [n for n in nodes if n.get("id", "").startswith('["rate-evidence",')]
-        if banners and not heroes:
-            raise ValueError(f"{file.name}: change banner without source identity: {banners}")
-        for hero in heroes:
-            _, tag, digest, section, product, index = json.loads(hero["id"])
+        heroes = {}
+        observed = {}
+        for node in nodes:
+            marker = node.get("id", "")
+            label = node.get("text") or node.get("desc") or ""
+            match = re.search(r"(?:Best advertised|Advertised rate) [↑↓] ", label)
+            if marker.startswith('["rate-evidence",'):
+                _, tag, digest, section, product, index = json.loads(marker)
+                heroes[tag, digest, section, product, index] = node
+            if match:
+                if not marker.startswith('["rate-move",'):
+                    raise ValueError(f"{file.name}: movement without offer identity: {label}")
+                key = tuple(json.loads(marker)[1:])
+                observed.setdefault(key, set()).add(label[match.start():].split(", ", 1)[0])
+        for identity in heroes.keys() | observed.keys():
+            tag, digest, section, product, index = identity
             moves, core = publication(tag, digest)
             key = (section, product, index)
             covered.add(key)
             move = moves.get(key)
+            banners = observed.get(identity, set())
+            hero = heroes.get(identity, {})
             for banner in banners:
                 if not move:
                     raise ValueError(f"{key}: no matching archived change for {banner}")
                 _, before, day, after = move
                 bps = round((after - before) * 100, 1)
-                expected = f"{'↑' if bps > 0 else '↓'} {abs(bps):g} bps"
-                endpoints = f"{percent(before)} → {percent(after)}"
-                observed = date.fromisoformat(day)
-                age = (device_day - observed).days
+                movement = f"{'↑' if bps > 0 else '↓'} {abs(bps):g} bps"
+                seen = date.fromisoformat(day)
+                age = (device_day - seen).days
                 when = ("today" if age <= 0 else "yesterday" if age == 1 else
-                        f"{age} days ago" if age < 7 else f"{observed.day} {observed:%b %Y}")
-                # Australian short month spelling differs between ICU and Python.
-                normalised = banner.replace("Sept ", "Sep ")
-                if f"{expected} · {when} · {endpoints}" not in normalised:
+                        f"{age} days ago" if age < 7 else f"{seen.day} {seen:%b %Y}")
+                expected = f"Advertised rate {movement} · {when}"
+                if hero or " → " in banner:
+                    expected += f" · {percent(before)} → {percent(after)}"
+                if expected != banner.replace("Sept ", "Sep "):
                     raise ValueError(f"{key}: {banner}; archive {move}")
-                if section == "TD" and product.split("|")[1:2] == ["3b2158a8-34ee-4cb2-870d-1b741ad6e77e"]:
+                if hero and section == "TD" and product.split("|")[1:2] == ["3b2158a8-34ee-4cb2-870d-1b741ad6e77e"]:
                     selected = [r for r in core["sections"][section]["rates"] if r.get("product_key") == product
                                 and r.get("rate_index") == index and r.get("term") == "P12M"
                                 and r.get("interest_payment") == "monthly"]
                     if len(selected) == 1 and hero.get("text") == percent(after):
+                        if core["run_date"] == "2026-11-28" and move != ("2026-11-23", 5.3, "2026-11-24", 5.5):
+                            raise ValueError(f"Unexpected November Income Plus archive endpoints: {move}")
                         verified_income_plus.add((tag, banner))
-            # Fail on missing genuine movements for straightforward advertised prices.
-            if core.get("exact_rate_moves") is not None and move and 'Rate' in labels and hero.get("text") == percent(move[3]) and not banners:
+            if hero and move and 'Rate' in labels and hero.get("text") == percent(move[3]) and not banners:
                 raise ValueError(f"{key}: missing advertised change {move}")
     if not verified_income_plus:
         raise ValueError("Income Plus regression screen was not verified")

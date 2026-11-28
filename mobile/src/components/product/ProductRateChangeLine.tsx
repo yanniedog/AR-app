@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 
 import { formatRate, formatRateChangeDate } from '../../data/format';
 import type { ProductBestRateSummary } from '../../data/productHistoryModel';
-import { exactRateMove } from '../../data/exactRateMove';
+import { exactRateMove, rateEvidenceId } from '../../data/exactRateMove';
 import { sourceRowForPublicRow } from '../../data/publicRateIntegration';
 import { useStore } from '../../data/store';
 import { moveTone } from '../../lib/moveSemantics';
@@ -42,10 +42,12 @@ export function ProductRateChangeSummaryLine({
   section,
   compact = false,
   model,
+  evidenceId,
 }: {
   section: SectionKey;
   compact?: boolean;
   model: ProductBestRateSummary | null;
+  evidenceId?: string;
 }) {
   const theme = useTheme();
   const text = productRateChangeText(model, compact);
@@ -64,6 +66,7 @@ export function ProductRateChangeSummaryLine({
       variant="tiny"
       weight={model?.kind === 'changed' ? '700' : '400'}
       style={{ color, marginTop: compact ? 3 : 8, textAlign: compact ? 'left' : 'center' }}
+      testID={evidenceId}
       accessibilityLabel={text}
     >
       {text}
@@ -82,8 +85,9 @@ export function ProductRateChangeLine({
   displayed: number | string | null | undefined;
   compact?: boolean;
 }) {
+  const manifest = useStore(state => state.manifest);
   const summary = useProductRateChangeSummary(row, section, displayed);
   return (
-    <ProductRateChangeSummaryLine model={summary} section={section} compact={compact} />
+    <ProductRateChangeSummaryLine evidenceId={summary ? rateEvidenceId('rate-move', manifest, section, row) : undefined} model={summary} section={section} compact={compact} />
   );
 }
