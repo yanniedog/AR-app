@@ -1,0 +1,298 @@
+[
+ {
+  "label": "Market",
+  "at": [
+   360,
+   149
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   672,
+   149
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   803
+  ]
+ },
+ {
+  "label": "Pending · Observed: 28 Nov 2026 · Pending: 28 Nov 2026",
+  "at": [
+   387,
+   321
+  ]
+ },
+ {
+  "label": "Cash rate",
+  "at": [
+   182,
+   475
+  ]
+ },
+ {
+  "label": "4.85%",
+  "at": [
+   182,
+   527
+  ]
+ },
+ {
+  "label": "Next decision",
+  "at": [
+   526,
+   527
+  ]
+ },
+ {
+  "label": "4 Nov 2026",
+  "at": [
+   182,
+   579
+  ]
+ },
+ {
+  "label": "8 Dec 2026",
+  "at": [
+   526,
+   575
+  ]
+ },
+ {
+  "label": "Bank response",
+  "flags": "tap",
+  "at": [
+   192,
+   681
+  ]
+ },
+ {
+  "label": "Bank response",
+  "at": [
+   192,
+   681
+  ]
+ },
+ {
+  "label": "Bank rates",
+  "flags": "tap",
+  "at": [
+   528,
+   681
+  ]
+ },
+ {
+  "label": "Bank rates",
+  "at": [
+   529,
+   681
+  ]
+ },
+ {
+  "label": "RBA",
+  "flags": "tap",
+  "at": [
+   192,
+   796
+  ]
+ },
+ {
+  "label": "RBA",
+  "at": [
+   193,
+   796
+  ]
+ },
+ {
+  "label": "Trends",
+  "flags": "tap",
+  "at": [
+   528,
+   796
+  ]
+ },
+ {
+  "label": "Trends",
+  "at": [
+   529,
+   796
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   941
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   939
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   941
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   939
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   941
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   939
+  ]
+ },
+ {
+  "label": "Recent movements",
+  "at": [
+   260,
+   1065
+  ]
+ },
+ {
+  "label": "28 Nov 2026",
+  "at": [
+   608,
+   1057
+  ]
+ },
+ {
+  "label": "Last 7 days · 4 banks · ↑ 2 · ↓ 2",
+  "id": "market-pulse",
+  "at": [
+   360,
+   1137
+  ]
+ },
+ {
+  "label": "BNK Bank (Goldfields Money_BCHL) · Decrease · Home loans · Average −21.0 bps · 2/4 products · 28 Nov 2026 · Median 7.69%",
+  "flags": "tap",
+  "at": [
+   360,
+   1285
+  ]
+ },
+ {
+  "label": "BNK Bank (Goldfields Money_BCHL)",
+  "at": [
+   314,
+   1221
+  ]
+ },
+ {
+  "label": "BNK Bank (Goldfields Money_BCHL)",
+  "at": [
+   66,
+   1285
+  ]
+ },
+ {
+  "label": "Decrease · Home loans · 2/4 products · 28 Nov 2026",
+  "at": [
+   314,
+   1285
+  ]
+ },
+ {
+  "label": "−21.0 bps",
+  "at": [
+   626,
+   1263
+  ]
+ },
+ {
+  "label": "Average",
+  "at": [
+   638,
+   1307
+  ]
+ },
+ {
+  "label": "Median 7.69% → 7.69%",
+  "at": [
+   314,
+   1349
+  ]
+ },
+ {
+  "label": "Easy Street · Decrease · Home loans · Average −20.0 bps · 3/13 products · 27 Nov 2026 · Median 6.69% → 6.69%",
+  "flags": "tap",
+  "at": [
+   360,
+   1391
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap,sel",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "sel",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

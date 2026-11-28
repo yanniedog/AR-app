@@ -1,0 +1,54 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Compare",
+  "at": [
+   234,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "Pending · Observed: 28 Nov 2026 · Pending: 28 Nov 2026",
+  "at": [
+   387,
+   281
+  ]
+ },
+ {
+  "label": "Minimum 2 rates",
+  "at": [
+   360,
+   988
+  ]
+ },
+ {
+  "label": "Choose products",
+  "flags": "tap",
+  "at": [
+   360,
+   1158
+  ]
+ },
+ {
+  "label": "Choose products",
+  "at": [
+   360,
+   1158
+  ]
+ }
+]

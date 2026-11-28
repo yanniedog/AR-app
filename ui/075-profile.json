@@ -1,0 +1,218 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Profile",
+  "at": [
+   207,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Pending · Observed: 28 Nov 2026 · Pending: 28 Nov 2026",
+  "at": [
+   387,
+   305
+  ]
+ },
+ {
+  "label": "Saved requirements",
+  "at": [
+   360,
+   499
+  ]
+ },
+ {
+  "label": "Scope · All screens",
+  "at": [
+   360,
+   547
+  ]
+ },
+ {
+  "label": "Home loans · Saved requirements 0",
+  "at": [
+   360,
+   587
+  ]
+ },
+ {
+  "label": "Loan purpose: Any",
+  "flags": "tap",
+  "at": [
+   360,
+   679
+  ]
+ },
+ {
+  "label": "Loan purpose",
+  "at": [
+   130,
+   678
+  ]
+ },
+ {
+  "label": "Rate type: Any",
+  "flags": "tap",
+  "at": [
+   360,
+   775
+  ]
+ },
+ {
+  "label": "Rate type",
+  "at": [
+   98,
+   774
+  ]
+ },
+ {
+  "label": "Repayment: Any",
+  "flags": "tap",
+  "at": [
+   360,
+   871
+  ]
+ },
+ {
+  "label": "Repayment",
+  "at": [
+   112,
+   870
+  ]
+ },
+ {
+  "label": "LVR: Any",
+  "flags": "tap",
+  "at": [
+   360,
+   967
+  ]
+ },
+ {
+  "label": "LVR",
+  "at": [
+   60,
+   966
+  ]
+ },
+ {
+  "label": "Features: Any",
+  "flags": "tap",
+  "at": [
+   360,
+   1063
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   95,
+   1063
+  ]
+ },
+ {
+  "label": "Savings · Saved requirements 0",
+  "at": [
+   360,
+   1167
+  ]
+ },
+ {
+  "label": "Account type: Any",
+  "flags": "tap",
+  "at": [
+   360,
+   1259
+  ]
+ },
+ {
+  "label": "Account type",
+  "at": [
+   126,
+   1258
+  ]
+ },
+ {
+  "label": "Features: Any",
+  "flags": "tap",
+  "at": [
+   360,
+   1350
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   95,
+   1355
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

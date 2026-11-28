@@ -1,0 +1,424 @@
+[
+ {
+  "label": "",
+  "flags": "tap",
+  "at": [
+   360,
+   734
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "at": [
+   300,
+   211
+  ]
+ },
+ {
+  "label": "Close Temporary filters",
+  "flags": "tap",
+  "at": [
+   640,
+   211
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   786
+  ]
+ },
+ {
+  "label": "Availability",
+  "at": [
+   360,
+   328
+  ]
+ },
+ {
+  "label": "Listed rate",
+  "flags": "tap,sel",
+  "at": [
+   190,
+   412
+  ]
+ },
+ {
+  "label": "Listed rate",
+  "at": [
+   190,
+   410
+  ]
+ },
+ {
+  "label": "No listed rate",
+  "flags": "tap",
+  "at": [
+   530,
+   412
+  ]
+ },
+ {
+  "label": "No listed rate",
+  "at": [
+   530,
+   410
+  ]
+ },
+ {
+  "label": "Loan purpose",
+  "at": [
+   360,
+   528
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   616
+  ]
+ },
+ {
+  "label": "Investor",
+  "flags": "tap",
+  "at": [
+   106,
+   616
+  ]
+ },
+ {
+  "label": "Investor",
+  "at": [
+   106,
+   616
+  ]
+ },
+ {
+  "label": "Owner occupied",
+  "flags": "tap",
+  "at": [
+   317,
+   616
+  ]
+ },
+ {
+  "label": "Owner occupied",
+  "at": [
+   317,
+   616
+  ]
+ },
+ {
+  "label": "Rate type",
+  "at": [
+   360,
+   732
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   820
+  ]
+ },
+ {
+  "label": "Fixed",
+  "flags": "tap,sel",
+  "at": [
+   90,
+   820
+  ]
+ },
+ {
+  "label": "Fixed",
+  "flags": "sel",
+  "at": [
+   90,
+   820
+  ]
+ },
+ {
+  "label": "Variable",
+  "flags": "tap",
+  "at": [
+   234,
+   820
+  ]
+ },
+ {
+  "label": "Variable",
+  "at": [
+   234,
+   820
+  ]
+ },
+ {
+  "label": "Fixed · bundle",
+  "flags": "tap",
+  "at": [
+   431,
+   820
+  ]
+ },
+ {
+  "label": "Fixed · bundle",
+  "at": [
+   431,
+   820
+  ]
+ },
+ {
+  "label": "Introductory",
+  "flags": "tap",
+  "at": [
+   621,
+   820
+  ]
+ },
+ {
+  "label": "Introductory",
+  "at": [
+   633,
+   820
+  ]
+ },
+ {
+  "label": "Repayment",
+  "at": [
+   360,
+   936
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1024
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "flags": "tap",
+  "at": [
+   173,
+   1024
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "at": [
+   173,
+   1024
+  ]
+ },
+ {
+  "label": "Interest only",
+  "flags": "tap",
+  "at": [
+   425,
+   1024
+  ]
+ },
+ {
+  "label": "Interest only",
+  "at": [
+   425,
+   1024
+  ]
+ },
+ {
+  "label": "LVR · Tier",
+  "at": [
+   360,
+   1140
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1228
+  ]
+ },
+ {
+  "label": "LVR ≤0.700%",
+  "flags": "tap",
+  "at": [
+   137,
+   1228
+  ]
+ },
+ {
+  "label": "LVR ≤0.700%",
+  "at": [
+   137,
+   1228
+  ]
+ },
+ {
+  "label": "LVR ≤0.850%",
+  "flags": "tap",
+  "at": [
+   358,
+   1228
+  ]
+ },
+ {
+  "label": "LVR ≤0.850%",
+  "at": [
+   358,
+   1228
+  ]
+ },
+ {
+  "label": "LVR ≤10.0%",
+  "flags": "tap",
+  "at": [
+   571,
+   1228
+  ]
+ },
+ {
+  "label": "LVR ≤10.0%",
+  "at": [
+   571,
+   1228
+  ]
+ },
+ {
+  "label": "LVR ≤17.5%",
+  "flags": "tap",
+  "at": [
+   684,
+   1228
+  ]
+ },
+ {
+  "label": "LVR ≤17.5%",
+  "at": [
+   696,
+   1228
+  ]
+ },
+ {
+  "label": "Show All 115 Options",
+  "flags": "tap",
+  "at": [
+   185,
+   1290
+  ]
+ },
+ {
+  "label": "Show All 115 Options",
+  "at": [
+   185,
+   1304
+  ]
+ },
+ {
+  "label": "Account features",
+  "at": [
+   360,
+   1362
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1392
+  ]
+ },
+ {
+  "label": "Bill payment",
+  "flags": "tap",
+  "at": [
+   133,
+   1392
+  ]
+ },
+ {
+  "label": "Bill payment",
+  "at": [
+   133,
+   1407
+  ]
+ },
+ {
+  "label": "Card access",
+  "flags": "tap",
+  "at": [
+   346,
+   1392
+  ]
+ },
+ {
+  "label": "Card access",
+  "at": [
+   346,
+   1407
+  ]
+ },
+ {
+  "label": "Digital banking",
+  "flags": "tap",
+  "at": [
+   573,
+   1392
+  ]
+ },
+ {
+  "label": "Digital banking",
+  "at": [
+   574,
+   1407
+  ]
+ },
+ {
+  "label": "Early / extra repayments",
+  "flags": "tap",
+  "at": [
+   695,
+   1392
+  ]
+ },
+ {
+  "label": "Reset",
+  "flags": "tap",
+  "at": [
+   154,
+   1369
+  ]
+ },
+ {
+  "label": "Reset",
+  "at": [
+   154,
+   1370
+  ]
+ },
+ {
+  "label": "Show 2,666 rates",
+  "flags": "tap",
+  "at": [
+   494,
+   1369
+  ]
+ },
+ {
+  "label": "Show 2,666 rates",
+  "at": [
+   494,
+   1370
+  ]
+ }
+]

@@ -1,0 +1,206 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "App health audit",
+  "at": [
+   304,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "0",
+  "at": [
+   360,
+   217
+  ]
+ },
+ {
+  "label": "Rejected addresses",
+  "at": [
+   360,
+   297
+  ]
+ },
+ {
+  "label": "6",
+  "at": [
+   360,
+   345
+  ]
+ },
+ {
+  "label": "HTTP not attempted",
+  "at": [
+   360,
+   425
+  ]
+ },
+ {
+  "label": "6",
+  "at": [
+   360,
+   473
+  ]
+ },
+ {
+  "label": "HTTP attempt evidence missing",
+  "at": [
+   360,
+   553
+  ]
+ },
+ {
+  "label": "0",
+  "at": [
+   360,
+   601
+  ]
+ },
+ {
+  "label": "Unverified links",
+  "at": [
+   360,
+   681
+  ]
+ },
+ {
+  "label": "687",
+  "at": [
+   360,
+   729
+  ]
+ },
+ {
+  "label": "Executed",
+  "at": [
+   360,
+   809
+  ]
+ },
+ {
+  "label": "2,883 / 2,883",
+  "at": [
+   360,
+   857
+  ]
+ },
+ {
+  "label": "Verified upload",
+  "at": [
+   360,
+   959
+  ]
+ },
+ {
+  "label": "Verified upload",
+  "at": [
+   186,
+   959
+  ]
+ },
+ {
+  "label": "Uploaded",
+  "at": [
+   360,
+   1017
+  ]
+ },
+ {
+  "label": "https://paste.c-net.org/b2d8b7c9-9537-c02b-70c7-aca2ccc51055",
+  "at": [
+   360,
+   1093
+  ]
+ },
+ {
+  "label": "Copy link",
+  "flags": "tap",
+  "at": [
+   360,
+   1199
+  ]
+ },
+ {
+  "label": "Copy link",
+  "at": [
+   360,
+   1199
+  ]
+ },
+ {
+  "label": "Audit history",
+  "at": [
+   360,
+   1381
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

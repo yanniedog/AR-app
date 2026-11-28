@@ -1,0 +1,185 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Settings",
+  "at": [
+   224,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "Pending · Observed: 28 Nov 2026 · Pending: 28 Nov 2026",
+  "at": [
+   387,
+   281
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   880
+  ]
+ },
+ {
+  "label": "App update",
+  "at": [
+   364,
+   435
+  ]
+ },
+ {
+  "label": "Status",
+  "at": [
+   360,
+   535
+  ]
+ },
+ {
+  "label": "Up to date",
+  "at": [
+   360,
+   583
+  ]
+ },
+ {
+  "label": "Version",
+  "at": [
+   360,
+   647
+  ]
+ },
+ {
+  "label": "1.0.394 (450)",
+  "at": [
+   360,
+   695
+  ]
+ },
+ {
+  "label": "Source",
+  "at": [
+   360,
+   759
+  ]
+ },
+ {
+  "label": "GitHub",
+  "at": [
+   360,
+   807
+  ]
+ },
+ {
+  "label": "APK",
+  "at": [
+   360,
+   871
+  ]
+ },
+ {
+  "label": "Verified",
+  "at": [
+   360,
+   919
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   360,
+   983
+  ]
+ },
+ {
+  "label": "Android installation permission",
+  "at": [
+   360,
+   1031
+  ]
+ },
+ {
+  "label": "Check for update",
+  "flags": "tap",
+  "at": [
+   360,
+   1141
+  ]
+ },
+ {
+  "label": "Check for update",
+  "at": [
+   387,
+   1141
+  ]
+ },
+ {
+  "label": "Appearance",
+  "at": [
+   364,
+   1334
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
