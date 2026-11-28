@@ -1,0 +1,472 @@
+[
+ {
+  "label": "Rates",
+  "at": [
+   361,
+   149
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   673,
+   149
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap",
+  "at": [
+   134,
+   277
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   275
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   277
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   275
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap,sel",
+  "at": [
+   587,
+   277
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "sel",
+  "at": [
+   586,
+   275
+  ]
+ },
+ {
+  "label": "Search",
+  "flags": "tap",
+  "at": [
+   386,
+   399
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "flags": "tap",
+  "at": [
+   80,
+   521
+  ]
+ },
+ {
+  "label": "Filter",
+  "at": [
+   80,
+   543
+  ]
+ },
+ {
+  "label": "Sort · Advertised rate",
+  "flags": "tap",
+  "at": [
+   218,
+   521
+  ]
+ },
+ {
+  "label": "Advertised",
+  "at": [
+   218,
+   543
+  ]
+ },
+ {
+  "label": "Compare",
+  "flags": "tap",
+  "at": [
+   378,
+   521
+  ]
+ },
+ {
+  "label": "Compare",
+  "at": [
+   378,
+   543
+  ]
+ },
+ {
+  "label": "Lenders",
+  "flags": "tap",
+  "at": [
+   520,
+   521
+  ]
+ },
+ {
+  "label": "Lenders",
+  "at": [
+   520,
+   543
+  ]
+ },
+ {
+  "label": "Search actions",
+  "flags": "tap",
+  "at": [
+   640,
+   521
+  ]
+ },
+ {
+  "label": "More",
+  "at": [
+   640,
+   543
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   989
+  ]
+ },
+ {
+  "label": "View Suncorp Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   489
+  ]
+ },
+ {
+  "label": "Term Deposit, Suncorp Bank, Rate 5.75%, 1 yr · $1m–$2m · at maturity · Conditions: Unverified, Tier #37, Best advertised",
+  "id": "rate-card-TD",
+  "flags": "tap",
+  "at": [
+   384,
+   489
+  ]
+ },
+ {
+  "label": "Sun · Term Deposit",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   447
+  ]
+ },
+ {
+  "label": "Save, Term Deposit, Suncorp Bank, Rate 5.75%, Balance $1,000k–$2,000k",
+  "id": "rate-save:Suncorp%20Bank%7CTD%7CTERM_DEPOSITS%7CTerm%20Deposit:37",
+  "flags": "tap",
+  "at": [
+   640,
+   482
+  ]
+ },
+ {
+  "label": "View AMP Bank GO · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   561
+  ]
+ },
+ {
+  "label": "AMP Bank GO 12 Month Term Deposit, AMP Bank GO, Rate 5.70%, 1 yr · at maturity, Tier #1, Freshness · Unknown",
+  "id": "rate-card-TD",
+  "flags": "tap",
+  "at": [
+   384,
+   561
+  ]
+ },
+ {
+  "label": "AMP Go · AMP Bank GO 12 Month Term Deposit",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   519
+  ]
+ },
+ {
+  "label": "Save, AMP Bank GO 12 Month Term Deposit, AMP Bank GO, Rate 5.70%",
+  "id": "rate-save:AMP%20Bank%20GO%7C282bc819-b61b-4233-b53b-290808bcb9f3%7CTERM_DEPOSITS%7CAMP%20Bank%20GO%2012%20Month%20Term%20Deposit:1",
+  "flags": "tap",
+  "at": [
+   640,
+   554
+  ]
+ },
+ {
+  "label": "View Australian Military Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   633
+  ]
+ },
+ {
+  "label": "Investment Plus, Australian Military Bank, Rate 5.70%, 6 mo · $1k+ · at maturity, Tier #32, Best advertised ↑ 25 bps · 4",
+  "id": "rate-card-TD",
+  "flags": "tap",
+  "at": [
+   384,
+   633
+  ]
+ },
+ {
+  "label": "AMB · Investment Plus",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   591
+  ]
+ },
+ {
+  "label": "Save, Investment Plus, Australian Military Bank, Rate 5.70%",
+  "id": "rate-save:Australian%20Military%20Bank%7Cc70ea9ac-cf01-49ff-a100-b59a953ff33a%7CTERM_DEPOSITS%7CInvestment%20Plus:32",
+  "flags": "tap",
+  "at": [
+   640,
+   626
+  ]
+ },
+ {
+  "label": "View Southern Cross Credit Union · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   762
+  ]
+ },
+ {
+  "label": "TERM DEPOSIT, Southern Cross Credit Union, Rate 5.70%, 1 yr · $5k–$20m · at maturity · Conditions: Unverified, Tier #18,",
+  "id": "rate-card-TD",
+  "flags": "tap",
+  "at": [
+   384,
+   762
+  ]
+ },
+ {
+  "label": "SCCU · TERM DEPOSIT",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   721
+  ]
+ },
+ {
+  "label": "Save, TERM DEPOSIT, Southern Cross Credit Union, Rate 5.70%, Rate index 18",
+  "id": "rate-save:Southern%20Cross%20Credit%20Union%7CSTANDARD_TERM_DEPOSIT%7CTERM_DEPOSITS%7CTERM%20DEPOSIT:18",
+  "flags": "tap",
+  "at": [
+   640,
+   762
+  ]
+ },
+ {
+  "label": "View Southern Cross Credit Union · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   906
+  ]
+ },
+ {
+  "label": "TERM DEPOSIT, Southern Cross Credit Union, Rate 5.70%, 1 yr · $5k–$20m · Monthly · Conditions: Unverified, Tier #19, Bes",
+  "id": "rate-card-TD",
+  "flags": "tap",
+  "at": [
+   384,
+   906
+  ]
+ },
+ {
+  "label": "SCCU · TERM DEPOSIT",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   865
+  ]
+ },
+ {
+  "label": "Save, TERM DEPOSIT, Southern Cross Credit Union, Rate 5.70%, Rate index 19",
+  "id": "rate-save:Southern%20Cross%20Credit%20Union%7CSTANDARD_TERM_DEPOSIT%7CTERM_DEPOSITS%7CTERM%20DEPOSIT:19",
+  "flags": "tap",
+  "at": [
+   640,
+   906
+  ]
+ },
+ {
+  "label": "View Bank First · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1050
+  ]
+ },
+ {
+  "label": "270 Day Term Deposit, Bank First, Rate 5.65%, 270 days · $500–$10m · at maturity, Tier #1, Best advertised ↑ 25 bps · 18",
+  "id": "rate-card-TD",
+  "flags": "tap",
+  "at": [
+   384,
+   1050
+  ]
+ },
+ {
+  "label": "BFirst · 270 Day Term Deposit",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1009
+  ]
+ },
+ {
+  "label": "Save, 270 Day Term Deposit, Bank First, Rate 5.65%",
+  "id": "rate-save:Bank%20First%7Cf5ff9e62-493b-47e6-9c13-62cc0a829aa7%7CTERM_DEPOSITS%7C270%20Day%20Term%20Deposit:1",
+  "flags": "tap",
+  "at": [
+   640,
+   1050
+  ]
+ },
+ {
+  "label": "View Judo Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1194
+  ]
+ },
+ {
+  "label": "Personal Term Deposits, Judo Bank, Rate 5.65%, 4 yrs · Annually · Conditions: Unverified, Tier #2, Best advertised ↑ 5 b",
+  "id": "rate-card-TD",
+  "flags": "tap",
+  "at": [
+   384,
+   1194
+  ]
+ },
+ {
+  "label": "Judo · Personal Term Deposits",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1153
+  ]
+ },
+ {
+  "label": "Save, Personal Term Deposits, Judo Bank, Rate 5.65%, 4 yrs",
+  "id": "rate-save:Judo%20Bank%7C09c281bb-27cb-4daf-88f4-067e28d37ea4%7CTERM_DEPOSITS%7CPersonal%20Term%20Deposits:2",
+  "flags": "tap",
+  "at": [
+   640,
+   1194
+  ]
+ },
+ {
+  "label": "View Judo Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1333
+  ]
+ },
+ {
+  "label": "Personal Term Deposits, Judo Bank, Rate 5.65%, 10 mo · at maturity · Conditions: Unverified, Tier #23, Best advertised ↑",
+  "id": "rate-card-TD",
+  "flags": "tap",
+  "at": [
+   384,
+   1333
+  ]
+ },
+ {
+  "label": "Judo · Personal Term Deposits",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1297
+  ]
+ },
+ {
+  "label": "Save, Personal Term Deposits, Judo Bank, Rate 5.65%, 10 mo",
+  "id": "rate-save:Judo%20Bank%7C09c281bb-27cb-4daf-88f4-067e28d37ea4%7CTERM_DEPOSITS%7CPersonal%20Term%20Deposits:23",
+  "flags": "tap",
+  "at": [
+   640,
+   1338
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
