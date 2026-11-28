@@ -1,0 +1,175 @@
+[
+ {
+  "label": "Verified · 1.0.399",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   361,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   673,
+   331
+  ]
+ },
+ {
+  "label": "No saved rates",
+  "at": [
+   360,
+   770
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   144,
+   962
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   144,
+   960
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   962
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   960
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   576,
+   962
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   576,
+   960
+  ]
+ },
+ {
+  "label": "Add my rate",
+  "flags": "tap",
+  "at": [
+   360,
+   1074
+  ]
+ },
+ {
+  "label": "Add my rate",
+  "at": [
+   361,
+   1075
+  ]
+ },
+ {
+  "label": "Browse rates",
+  "flags": "tap",
+  "at": [
+   360,
+   1196
+  ]
+ },
+ {
+  "label": "Browse rates",
+  "at": [
+   361,
+   1196
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap,sel",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "sel",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

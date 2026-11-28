@@ -1,0 +1,134 @@
+{
+ "count": 20,
+ "flagged": 2,
+ "sheets": [
+  1,
+  2
+ ],
+ "results": [
+  {
+   "name": "browse",
+   "why": "home rates list, incl. early first page after eligibility is ready, then the settled page (rows must not shift); stacked product rows sit 8 dp apart",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "watchlist",
+   "why": "saved items; stacked rows sit 8 dp apart",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "market",
+   "why": "market tab",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "tools",
+   "why": "tools tab",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "trends",
+   "why": "trends charts; window options on one scrolling line",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "search",
+   "why": "search",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "bank-rates",
+   "why": "bank rates",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "compare",
+   "why": "compare",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "calculator",
+   "why": "calculator",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "projections",
+   "why": "Mortgage projection inputs: balance and Years remaining finish above the Variable rate and Fixed rate strip, with 48 dp controls",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "research",
+   "why": "research",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "rba",
+   "why": "RBA outlook charts, crash site",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "rba-scrolled",
+   "why": "RBA lower sections and history chart",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "rba-response",
+   "why": "RBA response",
+   "flags": [
+    "text: 360 MMS · First move · Baseline unavailable · Afte"
+   ],
+   "thumb": true
+  },
+  {
+   "name": "settings",
+   "why": "lower settings: Data section and App update status after the Wi-Fi-only and automatic-update switches were removed",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "debug-log",
+   "why": "Debug log controls remain visible on the emulator viewport",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "profile",
+   "why": "profile requirements as collapsed rows (label, current choice, chevron) and the mortgage comparison fields in fixed rows that no longer overlap; purpose, repayment and rate type take one choice",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "product-history",
+   "why": "Bank of Sydney term deposit history: verify the timeframe strip remains reachable and clear of adjacent content",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "bank-history",
+   "why": "Bank of Sydney lender history: verify the timeframe strip fits the chart viewport and retains 48 dp controls",
+   "flags": [],
+   "thumb": true
+  },
+  {
+   "name": "mortgage-history",
+   "why": "Home loan history: benchmark ribbon at the user's LVR and above (default 80%), 1 year default, product line at the selected rate (labelled Selected rate when another tier leads), missing observations counted from first observation, and the Provider website link",
+   "flags": [
+    "action unavailable: 1 year"
+   ],
+   "thumb": true
+  }
+ ]
+}

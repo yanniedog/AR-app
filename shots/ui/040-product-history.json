@@ -1,0 +1,249 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Term Deposit",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   268,
+   205
+  ]
+ },
+ {
+  "label": "Published · 1",
+  "at": [
+   608,
+   205
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   360,
+   345
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "flags": "tap",
+  "at": [
+   360,
+   463
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "at": [
+   386,
+   463
+  ]
+ },
+ {
+  "label": "Show Fees",
+  "flags": "tap",
+  "at": [
+   360,
+   689
+  ]
+ },
+ {
+  "label": "Fees",
+  "at": [
+   328,
+   689
+  ]
+ },
+ {
+  "label": "Published product history",
+  "at": [
+   360,
+   853
+  ]
+ },
+ {
+  "label": "Leading advertised · All tiers · Conditional rate / Restricted",
+  "at": [
+   360,
+   993
+  ]
+ },
+ {
+  "label": "Selected rate 3.80% · Leading advertised 5.35% · All tiers",
+  "at": [
+   360,
+   1089
+  ]
+ },
+ {
+  "label": "Term Deposit · Term deposits",
+  "at": [
+   360,
+   1165
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1249
+  ]
+ },
+ {
+  "label": "30 days",
+  "flags": "tap",
+  "at": [
+   105,
+   1249
+  ]
+ },
+ {
+  "label": "30 days",
+  "at": [
+   105,
+   1249
+  ]
+ },
+ {
+  "label": "90 days",
+  "flags": "tap",
+  "at": [
+   254,
+   1249
+  ]
+ },
+ {
+  "label": "90 days",
+  "at": [
+   254,
+   1249
+  ]
+ },
+ {
+  "label": "1 year",
+  "flags": "tap,sel",
+  "at": [
+   392,
+   1249
+  ]
+ },
+ {
+  "label": "1 year",
+  "at": [
+   392,
+   1249
+  ]
+ },
+ {
+  "label": "All",
+  "flags": "tap",
+  "at": [
+   505,
+   1249
+  ]
+ },
+ {
+  "label": "All",
+  "at": [
+   505,
+   1249
+  ]
+ },
+ {
+  "label": "Benchmarks",
+  "flags": "tap,sel",
+  "at": [
+   133,
+   1351
+  ]
+ },
+ {
+  "label": "Benchmarks",
+  "at": [
+   133,
+   1357
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

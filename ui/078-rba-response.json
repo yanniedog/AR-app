@@ -1,0 +1,336 @@
+[
+ {
+  "label": "Verified · 1.0.399",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Back",
+  "flags": "tap",
+  "at": [
+   70,
+   331
+  ]
+ },
+ {
+  "label": "Bank response",
+  "at": [
+   293,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   672,
+   331
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   894
+  ]
+ },
+ {
+  "label": "Response",
+  "at": [
+   129,
+   492
+  ]
+ },
+ {
+  "label": "Bank rates",
+  "flags": "tap",
+  "at": [
+   575,
+   493
+  ]
+ },
+ {
+  "label": "Bank rates",
+  "at": [
+   575,
+   493
+  ]
+ },
+ {
+  "label": "Previous date",
+  "flags": "tap",
+  "at": [
+   80,
+   638
+  ]
+ },
+ {
+  "label": "3 Nov 2026",
+  "at": [
+   360,
+   594
+  ]
+ },
+ {
+  "label": "+0.25 pp · 4.85%",
+  "at": [
+   360,
+   638
+  ]
+ },
+ {
+  "label": "Tracked to 29 Nov 2026",
+  "at": [
+   360,
+   682
+  ]
+ },
+ {
+  "label": "Next date",
+  "flags": "tap,off",
+  "at": [
+   640,
+   638
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   782
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   780
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   782
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   780
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   782
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   780
+  ]
+ },
+ {
+  "label": "Search banks",
+  "flags": "tap",
+  "at": [
+   386,
+   920
+  ]
+ },
+ {
+  "label": "Bank",
+  "at": [
+   199,
+   1054
+  ]
+ },
+ {
+  "label": "First move",
+  "at": [
+   467,
+   1054
+  ]
+ },
+ {
+  "label": "After",
+  "at": [
+   629,
+   1054
+  ]
+ },
+ {
+  "label": "360 MMS · First move · Baseline unavailable · After · Timing unknown",
+  "flags": "tap",
+  "at": [
+   360,
+   1181
+  ]
+ },
+ {
+  "label": "360 MMS",
+  "at": [
+   60,
+   1180
+  ]
+ },
+ {
+  "label": "3M",
+  "at": [
+   60,
+   1180
+  ]
+ },
+ {
+  "label": "360 MMS",
+  "at": [
+   162,
+   1180
+  ]
+ },
+ {
+  "label": "Baseline unavailable",
+  "at": [
+   467,
+   1180
+  ]
+ },
+ {
+  "label": "Timing unknown",
+  "at": [
+   629,
+   1180
+  ]
+ },
+ {
+  "label": "AAA Financial Corporation · First move · Baseline unavailable · After · Timing unknown",
+  "flags": "tap",
+  "at": [
+   360,
+   1311
+  ]
+ },
+ {
+  "label": "AAA Financial Corporation",
+  "at": [
+   60,
+   1310
+  ]
+ },
+ {
+  "label": "AFC",
+  "at": [
+   60,
+   1310
+  ]
+ },
+ {
+  "label": "AAA Financial Corporation",
+  "at": [
+   233,
+   1310
+  ]
+ },
+ {
+  "label": "Baseline unavailable",
+  "at": [
+   467,
+   1310
+  ]
+ },
+ {
+  "label": "Timing unknown",
+  "at": [
+   629,
+   1310
+  ]
+ },
+ {
+  "label": "Abacus Home Loans · First move · Baseline unavailable · After · Timing unknown",
+  "flags": "tap",
+  "at": [
+   360,
+   1384
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap,sel",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "sel",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

@@ -1,0 +1,394 @@
+[
+ {
+  "label": "Verified · 1.0.399",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Back",
+  "flags": "tap",
+  "at": [
+   70,
+   331
+  ]
+ },
+ {
+  "label": "Bank rates",
+  "at": [
+   252,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   672,
+   331
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   894
+  ]
+ },
+ {
+  "label": "Bank rates",
+  "at": [
+   360,
+   471
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   190,
+   587
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   190,
+   585
+  ]
+ },
+ {
+  "label": "Gap",
+  "flags": "tap",
+  "at": [
+   530,
+   587
+  ]
+ },
+ {
+  "label": "Gap",
+  "at": [
+   530,
+   585
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   723
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   721
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   723
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   721
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   723
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   721
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   859
+  ]
+ },
+ {
+  "label": "Min",
+  "flags": "tap",
+  "at": [
+   80,
+   859
+  ]
+ },
+ {
+  "label": "Min",
+  "at": [
+   80,
+   859
+  ]
+ },
+ {
+  "label": "Mean",
+  "flags": "tap,sel",
+  "at": [
+   199,
+   859
+  ]
+ },
+ {
+  "label": "Mean",
+  "at": [
+   199,
+   859
+  ]
+ },
+ {
+  "label": "Median",
+  "flags": "tap",
+  "at": [
+   339,
+   859
+  ]
+ },
+ {
+  "label": "Median",
+  "at": [
+   339,
+   859
+  ]
+ },
+ {
+  "label": "Max",
+  "flags": "tap",
+  "at": [
+   472,
+   859
+  ]
+ },
+ {
+  "label": "Max",
+  "at": [
+   472,
+   859
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   995
+  ]
+ },
+ {
+  "label": "1 year",
+  "flags": "tap",
+  "at": [
+   94,
+   995
+  ]
+ },
+ {
+  "label": "1 year",
+  "at": [
+   94,
+   995
+  ]
+ },
+ {
+  "label": "All",
+  "flags": "tap,sel",
+  "at": [
+   215,
+   995
+  ]
+ },
+ {
+  "label": "All",
+  "at": [
+   215,
+   995
+  ]
+ },
+ {
+  "label": "Big four",
+  "flags": "tap",
+  "at": [
+   348,
+   995
+  ]
+ },
+ {
+  "label": "Big four",
+  "at": [
+   348,
+   995
+  ]
+ },
+ {
+  "label": "All banks",
+  "flags": "tap,sel",
+  "at": [
+   513,
+   995
+  ]
+ },
+ {
+  "label": "All banks",
+  "at": [
+   513,
+   995
+  ]
+ },
+ {
+  "label": "Products · Advertised rate",
+  "at": [
+   360,
+   1103
+  ]
+ },
+ {
+  "label": "Missing observations · 8",
+  "at": [
+   360,
+   1183
+  ]
+ },
+ {
+  "label": "Previous bank",
+  "flags": "tap",
+  "at": [
+   80,
+   1291
+  ]
+ },
+ {
+  "label": "Choose bank · 360 MMS",
+  "id": "bank-rate-picker",
+  "flags": "tap",
+  "at": [
+   360,
+   1291
+  ]
+ },
+ {
+  "label": "360 MMS",
+  "at": [
+   172,
+   1291
+  ]
+ },
+ {
+  "label": "3M",
+  "at": [
+   172,
+   1291
+  ]
+ },
+ {
+  "label": "360 MMS",
+  "at": [
+   370,
+   1291
+  ]
+ },
+ {
+  "label": "Next bank",
+  "flags": "tap",
+  "at": [
+   640,
+   1291
+  ]
+ },
+ {
+  "label": "8.59%",
+  "at": [
+   360,
+   1382
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap,sel",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "sel",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

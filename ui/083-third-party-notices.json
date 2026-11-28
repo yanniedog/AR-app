@@ -1,0 +1,158 @@
+[
+ {
+  "label": "Verified · 1.0.399",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Back",
+  "flags": "tap",
+  "at": [
+   70,
+   331
+  ]
+ },
+ {
+  "label": "Open-source notices",
+  "at": [
+   349,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   672,
+   331
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   894
+  ]
+ },
+ {
+  "label": "Third-party notices",
+  "at": [
+   418,
+   487
+  ]
+ },
+ {
+  "label": "Commissioner",
+  "at": [
+   360,
+   656
+  ]
+ },
+ {
+  "label": "SIL Open Font License 1.1",
+  "at": [
+   360,
+   728
+  ]
+ },
+ {
+  "label": "Revision 16865a9483b54bd633b5471b109792db44f7786e",
+  "at": [
+   360,
+   812
+  ]
+ },
+ {
+  "label": "Source",
+  "at": [
+   360,
+   896
+  ]
+ },
+ {
+  "label": "https://github.com/kosbarts/Commissioner/tree/16865a9483b54bd633b5471b109792db44f7786e",
+  "at": [
+   360,
+   960
+  ]
+ },
+ {
+  "label": "Licence notice",
+  "at": [
+   360,
+   1060
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
