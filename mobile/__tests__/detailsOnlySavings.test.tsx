@@ -40,3 +40,35 @@ test('discovery-only legacy details preserve application availability and actual
     if (tree) act(() => tree.unmount());
   }
 });
+
+const buttons = (tree: any) => tree.root.findAllByType('Button').map((button: any) => button.props.title);
+
+test('a public-only product with no lender links offers its source page, not a provider claim', async () => {
+  mockCatalogue = { details: { products: { product: {} } }, manifest: { run_date: '2026-09-15' }, loading: false };
+  mockPublicProduct = { name: 'Portfolio Loan', status: 'current', programmeIds: [],
+    sourceEvidence: { evidenceId: 'e1', url: 'https://www.mortgagemart.example.au/portfolio-loan', sha256: 'a', locator: 'rates' } };
+  let tree: any;
+  try {
+    await act(async () => { tree = TestRenderer.create(<DetailsOnlyProduct productKey="product" />); });
+    expect(buttons(tree)).toContain('Source page');
+    expect(buttons(tree)).not.toContain('Provider website');
+  } finally {
+    mockPublicProduct = undefined;
+    if (tree) act(() => tree.unmount());
+  }
+});
+
+test('a lender landing page still beats the public source page and keeps the provider label', async () => {
+  mockCatalogue = { details: { products: { product: { links: { overview: 'https://www.lender.example.au/' } } } }, manifest: { run_date: '2026-09-15' }, loading: false };
+  mockPublicProduct = { name: 'Portfolio Loan', status: 'current', programmeIds: [],
+    sourceEvidence: { evidenceId: 'e1', url: 'https://www.other.example.au/portfolio-loan', sha256: 'a', locator: 'rates' } };
+  let tree: any;
+  try {
+    await act(async () => { tree = TestRenderer.create(<DetailsOnlyProduct productKey="product" />); });
+    expect(buttons(tree)).toContain('Provider website');
+    expect(buttons(tree)).not.toContain('Source page');
+  } finally {
+    mockPublicProduct = undefined;
+    if (tree) act(() => tree.unmount());
+  }
+});
