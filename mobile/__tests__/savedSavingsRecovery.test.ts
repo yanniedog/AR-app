@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { advertisedTermMonths } from '../src/data/calc';
-import { formatTerm } from '../src/data/format';
+import { formatTerm, humanizeEnum } from '../src/data/format';
+import { publicInterestPayment } from '../src/data/scenarioPublicCost';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import { EMPTY_PROFILE } from '../src/data/profile';
@@ -48,4 +49,14 @@ test('published day and compound terms override the derived month count', () => 
   expect(sevenDays).toBeDefined();
   expect(formatTerm(sevenDays!)).toBe('7 days');
   expect(advertisedTermMonths(sevenDays!)).toBeNull();
+});
+
+test('published fortnightly and four-weekly schedules remain distinct from monthly', () => {
+  for (const [cadence, label] of [
+    ['fortnightly', 'Paid fortnightly'], ['four_weekly', 'Paid every 4 weeks'],
+    ['fortnightly_or_monthly', 'Fortnightly or monthly'],
+  ]) {
+    expect(humanizeEnum(cadence)).toBe(label);
+    expect(publicInterestPayment(cadence)).toBe('unknown');
+  }
 });

@@ -80,6 +80,7 @@ const ENUM_LABEL_OVERRIDES: Readonly<Record<string, UiLabel>> = {
   VARIABLE: 'Variable', FIXED: 'Fixed', BASE: 'Ongoing', BONUS: 'Bonus rate', INTRO: 'Introductory', INTRODUCTORY: 'Introductory',
   BUNDLE_DISCOUNT_FIXED: 'Fixed · bundle', BUNDLE_DISCOUNT_VARIABLE: 'Variable · bundle',
   QUARTERLY: 'Paid quarterly', SEMI_ANNUALLY: 'Paid semi-annually',
+  FORTNIGHTLY: 'Paid fortnightly', FOUR_WEEKLY: 'Paid every 4 weeks', FORTNIGHTLY_OR_MONTHLY: 'Fortnightly or monthly',
   ONLINE: 'Online', MONTHLY: 'Monthly', AT_MATURITY: 'at maturity', LVR: 'LVR', TD: 'TD',
   SAVINGS: 'Savings', STANDARD: 'Standard', ANNUALLY: 'Annually', BASIC: 'Basic',
   MIN_AGE: 'Minimum age', MAX_AGE: 'Maximum age', MIN_BALANCE: 'Minimum balance', MAX_BALANCE: 'Maximum balance',

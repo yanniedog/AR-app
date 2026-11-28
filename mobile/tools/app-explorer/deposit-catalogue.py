@@ -12,7 +12,8 @@ from urllib.parse import quote, urlsplit
 
 transport = importlib.import_module("deposit-offers")
 REGISTER = "https://api.cdr.gov.au/cdr-register/v1/all/data-holders/brands/summary"
-FREQUENCIES = {"P1M": "monthly", "P3M": "quarterly", "P6M": "semi_annually",
+FREQUENCIES = {"P14D": "fortnightly", "P2W": "fortnightly", "P28D": "four_weekly", "P4W": "four_weekly",
+               "P1M": "monthly", "P3M": "quarterly", "P6M": "semi_annually",
                "P12M": "annually", "P1Y": "annually"}
 
 

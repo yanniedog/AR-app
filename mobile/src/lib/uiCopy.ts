@@ -327,7 +327,7 @@ export const UI_LABELS = [
   'Debt', 'Fee', 'Security', 'Common period', 'Common amount', 'Common funding date',
   'Ranking', 'Transfers', 'Linked accounts', 'Owner-occupied', 'Variable rate', 'Fixed rate',
   'Savings account', 'At-call', 'Base rate', 'Flat rate', 'Tiered balance', 'Term deposit',
-  'Paid at maturity', 'Paid monthly', 'Paid quarterly', 'Paid semi-annually', 'Paid annually',
+  'Paid at maturity', 'Paid monthly', 'Paid fortnightly', 'Paid every 4 weeks', 'Fortnightly or monthly', 'Paid quarterly', 'Paid semi-annually', 'Paid annually',
   'Paid weekly', 'Paid daily', 'Other', 'Categories', 'Parent sections', 'Show parent sections',
   'Close parent sections', 'Dismiss parent sections', 'Subscription', 'Filters', 'Search lenders',
   'Account features', 'Published details', 'Options', 'Lowest', 'Highest', 'Incomplete',
