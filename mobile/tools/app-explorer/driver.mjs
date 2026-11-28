@@ -247,6 +247,8 @@ async function settle(timeoutMs, since = Date.now(), before = null, { scrolling 
   let loadStart = null;
   let lastObservedLoadingAt = null;
   let maxLoadingMs = 0;
+  let unverifiedLoadStart = null;
+  let loadingUnverifiedMs = 0;
   let shifts = 0;
   let dumps = 0;
   let dumpTotal = 0;
@@ -259,6 +261,8 @@ async function settle(timeoutMs, since = Date.now(), before = null, { scrolling 
       responseMs,
       firstContentMs,
       maxLoadingMs,
+      loadingUnverifiedMs: unverifiedLoadStart == null ? loadingUnverifiedMs
+        : Math.max(loadingUnverifiedMs, Date.now() - unverifiedLoadStart),
       shifts,
       blank: latestDumpUsable && isBlank(last.nodes),
       errorState: latestDumpUsable ? errorStateOf(last.nodes) : null,
@@ -282,6 +286,9 @@ async function settle(timeoutMs, since = Date.now(), before = null, { scrolling 
       failedDumps += 1;
       if (loadStart != null) {
         maxLoadingMs = Math.max(maxLoadingMs, lastObservedLoadingAt - loadStart);
+        // The spinner may continue through a failed capture. Only a usable,
+        // non-loading hierarchy closes the period that could not be verified.
+        unverifiedLoadStart ??= loadStart;
         loadStart = null;
       }
       prev = null;
@@ -305,9 +312,15 @@ async function settle(timeoutMs, since = Date.now(), before = null, { scrolling 
     if (loading) {
       lastObservedLoadingAt = Date.now();
       loadStart ??= lastObservedLoadingAt;
-    } else if (loadStart != null) {
-      maxLoadingMs = Math.max(maxLoadingMs, Date.now() - loadStart);
-      loadStart = null;
+    } else {
+      if (loadStart != null) {
+        maxLoadingMs = Math.max(maxLoadingMs, Date.now() - loadStart);
+        loadStart = null;
+      }
+      if (unverifiedLoadStart != null) {
+        loadingUnverifiedMs = Math.max(loadingUnverifiedMs, Date.now() - unverifiedLoadStart);
+        unverifiedLoadStart = null;
+      }
     }
     if (fp !== prev) firstSeen = dumpStarted;
     if (until && !loading && until(last.nodes)) {
@@ -535,6 +548,7 @@ class Explorer {
       responseMs: settled.responseMs ?? undefined,
       firstContentMs: settled.firstContentMs ?? undefined,
       maxLoadingMs: settled.maxLoadingMs || undefined,
+      loadingUnverifiedMs: settled.loadingUnverifiedMs || undefined,
       blank: settled.blank || undefined,
       waitedMs: settled.waitedMs,
       shifts: settled.shifts || undefined,
