@@ -1,0 +1,65 @@
+[
+ {
+  "label": "",
+  "flags": "tap",
+  "at": [
+   360,
+   800
+  ]
+ },
+ {
+  "label": "Account type",
+  "at": [
+   300,
+   1086
+  ]
+ },
+ {
+  "label": "Close Account type",
+  "flags": "tap",
+  "at": [
+   640,
+   1086
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1350
+  ]
+ },
+ {
+  "label": "Any",
+  "flags": "tap,sel",
+  "at": [
+   360,
+   1200
+  ]
+ },
+ {
+  "label": "Ongoing",
+  "flags": "tap",
+  "at": [
+   360,
+   1300
+  ]
+ },
+ {
+  "label": "Bonus rate",
+  "flags": "tap",
+  "at": [
+   360,
+   1400
+  ]
+ },
+ {
+  "label": "Introductory",
+  "flags": "tap",
+  "at": [
+   360,
+   1500
+  ]
+ }
+]
