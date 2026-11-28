@@ -1,0 +1,398 @@
+[
+ {
+  "label": "Rates",
+  "at": [
+   361,
+   149
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   673,
+   149
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap",
+  "at": [
+   134,
+   277
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   275
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   277
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   275
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap,sel",
+  "at": [
+   587,
+   277
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "sel",
+  "at": [
+   586,
+   275
+  ]
+ },
+ {
+  "label": "Search",
+  "flags": "tap",
+  "at": [
+   386,
+   399
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "flags": "tap",
+  "at": [
+   80,
+   521
+  ]
+ },
+ {
+  "label": "Filter",
+  "at": [
+   80,
+   543
+  ]
+ },
+ {
+  "label": "Sort · Advertised rate",
+  "flags": "tap",
+  "at": [
+   218,
+   521
+  ]
+ },
+ {
+  "label": "Advertised",
+  "at": [
+   218,
+   543
+  ]
+ },
+ {
+  "label": "Compare",
+  "flags": "tap",
+  "at": [
+   378,
+   521
+  ]
+ },
+ {
+  "label": "Compare",
+  "at": [
+   378,
+   543
+  ]
+ },
+ {
+  "label": "Lenders",
+  "flags": "tap",
+  "at": [
+   520,
+   521
+  ]
+ },
+ {
+  "label": "Lenders",
+  "at": [
+   520,
+   543
+  ]
+ },
+ {
+  "label": "Search actions",
+  "flags": "tap",
+  "at": [
+   640,
+   521
+  ]
+ },
+ {
+  "label": "More",
+  "at": [
+   640,
+   543
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   989
+  ]
+ },
+ {
+  "label": "View Unity Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   657
+  ]
+ },
+ {
+  "label": "Term Deposit, Unity Bank, Rate 5.80%, 1 yr · $1k–$10m · at maturity · Conditions: Unverified, Tier #22, Best advertised ",
+  "flags": "tap",
+  "at": [
+   384,
+   657
+  ]
+ },
+ {
+  "label": "Unity Bank · Term Deposit",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   616
+  ]
+ },
+ {
+  "label": "Save, Term Deposit, Unity Bank, Rate 5.80%",
+  "id": "rate-save:Unity%20Bank%7CI30_ALL_TERMS%7CTERM_DEPOSITS%7CTerm%20Deposit:22",
+  "flags": "tap",
+  "at": [
+   640,
+   657
+  ]
+ },
+ {
+  "label": "View Suncorp Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   801
+  ]
+ },
+ {
+  "label": "Term Deposit, Suncorp Bank, Rate 5.75%, 1 yr · $5k–$100k · at maturity · Conditions: Unverified, Tier #35, Best advertis",
+  "flags": "tap",
+  "at": [
+   384,
+   801
+  ]
+ },
+ {
+  "label": "Sun · Term Deposit",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   760
+  ]
+ },
+ {
+  "label": "Save, Term Deposit, Suncorp Bank, Rate 5.75%, Balance $5k–$99,999",
+  "id": "rate-save:Suncorp%20Bank%7CTD%7CTERM_DEPOSITS%7CTerm%20Deposit:35",
+  "flags": "tap",
+  "at": [
+   640,
+   801
+  ]
+ },
+ {
+  "label": "View Suncorp Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   945
+  ]
+ },
+ {
+  "label": "Term Deposit, Suncorp Bank, Rate 5.75%, 1 yr · $100k–$1m · at maturity · Conditions: Unverified, Tier #36, Best advertis",
+  "flags": "tap",
+  "at": [
+   384,
+   945
+  ]
+ },
+ {
+  "label": "Sun · Term Deposit",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   904
+  ]
+ },
+ {
+  "label": "Save, Term Deposit, Suncorp Bank, Rate 5.75%, Balance $100k–$999,999",
+  "id": "rate-save:Suncorp%20Bank%7CTD%7CTERM_DEPOSITS%7CTerm%20Deposit:36",
+  "flags": "tap",
+  "at": [
+   640,
+   945
+  ]
+ },
+ {
+  "label": "View Suncorp Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1089
+  ]
+ },
+ {
+  "label": "Term Deposit, Suncorp Bank, Rate 5.75%, 1 yr · $1m–$2m · at maturity · Conditions: Unverified, Tier #37, Best advertised",
+  "flags": "tap",
+  "at": [
+   384,
+   1089
+  ]
+ },
+ {
+  "label": "Sun · Term Deposit",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1048
+  ]
+ },
+ {
+  "label": "Save, Term Deposit, Suncorp Bank, Rate 5.75%, Balance $1,000k–$2,000k",
+  "id": "rate-save:Suncorp%20Bank%7CTD%7CTERM_DEPOSITS%7CTerm%20Deposit:37",
+  "flags": "tap",
+  "at": [
+   640,
+   1089
+  ]
+ },
+ {
+  "label": "View AMP Bank GO · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1233
+  ]
+ },
+ {
+  "label": "AMP Bank GO 12 Month Term Deposit, AMP Bank GO, Rate 5.70%, 1 yr · at maturity, Tier #1, Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   384,
+   1233
+  ]
+ },
+ {
+  "label": "AMP Go · AMP Bank GO 12 Month Term Deposit",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1192
+  ]
+ },
+ {
+  "label": "Save, AMP Bank GO 12 Month Term Deposit, AMP Bank GO, Rate 5.70%",
+  "id": "rate-save:AMP%20Bank%20GO%7C282bc819-b61b-4233-b53b-290808bcb9f3%7CTERM_DEPOSITS%7CAMP%20Bank%20GO%2012%20Month%20Term%20Deposit:1",
+  "flags": "tap",
+  "at": [
+   640,
+   1233
+  ]
+ },
+ {
+  "label": "View Australian Military Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1353
+  ]
+ },
+ {
+  "label": "Investment Plus, Australian Military Bank, Rate 5.70%, 6 mo · $1k+ · at maturity, Tier #32, Best advertised ↑ 25 bps · 4",
+  "flags": "tap",
+  "at": [
+   384,
+   1353
+  ]
+ },
+ {
+  "label": "AMB · Investment Plus",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1336
+  ]
+ },
+ {
+  "label": "Save, Investment Plus, Australian Military Bank, Rate 5.70%",
+  "id": "rate-save:Australian%20Military%20Bank%7Cc70ea9ac-cf01-49ff-a100-b59a953ff33a%7CTERM_DEPOSITS%7CInvestment%20Plus:32",
+  "flags": "tap",
+  "at": [
+   640,
+   1361
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

@@ -1,0 +1,227 @@
+[
+ {
+  "label": "Verified · 1.0.400",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Back",
+  "flags": "tap",
+  "at": [
+   70,
+   331
+  ]
+ },
+ {
+  "label": "Profile",
+  "at": [
+   211,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   672,
+   331
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   894
+  ]
+ },
+ {
+  "label": "Savings · Saved requirements 0",
+  "at": [
+   360,
+   336
+  ]
+ },
+ {
+  "label": "Account type: Any",
+  "flags": "tap",
+  "at": [
+   360,
+   396
+  ]
+ },
+ {
+  "label": "Account type",
+  "at": [
+   126,
+   383
+  ]
+ },
+ {
+  "label": "Features: Any",
+  "flags": "tap",
+  "at": [
+   360,
+   444
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   95,
+   444
+  ]
+ },
+ {
+  "label": "Term deposits · Saved requirements 0",
+  "at": [
+   360,
+   548
+  ]
+ },
+ {
+  "label": "Interest paid: Any",
+  "flags": "tap",
+  "at": [
+   360,
+   640
+  ]
+ },
+ {
+  "label": "Interest paid",
+  "at": [
+   121,
+   639
+  ]
+ },
+ {
+  "label": "Features: Any",
+  "flags": "tap",
+  "at": [
+   360,
+   736
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   95,
+   736
+  ]
+ },
+ {
+  "label": "Shared requirements · Savings accounts / Term deposits",
+  "at": [
+   360,
+   860
+  ]
+ },
+ {
+  "label": "Digital banking",
+  "at": [
+   303,
+   964
+  ]
+ },
+ {
+  "label": "Digital banking",
+  "flags": "tap",
+  "at": [
+   641,
+   964
+  ]
+ },
+ {
+  "label": "Show Mortgage comparison",
+  "flags": "tap",
+  "at": [
+   360,
+   1189
+  ]
+ },
+ {
+  "label": "Mortgage comparison",
+  "at": [
+   328,
+   1189
+  ]
+ },
+ {
+  "label": "Show Private customer inputs",
+  "flags": "tap",
+  "at": [
+   360,
+   1379
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

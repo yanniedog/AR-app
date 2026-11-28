@@ -1,0 +1,172 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I With Offset Mortgage",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "$487 · Conditions: Unverified · $132 · Conditions: Unverified · $375 · Conditions: Unverified · $132 · Conditions: Unver",
+  "at": [
+   372,
+   256
+  ]
+ },
+ {
+  "label": "Offset account",
+  "at": [
+   98,
+   646
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   438,
+   626
+  ]
+ },
+ {
+  "label": "Availability",
+  "at": [
+   228,
+   718
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   568,
+   718
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   268,
+   770
+  ]
+ },
+ {
+  "label": "Published · 9",
+  "at": [
+   608,
+   770
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   360,
+   922
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "flags": "tap",
+  "at": [
+   360,
+   1040
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "at": [
+   386,
+   1040
+  ]
+ },
+ {
+  "label": "Show Fees",
+  "flags": "tap",
+  "at": [
+   360,
+   1266
+  ]
+ },
+ {
+  "label": "Fees",
+  "at": [
+   328,
+   1266
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

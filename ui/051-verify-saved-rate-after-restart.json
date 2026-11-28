@@ -1,0 +1,207 @@
+[
+ {
+  "label": "Saved",
+  "at": [
+   361,
+   149
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   673,
+   149
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   803
+  ]
+ },
+ {
+  "label": "Your entered rates",
+  "at": [
+   360,
+   289
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   414
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   412
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   414
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   412
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   414
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   412
+  ]
+ },
+ {
+  "label": "Add my rate",
+  "flags": "tap",
+  "at": [
+   360,
+   526
+  ]
+ },
+ {
+  "label": "Add my rate",
+  "at": [
+   361,
+   527
+  ]
+ },
+ {
+  "label": "Entered rates",
+  "at": [
+   114,
+   642
+  ]
+ },
+ {
+  "label": "This device",
+  "at": [
+   617,
+   642
+  ]
+ },
+ {
+  "label": "Saved rates",
+  "at": [
+   360,
+   722
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   360,
+   802
+  ]
+ },
+ {
+  "label": "View MoveBank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   910
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I With Offset Mortgage, MoveBank, Comparison rate 6.35%, Advertised rate 6.29% · Variable · Principal &",
+  "flags": "tap",
+  "at": [
+   328,
+   910
+  ]
+ },
+ {
+  "label": "MoveBank · Owner Occupier P&I With Offset Mortgage",
+  "id": "compact-product-name",
+  "at": [
+   328,
+   869
+  ]
+ },
+ {
+  "label": "Remove, Owner Occupier P&I With Offset Mortgage, MoveBank, Comparison rate 6.35%",
+  "id": "rate-save:MoveBank%7C1dd4df6f-8930-40a8-978e-ab9077898480%7CRESIDENTIAL_MORTGAGES%7COwner%20Occupier%20P%26I%20With%20Offset%20Mortgage:6",
+  "flags": "tap,sel",
+  "at": [
+   528,
+   910
+  ]
+ },
+ {
+  "label": "Enable alerts · MoveBank · Owner Occupier P&I With Offset Mortgage",
+  "flags": "tap",
+  "at": [
+   640,
+   910
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap,sel",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "sel",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
