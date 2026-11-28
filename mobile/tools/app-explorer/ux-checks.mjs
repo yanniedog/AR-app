@@ -72,9 +72,29 @@ export function appNodes(nodes, pkg) {
  */
 function clippedByScroller(n, scrollers, app) {
   const h = n.bounds[3] - n.bounds[1];
-  return scrollers.some(c => c !== n && contains(c.bounds, n.bounds, 0)
+  return scrollers.some(c => c !== n && c.cls !== 'HorizontalScrollView' && contains(c.bounds, n.bounds, 0)
     && (Math.abs(n.bounds[1] - c.bounds[1]) <= 2 || Math.abs(n.bounds[3] - c.bounds[3]) <= 2)
     && app.some(o => o !== n && o.cls === n.cls && o.bounds[3] - o.bounds[1] > h + 2 && contains(c.bounds, o.bounds, 0)));
+}
+
+// Android clips both a chip and its text at the scroll edge. A same-kind chip
+// with a fully inset label establishes that the cut-off side normally has padding.
+function horizontallyClippedTarget(target, scrollers, app, nodes, minWidth) {
+  if (!target.desc) return false;
+  const [left, top, right, bottom] = target.bounds;
+  return scrollers.some(scroller => {
+    if (scroller.cls !== 'HorizontalScrollView' || !contains(scroller.bounds, target.bounds, 0)) return false;
+    const edge = right === scroller.bounds[2] ? 2 : left === scroller.bounds[0] ? 0 : null;
+    if (edge == null || !nodes.some(n => n.pkg === target.pkg && n.cls === 'TextView' && n.text === target.desc
+      && n.bounds[edge] === target.bounds[edge] && n.bounds[1] >= top && n.bounds[3] <= bottom)) return false;
+    return app.some(sibling => {
+      const [x1, y1, x2, y2] = sibling.bounds;
+      return sibling !== target && sibling.clickable && sibling.cls === target.cls && y1 === top && y2 === bottom
+        && x2 - x1 >= minWidth && contains(scroller.bounds, sibling.bounds, 0)
+        && app.some(n => n.cls === 'TextView' && n.text === sibling.desc && contains(sibling.bounds, n.bounds, 0)
+          && (edge === 2 ? x2 - n.bounds[2] : n.bounds[0] - x1) > 2);
+    });
+  });
 }
 
 const TAB_LABELS = /^(Rates|Saved|Market)$/;
@@ -86,7 +106,7 @@ export function bottomBarTop(app, size) {
 }
 
 /** Tap targets under the platform minimum. */
-function tapTargets({ screen, app, density, size }) {
+function tapTargets({ screen, app, nodes, density, size }) {
   const out = [];
   const seen = new Set();
   const dp = DP(density);
@@ -102,6 +122,7 @@ function tapTargets({ screen, app, density, size }) {
     const h = (n.bounds[3] - n.bounds[1]) / dp;
     // Rounding of density-independent sizes must not turn 48 into a failure.
     if (w >= LIMITS.minTapDp - 0.5 && h >= LIMITS.minTapDp - 0.5) continue;
+    if (h >= LIMITS.minTapDp - 0.5 && horizontallyClippedTarget(n, scrollers, app, nodes, (LIMITS.minTapDp - 0.5) * dp)) continue;
     const key = n.bounds.join(',');
     if (seen.has(key)) continue;
     seen.add(key);

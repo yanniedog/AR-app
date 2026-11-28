@@ -14,6 +14,8 @@ import { androidRipple, AppText, Button } from './ui';
 export interface SelectorOption<T extends string> { label: UiCopy; value: T; disabled?: boolean }
 
 const STRIP_HEIGHT = 34;
+/** Height of the strip line: its options keep 48 dp touch targets. */
+const STRIP_LINE = 48;
 const FADE_WIDTH = 28;
 
 /** Right or left edge fade that hints at more options without a scrollbar. */
@@ -84,12 +86,12 @@ export function OptionStrip<T extends string>({
   const fadeColor = background ?? theme.colors.bg;
 
   return (
-    <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: STRIP_HEIGHT }, style]}>
+    <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 10, height: STRIP_LINE }, style]}>
       {label ? (
         <AppText variant="small" color="textMuted" weight="500" numberOfLines={1} style={{ flexShrink: 0 }}>{label}</AppText>
       ) : null}
       <View
-        style={{ flex: 1, minWidth: 0 }}
+        style={{ flex: 1, minWidth: 0, height: STRIP_LINE }}
         onLayout={(event: LayoutChangeEvent) => {
           const width = event.nativeEvent.layout.width;
           setFrame(current => current.width === width ? current : { ...current, width });
@@ -101,6 +103,7 @@ export function OptionStrip<T extends string>({
           showsHorizontalScrollIndicator={false}
           onScroll={onScroll}
           scrollEventThrottle={32}
+          style={{ height: STRIP_LINE }}
           onContentSizeChange={(content) => setFrame(current => current.content === content ? current : { ...current, content })}
           contentContainerStyle={{ alignItems: 'center', gap: 2, paddingRight: overflow ? FADE_WIDTH / 2 : 0 }}
           accessibilityRole={multiple ? undefined : 'tablist'}
@@ -298,8 +301,8 @@ export function ChipStrip({ children, style }: { children: UiChild; style?: Styl
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      style={[{ flexGrow: 0 }, style]}
-      contentContainerStyle={{ alignItems: 'center', gap: 6 }}
+      style={[{ flexGrow: 0, minHeight: STRIP_LINE }, style]}
+      contentContainerStyle={{ alignItems: 'center', gap: 6, minHeight: STRIP_LINE }}
     >
       {children}
     </ScrollView>

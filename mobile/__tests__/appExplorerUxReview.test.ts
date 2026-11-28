@@ -130,6 +130,21 @@ describe('app explorer UX review', () => {
     expect(r.findings.filter(f => f.check === 'crowded-targets')).toEqual([]);
   });
 
+  it('requires a horizontal scroller and clipping evidence for edge-aligned targets', () => {
+    // Explorer run 45910757865, open filters. Android clips even the text bounds.
+    const strip = { scrollable: true, cls: 'HorizontalScrollView', bounds: [32, 1193, 688, 1289] };
+    const wide = { desc: 'LVR ≤10.0%', cls: 'Button', clickable: true, bounds: [474, 1193, 667, 1289] };
+    const wideLabel = { text: wide.desc, cls: 'TextView', bounds: [498, 1222, 643, 1260] };
+    const sliver = { desc: 'LVR ≤17.5%', cls: 'Button', clickable: true, bounds: [679, 1193, 688, 1289] };
+    const clippedLabel = { text: sliver.desc, cls: 'TextView', bounds: [703, 1222, 688, 1260] };
+    const r = review({
+      filters: [strip, wide, wideLabel, sliver, clippedLabel],
+      vertical: [{ ...strip, cls: 'ScrollView', bounds: [32, 600, 688, 1390] }, wide, wideLabel, sliver, clippedLabel],
+      'edge-without-clipping-evidence': [strip, wide, wideLabel, sliver],
+    });
+    expect(r.findings.filter(f => f.check === 'tap-target').map(f => f.text)).toEqual([sliver.desc, sliver.desc]);
+  });
+
   it('keeps small controls near the bottom when there is no tab bar, and edge-aligned children that are not clipped', () => {
     const small = { text: 'Tiny', clickable: true, bounds: [20, 1400, 100, 1440] };
     const scroller = { scrollable: true, cls: 'ScrollView', bounds: [0, 585, 720, 1392] };

@@ -1,12 +1,14 @@
 import fs from 'fs';
 import path from 'path';
+import { sanitizeNativeIntentPath } from '../app/+native-intent';
+
+const { isShotRoute } = require('../tools/app-explorer/shot-route.cjs') as { isShotRoute: (route: string) => boolean };
 
 const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'tools', 'app-explorer', 'shots.json'), 'utf8')) as {
   name: string; open: string; scroll?: number; why: string;
 }[];
 
-const intent = fs.readFileSync(path.join(__dirname, '..', 'app', '+native-intent.tsx'), 'utf8');
-const publicRoutes = new Set([...(intent.match(/PUBLIC_ROUTES = new Set\(\[([^\]]*)\]/)?.[1] ?? '').matchAll(/'([^']+)'/g)].map(m => m[1]));
+const historyRouteFiles = new Map([['bank', 'bank/[provider]'], ['product', 'product/[key]']]);
 
 describe('app explorer shots manifest', () => {
   it('holds at most 20 uniquely named shots', () => {
@@ -19,13 +21,15 @@ describe('app explorer shots manifest', () => {
     const appDir = path.join(__dirname, '..', 'app');
     for (const shot of manifest) {
       expect(shot.name).toMatch(/^[a-z0-9-]{1,40}$/);
-      expect(shot.open).toMatch(/^\/[a-z0-9-]+(\/[a-z0-9-]+)*(\?[a-z0-9=&_-]*)?$/i);
+      expect({ route: shot.open, safe: isShotRoute(shot.open) }).toEqual({ route: shot.open, safe: true });
       if (shot.scroll !== undefined) expect(Number.isInteger(shot.scroll) && shot.scroll >= 0 && shot.scroll <= 10).toBe(true);
       // The driver opens routes as deep links, which the native intent filter only allows for public routes.
-      expect({ route: shot.open, deepLink: publicRoutes.has(shot.open.split('?')[0].split('/')[1]) }).toEqual({ route: shot.open, deepLink: true });
+      expect(sanitizeNativeIntentPath(`arrates://${shot.open.slice(1)}`)).toBe(shot.open);
       expect(shot.why.trim().length).toBeGreaterThan(0);
       const route = shot.open.split('?')[0].replace(/^\//, '');
-      const exists = ['.tsx', '.ts', '.jsx', '.js', '/index.tsx'].some(ext => fs.existsSync(path.join(appDir, route + ext)))
+      const segments = route.split('/');
+      const historyFile = segments.length === 2 ? historyRouteFiles.get(segments[0]) : undefined;
+      const exists = ['.tsx', '.ts', '.jsx', '.js', '/index.tsx'].some(ext => fs.existsSync(path.join(appDir, (historyFile ?? route) + ext)))
         || fs.readdirSync(path.join(appDir, '(tabs)')).some(f => f.replace(/\.tsx$/, '') === route);
       expect({ route: shot.open, exists }).toEqual({ route: shot.open, exists: true });
     }

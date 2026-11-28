@@ -57,7 +57,7 @@
     "name": "projections",
     "open": "/projections",
     "scroll": 0,
-    "why": "projections chart; timeframe strip (3M to 50Y) on one line and Scenarios / Y-axis icon buttons that open sheets"
+    "why": "Projections inputs: Variable rate and Fixed rate keep 48 dp targets and clear the Years remaining field"
   },
   {
     "name": "research",
@@ -106,16 +106,18 @@
     "why": "profile requirements as collapsed rows (label, current choice, chevron) instead of chip grids"
   },
   {
-    "name": "terms",
-    "open": "/terms",
-    "scroll": 0,
-    "why": "terms"
+    "name": "product-history",
+    "open": "/product/Bank%20of%20Sydney%7Cterm_deposit%7CTERM_DEPOSITS%7CTerm%20Deposit",
+    "scroll": 2,
+    "visibleAction": "1 year",
+    "why": "Bank of Sydney term deposit history: verify the timeframe strip remains reachable and clear of adjacent content"
   },
   {
-    "name": "third-party",
-    "open": "/third-party-notices",
+    "name": "bank-history",
+    "open": "/bank/Bank%20of%20Sydney",
     "scroll": 0,
-    "why": "third-party notices"
+    "visibleAction": "1 year",
+    "why": "Bank of Sydney lender history: verify the timeframe strip fits the chart viewport and retains 48 dp controls"
   },
   {
     "name": "catalogue",
