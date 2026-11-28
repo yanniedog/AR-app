@@ -29,6 +29,70 @@ def product_url(register, brand, product):
     return base + "/" + quote(product, safe="")
 
 
+def numeric(value):
+    if value is None or value == "":
+        return None
+    number = Decimal(str(value))
+    if not number.is_finite():
+        raise InvalidOperation("non-finite value")
+    return number
+
+
+def structured_payment(source):
+    if source.get("applicationType") == "MATURITY":
+        return "at_maturity"
+    if source.get("applicationType") == "PERIODIC":
+        return FREQUENCIES.get(source.get("applicationFrequency"))
+    return None
+
+
+def displayed_offer_key(row, section, *, source):
+    # Only the displayed dimensions identify a candidate. Other eligibility,
+    # access and pricing conditions remain outside this public CDR comparison.
+    try:
+        if source:
+            tiers = [t for t in row.get("tiers") or [] if t.get("unitOfMeasure") == "DOLLAR"]
+            if len(tiers) > 1:
+                return None
+            tier = tiers[0] if tiers else {}
+            bounds = (numeric(tier.get("minimumValue")), numeric(tier.get("maximumValue")))
+            kind, term, payment = row.get("depositRateType"), row.get("additionalValue"), structured_payment(row)
+        else:
+            bounds = (numeric(row.get("balance_min")), numeric(row.get("balance_max")))
+            kind, term, payment = row.get("rate_type"), row.get("term"), row.get("interest_payment")
+        if not kind:
+            return None
+        if section == "TD":
+            if kind != "FIXED" or not term or not payment:
+                return None
+            return kind, term, payment, bounds
+        return kind, bounds
+    except InvalidOperation:
+        return None
+
+
+def matched_displayed_offer(row, product, section, candidates):
+    evidence = {"state": "unverified"}
+    if not product or product.get("productId") != row.get("product_id"):
+        return {**evidence, "reason": "product unavailable"}
+    same_revision = bool(row.get("last_updated") and row["last_updated"] == product.get("lastUpdated"))
+    evidence.update(revision="same" if same_revision else "changed or missing",
+                    appUpdated=row.get("last_updated"), bankUpdated=product.get("lastUpdated"))
+    key = displayed_offer_key(row, section, source=False)
+    matches = candidates.get(key, []) if key else []
+    if len(matches) != 1:
+        return {**evidence, "reason": "no unique combination of displayed fields", "candidates": len(matches)}
+    index, src = matches[0]
+    evidence.update(bankIndex=index, bankRate=src.get("rate"))
+    try:
+        lhs, rhs = numeric(row.get("rate")), numeric(src.get("rate"))
+        if lhs is not None and rhs is not None:
+            evidence["state"] = "matches" if lhs == rhs else "differs"
+    except InvalidOperation:
+        pass
+    return evidence
+
+
 def compare(row, product, section):
     result = {"rate": "unverified", "payment": "unverified" if section == "TD" else "not applicable", "term": "unverified" if section == "TD" else "not applicable", "balance": "unverified"}
     if not product or product.get("productId") != row.get("product_id"):
@@ -47,11 +111,10 @@ def compare(row, product, section):
         except InvalidOperation:
             pass
     if section == "TD":
-        application = source.get("applicationType")
-        payment = "at_maturity" if application == "MATURITY" else FREQUENCIES.get(source.get("applicationFrequency")) if application == "PERIODIC" else None
+        payment = structured_payment(source)
         result.update(cdrPayment=payment, payment="matches" if payment and payment == row.get("interest_payment") else "differs" if payment else "unverified")
         term = source.get("additionalValue")
-        if source.get("depositRateType") == "FIXED" and isinstance(term, str) and re.fullmatch(r"P\d+[DMWY]", term):
+        if source.get("depositRateType") == "FIXED" and isinstance(term, str) and re.fullmatch(r"P(?=\d)(?:\d+Y)?(?:\d+M)?(?:\d+W)?(?:\d+D)?", term):
             result.update(cdrTerm=term, term="matches" if row.get("term") == term else "differs")
         else:
             result["term"] = "unverified"
@@ -91,10 +154,17 @@ def collect(core, registry, read):
                 reason = None
             except (OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:
                 reason = str(exc)[:200]
+        offers = defaultdict(lambda: defaultdict(list))
+        for section in {section for section, _ in rows}:
+            for index, source in enumerate((product or {}).get("depositRates") or [], 1):
+                key = displayed_offer_key(source, section, source=True)
+                if key is not None:
+                    offers[section][key].append((index, source))
         return [dict(section=section, provider=row["provider"], product=row["product_name"], key=row["product_key"],
                      index=row.get("rate_index"), source=url, error=reason, appRate=row.get("rate"),
                      appPayment=row.get("interest_payment"), appTerm=row.get("term"), appMin=row.get("balance_min"),
-                     appMax=row.get("balance_max"), **compare(row, product, section)) for section, row in rows]
+                     appMax=row.get("balance_max"), matchedDisplayedOffer=matched_displayed_offer(row, product, section, offers[section]),
+                     **compare(row, product, section)) for section, row in rows]
     with ThreadPoolExecutor(max_workers=24) as pool:
         return [r for group in pool.map(check, tasks) for r in group]
 
@@ -118,18 +188,25 @@ def live_read(url):
 def report(core, registry, read):
     observations = collect(core, registry, read)
     by_bank = defaultdict(Counter)
+    displayed = Counter()
     for row in observations:
         counts = by_bank[(row["provider"], row["section"])]
         counts["rows"] += 1
+        offer = row["matchedDisplayedOffer"]
+        label = "displayed offer " + offer["state"] + " (" + offer.get("revision", "unavailable") + ")"
+        counts[label] += 1
+        displayed[label] += 1
         for field in ("rate", "term", "payment", "balance"):
             counts[field + " " + row[field]] += 1
-    differences = sum(any(row[k] == "differs" for k in ("rate", "term", "payment", "balance")) for row in observations)
+    differences = sum(any(row[k] == "differs" for k in ("rate", "term", "payment", "balance"))
+                      or (row["matchedDisplayedOffer"]["state"] == "differs" and
+                          row["matchedDisplayedOffer"].get("revision") == "same") for row in observations)
     unverified_rates = sum(row["rate"] == "unverified" for row in observations)
     incomplete = sum(any(row[field] == "unverified" for field in ("rate", "term", "payment", "balance"))
-                     for row in observations)
+                     or row["matchedDisplayedOffer"]["state"] == "unverified" for row in observations)
     return dict(edition=core["run_date"], status="FAIL" if differences else "INCOMPLETE" if incomplete or not observations else "CHECKED",
         providers=len({row["provider"] for row in observations}), rows=len(observations), differences=differences,
-        unverifiedRateRows=unverified_rates, unverifiedOfferRows=incomplete, banks=[dict(provider=k[0], section=k[1], **v) for k, v in sorted(by_bank.items())],
+        unverifiedRateRows=unverified_rates, unverifiedOfferRows=incomplete, displayedOfferCounts=dict(displayed), banks=[dict(provider=k[0], section=k[1], **v) for k, v in sorted(by_bank.items())],
         observations=observations)
 
 
