@@ -3,6 +3,11 @@
   "semantic_revision": "ar-history-ready-v1",
   "compatible": [
     {
+      "sha256": "ca69028e7cdfd1f35b5eda00e354e64cfe4bcddf154ff7bc0dca8763daaf9269",
+      "pinned_by": "fbf87608b60251364e83c14cd550175eab7f7db2",
+      "note": "The successor changes live mortgage repayment filters. Prepared history has the same cohort dimensions, events and product histories."
+    },
+    {
       "sha256": "ee91ff248a3afc6b6e99cbe45f588ee621a210a01efdea1f5c197a52e6233ab3",
       "pinned_by": "bf28a0c0139ddcce7b26c07a3daefc9f4335648e",
       "note": "The successor changes LVR profile matching at read time. Both compilers publish the same raw LVR dimensions, cohort events, and product histories."
