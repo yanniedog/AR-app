@@ -14,7 +14,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useResolvedPublicRankingRows } from '../../hooks/useResolvedPublicRankingRows';
 import { useSuitabilityRevision } from '../../hooks/useSuitabilityRevision';
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, TextInput, useWindowDimensions, View } from 'react-native';
+import { Platform, Pressable, TextInput, useWindowDimensions, View, type ViewStyle } from 'react-native';
 
 import {
   LifecycleChart,
@@ -126,6 +126,7 @@ function NumericField({
   date,
   editable = true,
   error,
+  style,
 }: {
   label: UiCopy;
   value: string;
@@ -136,14 +137,15 @@ function NumericField({
   date?: boolean;
   editable?: boolean;
   error?: UiCopy;
+  style?: ViewStyle;
 }) {
   const theme = useTheme();
-  if (prefix === '$') return <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 160, minWidth: 0 }}>
+  if (prefix === '$') return <View style={[{ flexGrow: 1, flexShrink: 1, flexBasis: 160, minWidth: 0 }, style]}>
     <CurrencyInput label={label} value={value} onChangeText={onChangeText} editable={editable} error={error} />
     {suffix ? <AppText variant="small" color="textMuted">{suffix}</AppText> : null}
   </View>;
   return (
-    <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 160, minWidth: 0, gap: 5 }}>
+    <View style={[{ flexGrow: 1, flexShrink: 1, flexBasis: 160, minWidth: 0, gap: 5 }, style]}>
       <AppText variant="tiny" color="textMuted" weight="700">{label}</AppText>
       <View
         style={{
@@ -806,6 +808,9 @@ export function ProjectionWorkspace() {
     ],
   });
 
+  // A wrapped horizontal pair reported less height than its contents on
+  // Android. Let the fields take their intrinsic height when stacked.
+  const mortgageFieldStyle: ViewStyle | undefined = wide ? undefined : { flexBasis: 'auto', flexGrow: 0, flexShrink: 0 };
   const basicFields = (
     <Card style={{ gap: 14 }}>
       <AppText variant="h3">{uiLabel("Current values")}</AppText>
@@ -815,7 +820,7 @@ export function ProjectionWorkspace() {
       </LocalRateEditor>
       {section === 'Mortgage' ? (
         <>
-          <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <View style={{ flexDirection: wide ? 'row' : 'column', alignItems: wide ? 'flex-start' : 'stretch', gap: 10 }}>
             <NumericField
               label={uiLabel(scenario.mortgage.mode === 'buy' ? 'Calculated loan amount' : 'Current loan balance')}
               value={currentMortgageBalance}
@@ -823,9 +828,11 @@ export function ProjectionWorkspace() {
               prefix="$"
               editable={inputsEditable && scenario.mortgage.mode !== 'buy'}
               error={errors.mortgageBalance}
+              style={mortgageFieldStyle}
             />
-            <NumericField label="Years remaining" value={scenario.mortgage.years} onChangeText={(years) => updateMortgage({ years })} suffix="years" editable={inputsEditable} error={errors.years} />
-          </Row>
+            <NumericField label="Years remaining" value={scenario.mortgage.years} onChangeText={(years) => updateMortgage({ years })}
+              suffix="years" editable={inputsEditable} error={errors.years} style={mortgageFieldStyle} />
+          </View>
           {scenario.mortgage.mode === 'buy' ? (
             <Button title="Purchase details" variant="secondary" onPress={() => {
               void flush().then(saved => { if (saved) router.setParams({ mode: 'check' }); });
