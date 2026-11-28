@@ -6,7 +6,7 @@ export function rateSummary(dir) {
   const file = path.join(dir, 'rate-evidence.json');
   if (!fs.existsSync(file)) return ['**Rate evidence incomplete** · No verification receipt', ''];
   const r = JSON.parse(fs.readFileSync(file, 'utf8'));
-  const lines = [`**Rate evidence: ${r.outcome}** · Published edition ${r.source?.tag ?? 'unavailable'}`, ''];
+  const lines = [`**Rate evidence: ${r.outcome}** · Published edition ${r.source?.tag ?? 'unavailable'} · APK binding ${r.captureBinding ?? 'unverified'}`, ''];
   if (r.error) lines.push(`Collection error: ${r.error}`, '');
   lines.push('| Category | Banks visible / published | Products visible / published |', '| --- | ---: | ---: |');
   for (const [name, c] of Object.entries(r.sectionCoverage ?? {})) {

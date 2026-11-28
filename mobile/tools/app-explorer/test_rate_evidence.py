@@ -16,6 +16,8 @@ class ReleasedTermDeposit(unittest.TestCase):
         step = {'name': 'verify term deposit rates', 'slug': DATA['capture']}
         check = checkpoint(DATA, step, 'TD', 'Term deposits', by_label)
         self.assertEqual(check['errors'], [])
+        legacy = checkpoint(DATA, step, 'TD', 'Term deposits', by_label, bound=False)
+        self.assertEqual([r['state'] for r in legacy['rows']], ['date_only_match'])
         self.assertEqual([(r['product'], r['tier'], r['state']) for r in check['rows']], [(AMB_INCOME, 9, 'matched')])
 
     def test_bank_frequency_despite_identical_percentage(self):
