@@ -141,6 +141,40 @@ function containsLvr(range: NonNullable<ReturnType<typeof parseLvrRange>>, parse
   return parsed.lvr > 0 && (range.inclusive ? low >= 0 : low > 0) && (range.hiInclusive === false ? high < 0 : high <= 0);
 }
 
+// Fields that identify one priced variant of a product apart from its LVR tier.
+const VARIANT_FIELDS = ['provider', 'product_key', 'rate_type', 'ribbon_rate_structure', 'ribbon_fixed_term', 'term', 'term_months',
+  'repayment_type', 'ribbon_repayment_type', 'loan_purpose', 'security_purpose', 'account_class', 'balance_min', 'balance_max',
+  'feature_set'] as const;
+const variantKey = (row: RateRow) => JSON.stringify(VARIANT_FIELDS.map(field => row[field as keyof RateRow] ?? null));
+
+/** A lower LVR never prices worse. When a variant publishes no tier containing the
+ * borrower's LVR but does publish tiers above it, the lowest of those tiers is the
+ * most the borrower pays, so that tier stays in scope as an upper bound. Variants
+ * whose tiers all end below the borrower's LVR are not available to them. */
+export function higherLvrTierFallbacks(rows: readonly RateRow[], parsed: ReturnType<typeof inputs>): Map<RateRow, number> {
+  const out = new Map<RateRow, number>();
+  if (parsed.lvr === null) return out;
+  const groups = new Map<string, { contains: boolean; row: RateRow | null; lo: number; point: number }>();
+  for (const row of rows) {
+    const range = parseLvrRange(row.lvr_tier);
+    if (!range) continue;
+    const key = variantKey(row);
+    const group = groups.get(key) ?? { contains: false, row: null, lo: Infinity, point: 0 };
+    if (containsLvr(range, parsed)) group.contains = true;
+    else if ((range.lo > parsed.lvr || range.lo === parsed.lvr && !range.inclusive) && range.lo < group.lo) {
+      group.row = row; group.lo = range.lo;
+      group.point = range.inclusive ? range.lo : Math.min(range.lo + 0.01, (range.lo + range.hi) / 2);
+    }
+    groups.set(key, group);
+  }
+  for (const group of groups.values()) if (!group.contains && group.row) out.set(group.row, group.point);
+  return out;
+}
+const atLvr = (parsed: ReturnType<typeof inputs>, lvr: number): ReturnType<typeof inputs> =>
+  ({ ...parsed, lvr, exactLvr: null, lvrFraction: String(lvr / 100) }) as ReturnType<typeof inputs>;
+/** A fallback tier can only ever be an upper bound for the borrower's rate. */
+const asUpperBound = (state: MortgageComparisonMatch): MortgageComparisonMatch => state === 'listed' ? 'unverified' : state;
+
 function listedAmountBounds(row: RateRow) {
   const bound = (raw: RateRow['balance_min']): number | null => raw != null && String(raw).trim() !== ''
     && /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(String(raw).trim()) && Number.isFinite(Number(raw)) ? Number(raw) : null;
@@ -264,8 +298,11 @@ export function mortgageComparisonRows(rows: RateRow[], value: MortgageCompariso
   const scopes = !parsed.invalid && !parsed.incompleteFunds && (parsed.lvr !== null || parsed.amount !== null)
     ? scopedRateConditionsForRows(rows.map(sourceRowForPublicRow), 'Mortgage', context)
     : null;
+  const fallbacks = higherLvrTierFallbacks(rows, parsed);
   const selected = rows.filter((row, index) => {
-    const state = match(row, parsed, context, undefined, scopes?.[index]);
+    const point = fallbacks.get(row);
+    const state = point === undefined ? match(row, parsed, context, undefined, scopes?.[index])
+      : asUpperBound(match(row, atLvr(parsed, point), context, undefined, scopes?.[index]));
     if (state === 'unverified') { unverified++; unverifiedRows.add(row); }
     return state === 'listed' || state === 'unverified';
   });
@@ -277,10 +314,13 @@ export function indexedMortgageComparisonRows(rows: RateRow[], value: MortgageCo
   prepared: WeakMap<RateRow, PreparedMortgageComparisonRow>) {
   const parsed = inputs(value), unverifiedRows = new WeakSet<RateRow>();
   let unverified = 0;
+  const fallbacks = higherLvrTierFallbacks(rows, parsed);
   const selected = rows.filter(row => {
     const metadata = prepared.get(row);
     if (!metadata) throw new Error('Unprepared mortgage row');
-    const state = match(row, parsed, undefined, metadata);
+    const point = fallbacks.get(row);
+    const state = point === undefined ? match(row, parsed, undefined, metadata)
+      : asUpperBound(match(row, atLvr(parsed, point), undefined, metadata));
     if (state === 'unverified') { unverified++; unverifiedRows.add(row); }
     return state === 'listed' || state === 'unverified';
   });
@@ -328,6 +368,8 @@ export async function mortgageComparisonRowsCooperatively(
       }
     }
   }
+  const fallbacks = higherLvrTierFallbacks(rows, parsed);
+  for (const row of fallbacks.keys()) candidates.push(row);
   const prepared = await prepareMortgageComparisonRowsCooperatively(candidates, context, control);
   if (!prepared || cancelled()) return null;
   let unverified = 0;
@@ -336,7 +378,9 @@ export async function mortgageComparisonRowsCooperatively(
   sliceStarted = now();
   for (let offset = 0; offset < candidates.length; offset += 1) {
     const row = candidates[offset];
-    const state = match(row, parsed, context, prepared.get(row));
+    const point = fallbacks.get(row);
+    const state = point === undefined ? match(row, parsed, context, prepared.get(row))
+      : asUpperBound(match(row, atLvr(parsed, point), context, prepared.get(row)));
     if (state === 'unverified') { unverified += 1; unverifiedRows.add(row); }
     if (state === 'listed' || state === 'unverified') selected.push(row);
     if ((offset + 1) % 16 === 0 && now() - sliceStarted >= cooperativeSliceMs()) {
