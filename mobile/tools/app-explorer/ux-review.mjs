@@ -164,6 +164,7 @@ export async function reviewRun(dir, { sample } = {}) {
   }
   let contrastMeasured = 0;
   let keyboardMeasurementGaps = 0;
+  let unreadableScreenshots = 0;
   const findings = [];
   const perScreen = [];
   for (const s of screens) {
@@ -172,8 +173,12 @@ export async function reviewRun(dir, { sample } = {}) {
     const r = checkScreen({ screen: s.name, nodes: s.nodes, size: s.size, density, pkg: PKG, settleTimedOut: !!s.step.settleTimedOut, allowProse: legal });
     const list = [...r.findings];
     const png = loadPng(path.join(dir, 'screens', `${s.slug}.png`));
-    const measuredKeyboard = s.step.keyboardMeasurement === 'measured' && (s.step.keyboardBounds === null ||
-      (Array.isArray(s.step.keyboardBounds) && s.step.keyboardBounds.length === 4 && s.step.keyboardBounds.every(Number.isFinite)));
+    const bounds = s.step.keyboardBounds;
+    const validBounds = Array.isArray(bounds) && bounds.length === 4 && bounds.every(Number.isFinite) &&
+      bounds[0] >= 0 && bounds[1] >= 0 && bounds[0] < bounds[2] && bounds[1] < bounds[3] &&
+      bounds[2] <= s.size[0] && bounds[3] <= s.size[1];
+    const measuredKeyboard = s.step.keyboardMeasurement === 'measured' && (bounds === null || validBounds);
+    if (!png) unreadableScreenshots += 1;
     if (png && !measuredKeyboard) keyboardMeasurementGaps += 1;
     if (png && measuredKeyboard) {
       list.push(...contrastFindings({ screen: s.name, nodes: s.nodes, png, pkg: PKG, density, size: s.size, keyboardBounds: s.step.keyboardBounds }));
@@ -228,7 +233,7 @@ export async function reviewRun(dir, { sample } = {}) {
     findings.push({ check: 'contrast-not-measured', severity: 'minor', screen: 'all', text: '', at: [0, 0],
       detail: `Android keyboard bounds unavailable or unstable on ${keyboardMeasurementGaps} captures`, fix: 'Capture stable Android IME bounds alongside the screenshot' });
   }
-  if (reviewed && !contrastMeasured && !keyboardMeasurementGaps) findings.push({ check: 'contrast-not-measured', severity: 'minor', screen: 'all', text: '', at: [0, 0], detail: 'no screenshot could be read, so contrast was not checked', fix: FIXES['contrast-not-measured'] });
+  if (unreadableScreenshots) findings.push({ check: 'contrast-not-measured', severity: 'minor', screen: 'all', text: '', at: [0, 0], detail: `${unreadableScreenshots} screenshots could not be read for contrast scoring`, fix: FIXES['contrast-not-measured'] });
   const productDuplicates = { sourceRecordsRemoved: report.audit?.sourceDuplicateItemsRemoved ?? null,
     visible: visibleProductDuplicates(screens) };
   for (const group of productDuplicates.visible.evidence) {
