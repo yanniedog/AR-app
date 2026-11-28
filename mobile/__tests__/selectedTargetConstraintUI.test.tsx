@@ -62,7 +62,7 @@ jest.mock('../src/components/ProfileEditor', () => ({ ProfileEditor: 'ProfileEdi
 jest.mock('../src/components/scenario/CurrentBankPicker', () => ({ CurrentBankPicker: 'CurrentBankPicker' }));
 jest.mock('../src/components/scenario/SwitchCostEditor', () => ({ SwitchCostEditor: 'SwitchCostEditor' }));
 jest.mock('../src/components/product/ProductRateChangeLine', () => ({ productRateChangeText: () => null,
-  ProductRateChangeSummaryLine: 'ProductRateChangeSummaryLine' }));
+  ProductRateChangeLine: 'ProductRateChangeLine' }));
 jest.mock('../src/components/projections/LifecycleChart', () => ({ LifecycleChart: 'LifecycleChart' }));
 jest.mock('../src/components/scenario/ProjectionSummary', () => ({ ProjectionSummary: 'ProjectionSummary' }));
 jest.mock('../src/components/scenario/StaySwitchChart', () => ({ StaySwitchChart: 'StaySwitchChart' }));

@@ -122,7 +122,7 @@ export default function Compare() {
   const ensureDetails = useStore((s) => s.ensureDetails);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
-  const productHistoryAvailable = useStore((s) => s.productHistory != null);
+  const productHistoryAvailable = useStore((s) => s.previousRateEdition != null);
   const horizontalScrollRef = useRef<ScrollView>(null);
   const [layoutReady, setLayoutReady] = useState(false);
 
@@ -409,7 +409,8 @@ export default function Compare() {
                     </AppText>
                     {productHistoryAvailable ? (
                       <ProductRateChangeLine
-                        productKey={entry.row.product_key}
+                        row={entry.row}
+                        metric={rankedRateLabel === 'Comparison rate' ? 'comparison_rate' : rankedRateLabel === 'Ongoing rate' ? 'ongoing_rate' : 'rate'}
                         section={entry.section}
                         compact
                       />
@@ -543,7 +544,8 @@ export default function Compare() {
                             'best-rate-move',
                             CHANGE_ROW_H,
                             <ProductRateChangeLine
-                              productKey={e.row.product_key}
+                              row={e.row}
+                              metric={rankedRateLabels[idx] === 'Comparison rate' ? 'comparison_rate' : rankedRateLabels[idx] === 'Ongoing rate' ? 'ongoing_rate' : 'rate'}
                               section={e.section}
                               compact
                             />,

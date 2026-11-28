@@ -110,7 +110,7 @@
     "open": "/product/Bank%20of%20Sydney%7Cterm_deposit%7CTERM_DEPOSITS%7CTerm%20Deposit",
     "scroll": 1,
     "visibleAction": "1 year",
-    "why": "Bank of Sydney term deposit history: verify the timeframe strip remains reachable and clear of adjacent content"
+    "why": "Bank of Sydney term deposit history and selected-offer rate-change labels: verify the timeframe strip remains reachable and clear of adjacent content"
   },
   {
     "name": "bank-history",

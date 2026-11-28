@@ -519,6 +519,15 @@ class Explorer {
       visible: screen.slice(0, 40).map(i => i.label).filter(Boolean),
       ...extra,
     };
+    const appNodes = settled.nodes.filter(node => node.pkg === PKG);
+    const hero = appNodes.find(node => node.id?.endsWith('selected-offer-rate'));
+    for (const node of appNodes) {
+      const label = node.text || node.desc || '';
+      if (/Best advertised [↑↓]/i.test(label) ||
+          (hero && /[↑↓].*bps.*→/.test(label) && !label.endsWith('→ ' + hero.text))) {
+        step.error ??= 'Rate change does not match the selected offer: ' + label;
+      }
+    }
     this.steps.push(step);
     const flag = step.alive ? '' : ' CRASHED';
     console.log(`[${slug}] settle ${step.settleMs}ms${settled.timedOut ? ' (timeout)' : ''} jank ${frames.janky}/${frames.frames}${flag}`);

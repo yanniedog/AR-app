@@ -21,7 +21,9 @@ if [ "${MODE:-crawl}" = script ]; then
   fi
   args+=(--script explorer-script.json)
 fi
+selected_rate_status=0
 if [ "${MODE:-crawl}" = audit ] || [ "${MODE:-crawl}" = full ]; then
+  node mobile/tools/app-explorer/selected-rate-audit.mjs || selected_rate_status=$?
   # Targeted screenshots first so a later audit crash cannot lose them.
   node mobile/tools/app-explorer/shots.mjs explorer-out/shots || { mkdir -p explorer-out/shots; echo failed > explorer-out/shots/shots-failed; }
 fi
@@ -57,4 +59,5 @@ if [ "$ux_status" -ne 0 ]; then
   echo "ux-review failed with status $ux_status" >&2
   echo "$ux_status" > explorer-out/ux-review-failed
 fi
+if [ "$selected_rate_status" -ne 0 ]; then exit "$selected_rate_status"; fi
 exit "$status"

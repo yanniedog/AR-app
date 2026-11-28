@@ -127,6 +127,7 @@ export interface AppState {
   manifest: Manifest | null;
   /** The validated dated selection receipt; never reconstructed from manifest fields. */
   productEvidenceHead?: import('./payloadRevision').PayloadRevisionHead | null;
+  previousRateEdition?: import('./rateConditions').RateConditionContext;
   core: CorePayload | null;
   /** Invalidates graph memoization when the same catalogue gains verified history. */
   bankRateHistoryRevision?: number;

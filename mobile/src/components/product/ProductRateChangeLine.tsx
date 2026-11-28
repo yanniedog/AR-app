@@ -1,12 +1,9 @@
 import React, { useMemo } from 'react';
 
 import { formatRate, formatRateChangeDate } from '../../data/format';
-import {
-  bestRateForProduct,
-  summarizeProductBestRateSeries,
-  type CurrentProductBestRate,
-  type ProductBestRateSummary,
-} from '../../data/productHistory';
+import type { ProductBestRateSummary } from '../../data/productHistory';
+import { selectedRateChange } from '../../data/selectedRateChange';
+import type { RateRow } from '../../types';
 import { useStore } from '../../data/store';
 import { moveTone } from '../../lib/moveSemantics';
 import type { SectionKey } from '../../types';
@@ -22,49 +19,46 @@ function bpsMagnitude(bps: number): UiText {
 export function productRateChangeText(
   summary: ProductBestRateSummary | null,
   compact = false,
+  metric: RateMetric = 'rate',
 ): UiText | null {
   if (!summary) return null;
   if (summary.kind === 'tracking' || summary.kind === 'unchanged') return null;
 
   const arrow = summary.bps > 0 ? '↑' : '↓';
   const when = formatRateChangeDate(summary.observedOn);
+  const label = metric === 'comparison_rate' ? 'Comparison rate' : metric === 'ongoing_rate' ? 'Ongoing rate' : 'Advertised rate';
   return compact
-    ? uiJoin('Best advertised', ' ', arrow, ' ', bpsMagnitude(summary.bps), ' · ', when)
-    : uiJoin('Best advertised', ' ', arrow, ' ', bpsMagnitude(summary.bps), ' · ', when, ' · ', formatRate(summary.fromRate), ' → ', formatRate(summary.toRate));
+    ? uiJoin(label, ' ', arrow, ' ', bpsMagnitude(summary.bps), ' · ', when)
+    : uiJoin(label, ' ', arrow, ' ', bpsMagnitude(summary.bps), ' · ', when, ' · ', formatRate(summary.fromRate), ' → ', formatRate(summary.toRate));
 }
 
 export function useProductRateChangeSummary(
-  productKey: string,
-  current?: CurrentProductBestRate,
+  row: RateRow, section: SectionKey, metric?: RateMetric,
 ): ProductBestRateSummary | null {
-  const runDates = useStore((state) => state.productHistory?.run_dates ?? null);
-  const series = useStore((state) => state.productHistory?.products?.[productKey] ?? null);
-  const coreRunDate = useStore((state) => state.core?.run_date ?? null);
-  const coreBestRate = useStore((state) => bestRateForProduct(state.core, productKey));
-  const currentDate = current?.date ?? coreRunDate;
-  const currentRate = current?.rate ?? coreBestRate;
-  return useMemo(
-    () => {
-      return summarizeProductBestRateSeries(runDates, series, {
-        date: currentDate,
-        rate: currentRate,
-      });
-    },
-    [currentDate, currentRate, runDates, series],
-  );
+  const core = useStore(s => s.core);
+  const details = useStore(s => s.details);
+  const manifest = useStore(s => s.manifest);
+  const coreIntegrity = useStore(s => s.coreIntegrity);
+  const previous = useStore(s => s.previousRateEdition);
+  return useMemo(() => metric ? selectedRateChange(previous, { core, details, manifest, coreIntegrity }, row, section, metric) : null,
+    [previous, core, details, manifest, coreIntegrity, row, section, metric]);
 }
+
+type RateMetric = 'rate' | 'comparison_rate' | 'ongoing_rate';
 
 export function ProductRateChangeSummaryLine({
   section,
   compact = false,
   model,
+  metric,
 }: {
   section: SectionKey;
   compact?: boolean;
   model: ProductBestRateSummary | null;
+  metric?: RateMetric;
 }) {
   const theme = useTheme();
-  const text = productRateChangeText(model, compact);
+  const text = productRateChangeText(model, compact, metric);
   if (!text) return null;
 
   const tone = model?.kind === 'changed' ? moveTone(section, model.bps) : 'muted';
@@ -88,18 +82,18 @@ export function ProductRateChangeSummaryLine({
 }
 
 export function ProductRateChangeLine({
-  productKey,
+  row,
   section,
-  current,
+  metric,
   compact = false,
 }: {
-  productKey: string;
+  row: RateRow;
   section: SectionKey;
-  current?: CurrentProductBestRate;
+  metric?: RateMetric;
   compact?: boolean;
 }) {
-  const summary = useProductRateChangeSummary(productKey, current);
+  const summary = useProductRateChangeSummary(row, section, metric);
   return (
-    <ProductRateChangeSummaryLine model={summary} section={section} compact={compact} />
+    <ProductRateChangeSummaryLine model={summary} metric={metric} section={section} compact={compact} />
   );
 }

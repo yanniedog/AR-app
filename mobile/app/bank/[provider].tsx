@@ -1,3 +1,4 @@
+import { selectedRateChange } from '../../src/data/selectedRateChange';
 import { uiCount, uiDate, uiJoin, uiLabel, uiNumber, uiProviderName, uiSectionName, type UiCopy, type UiText } from "../../src/lib/uiCopy";
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
@@ -35,9 +36,6 @@ import {
 } from '../../src/data/bankInsights';
 import { formatRate } from '../../src/data/format';
 import {
-  productHistoryRepresentsRateRow,
-  productMoveBreakdownForCatalog,
-  type ProductMoveCatalogEntry,
   type ProductRateMove,
 } from '../../src/data/productHistory';
 import { lenderProductRows } from '../../src/data/selectors';
@@ -270,25 +268,31 @@ export default function BankDetail() {
     return out;
   }, [core, provider, depositRankMetric, mortgageRateMetric, includeNonStandard, detailsProducts, suitabilityRevision, providerProfile]);
 
+  const previousEdition = useStore(s => s.previousRateEdition);
+  const details = useStore(s => s.details);
+  const rateManifest = useStore(s => s.manifest);
   const catalogsBySection = useMemo(() => {
-    // Keep event denominators and product names in the exact same scope as the
-    // cards below, but only where the selected row is also the product-best
-    // rate represented by the product-key history ledger. Withhold ambiguous
-    // base/bonus or comparison-selected rows rather than misattribute a move.
-    const out: Partial<Record<SectionKey, ProductMoveCatalogEntry[]>> = {};
-    if (!showBankInsights || !hasProductHistory) return out;
+    const out: Partial<Record<SectionKey, { matched: number; moves: ProductRateMove[] }>> = {};
+    const dates = bankInsights?.run_dates ?? [];
+    const end = core ? dates.indexOf(core.run_date) : -1;
+    if (!showBankInsights || !hasProductHistory || end < 1 || previousEdition?.core?.run_date !== dates[end - 1]) return out;
+    const context = { core, details, manifest: rateManifest, coreIntegrity };
     for (const { section, rows } of rateGroups(false)) {
-      out[section] = rows.flatMap((row) => {
-        if (!productHistoryRepresentsRateRow(core, row)) return [];
-        return [{
-          productKey: row.product_key,
-          productName: (row.product_name && row.product_name.trim()) || row.product_key,
-          rateIndex: typeof row.rate_index === 'number' ? row.rate_index : null,
-        }];
-      });
+      const moves: ProductRateMove[] = [];
+      let matched = 0;
+      for (const row of rows) {
+        const summary = selectedRateChange(previousEdition, context, row, section, 'rate');
+        if (!summary) continue;
+        matched++;
+        if (summary.kind === 'changed' && Math.abs(summary.bps) >= 5) {
+          moves.push({ productKey: row.product_key, productName: row.product_name, rateIndex: row.rate_index ?? null,
+            date: summary.observedOn, fromRate: summary.fromRate, toRate: summary.toRate, bps: summary.bps });
+        }
+      }
+      out[section] = { matched, moves };
     }
     return out;
-  }, [rateGroups, core, hasProductHistory, showBankInsights]);
+  }, [rateGroups, core, coreIntegrity, details, rateManifest, previousEdition, hasProductHistory, showBankInsights, bankInsights]);
 
   const heavyHistory =
     (core?.sections.Mortgage.rates.length ?? 0) > 400 ||
@@ -470,11 +474,8 @@ export default function BankDetail() {
     if (!productHistory) return [] as { event: BankRateEvent; moves: ProductRateMove[] }[];
     const out: { event: BankRateEvent; moves: ProductRateMove[] }[] = [];
     for (const source of rawBankEvents) {
-      const breakdown = productMoveBreakdownForCatalog(
-        productHistory,
-        catalogsBySection[source.section] ?? [],
-        { date: source.date },
-      );
+      const breakdown = catalogsBySection[source.section];
+      if (!breakdown || source.date !== core?.run_date) continue;
       const event = eventForVisibleProducts(source, breakdown.matched, breakdown.moves);
       if (event) {
         out.push({ event, moves: breakdown.moves });
@@ -482,34 +483,35 @@ export default function BankDetail() {
       }
     }
     return out;
-  }, [catalogsBySection, productHistory, rawBankEvents]);
+  }, [catalogsBySection, core?.run_date, productHistory, rawBankEvents]);
 
   const bankEvents = useMemo(
-    () => eventBreakdowns.map(({ event }) => event),
-    [eventBreakdowns],
+    () => visibleBankEvents.map(source => eventBreakdowns.find(({ event }) =>
+      event.date === source.date && event.section === source.section)?.event ?? source),
+    [eventBreakdowns, visibleBankEvents],
   );
 
   const focusBreakdown = useMemo(() => {
     if (!focusSourceEvent || !focusSection || !productHistory) return null;
-    const breakdown = productMoveBreakdownForCatalog(
-      productHistory,
-      catalogsBySection[focusSection] ?? [],
-      { date: focusSourceEvent.date },
-    );
+    const breakdown = catalogsBySection[focusSection];
+    if (!breakdown || focusSourceEvent.date !== core?.run_date) return null;
     const event = eventForVisibleProducts(
       focusSourceEvent,
       breakdown.matched,
       breakdown.moves,
     );
     return { event, matched: breakdown.matched, moves: breakdown.moves };
-  }, [catalogsBySection, focusSection, focusSourceEvent, productHistory]);
+  }, [catalogsBySection, core?.run_date, focusSection, focusSourceEvent, productHistory]);
 
-  const focusEvent = focusBreakdown?.event ?? null;
+  // A historical lender aggregate can stand on its own; only the exact
+  // breakdown below can attach a movement to an individual offer.
+  const focusEvent = focusBreakdown?.event ?? visibleBankEvents.find(event =>
+    event.date === focusDate && event.section === focusSection) ?? null;
   const focusedMoves = focusBreakdown?.moves ?? [];
   const focusHistoryState = useMemo(() => {
     if (!focusSourceEvent || !focusSection) return 'idle' as const;
     if (!productHistory) return 'loading' as const;
-    if (!(catalogsBySection[focusSection]?.length)) return 'unsafe' as const;
+    if (!(catalogsBySection[focusSection]?.matched)) return 'unsafe' as const;
     if (!productHistory.run_dates.includes(focusSourceEvent.date)) return 'incomplete' as const;
     if (!focusBreakdown?.matched) return 'incomplete' as const;
     return focusEvent ? 'matched' as const : 'none' as const;

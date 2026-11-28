@@ -283,6 +283,7 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
       clearSuitabilityIndex();
       set({
         core: null,
+        previousRateEdition: undefined,
         bankRateHistoryLoading: false,
         coreIntegrity: null,
         coreAssetState: {

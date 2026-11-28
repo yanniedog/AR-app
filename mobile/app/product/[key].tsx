@@ -809,7 +809,7 @@ export default function ProductDetail() {
           <AppText variant="small" color="textMuted">
             {publicResolution ? publicRateOriginLabel(publicResolution) : presentation.primaryLabel}
           </AppText>
-          <AppText variant="rateHero" weight="700" style={{ color: theme.colors.text }}>
+          <AppText testID="selected-offer-rate" variant="rateHero" weight="700" style={{ color: theme.colors.text }}>
             {publicResolution ? publicRateText(publicResolution) : formatRate(presentation.primary)}
           </AppText>
           {presentation.secondary !== null && presentation.secondaryLabel ? (
@@ -818,9 +818,9 @@ export default function ProductDetail() {
             </AppText>
           ) : null}
           <ProductRateChangeLine
-            productKey={productKey}
+            row={row}
             section={section}
-            current={{ date: core?.run_date, rate: currentBest }}
+            metric={publicResolution ? undefined : presentation.primaryLabel === 'Comparison rate' ? 'comparison_rate' : 'rate'}
           />
           <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
             {row.last_updated ? uiJoin('Bank updated', ' ', uiDate(row.last_updated), ' · ', 'Checked', ' ', uiDate(core?.run_date)) : uiJoin('Checked', ' ', uiDate(core?.run_date))}

@@ -521,6 +521,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
                 bankSpreadHistoryError: null,
               } : {}),
               ...(bundle ? {
+                previousRateEdition: undefined,
                 core: bundle.core,
                 coreIntegrity: bundle.integrity,
                 coreAssetState: cachedAssetStateForProviderCoverage(
@@ -680,6 +681,8 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           closeSuitabilityGateUntilRebuild();
         }
         set({
+          previousRateEdition: previousSource === 'remote' && previousCore && matchesPreviousDetails(previousDetails)
+            ? { core: previousCore, details: previousDetails, manifest: adoptionOwner, coreIntegrity: get().coreIntegrity } : undefined,
           core,
           coreIntegrity: integrity,
           coreAssetState: liveAssetStateForProviderCoverage(integrity, core.coverage),
