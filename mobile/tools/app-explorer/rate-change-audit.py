@@ -103,6 +103,7 @@ def audit(directory):
     device_day = date.fromisoformat(subprocess.check_output(
         ["adb", "shell", "date", "+%Y-%m-%d"], text=True).strip())
     covered = set()
+    verified_income_plus = set()
     for file in Path(directory).rglob("*.nodes.json"):
         nodes = json.loads(file.read_text())["nodes"]
         labels = [n.get("text") or n.get("desc") or "" for n in nodes]
@@ -131,11 +132,19 @@ def audit(directory):
                 normalised = banner.replace("Sept ", "Sep ")
                 if f"{expected} · {when} · {endpoints}" not in normalised:
                     raise ValueError(f"{key}: {banner}; archive {move}")
+                if section == "TD" and product.split("|")[1:2] == ["3b2158a8-34ee-4cb2-870d-1b741ad6e77e"]:
+                    selected = [r for r in core["sections"][section]["rates"] if r.get("product_key") == product
+                                and r.get("rate_index") == index and r.get("term") == "P12M"
+                                and r.get("interest_payment") == "monthly"]
+                    if len(selected) == 1 and hero.get("text") == percent(after):
+                        verified_income_plus.add((tag, banner))
             # Fail on missing genuine movements for straightforward advertised prices.
             if core.get("exact_rate_moves") is not None and move and 'Rate' in labels and hero.get("text") == percent(move[3]) and not banners:
                 raise ValueError(f"{key}: missing advertised change {move}")
-    if not any("3b2158a8-34ee-4cb2-870d-1b741ad6e77e" in key[1] for key in covered):
+    if not verified_income_plus:
         raise ValueError("Income Plus regression screen was not verified")
+    for tag, banner in sorted(verified_income_plus):
+        print(f"Income Plus 12 months monthly | {tag} | {banner}")
     print(f"Exact rate history checked on {len(covered)} distinct emulator offers")
 
 

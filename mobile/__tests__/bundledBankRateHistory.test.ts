@@ -50,3 +50,13 @@ test('exact catalogue gets the complete history once without mutating catalogue 
   expect(withBundledBankRateHistory(core, bundled.core_sha256).bank_rate_history).toBe(first.bank_rate_history);
   expect(withBundledBankRateHistory(first, bundled.core_sha256)).toBe(first);
 });
+
+test('the pre-migration November publication has separate six- and twelve-month Income Plus evidence', () => {
+  const sha = '5b24f9c481f09bfe59071d96edcc2065f6686c967e99a27aca7bd9b544e1018e';
+  const product = 'Australian Military Bank|3b2158a8-34ee-4cb2-870d-1b741ad6e77e|TERM_DEPOSITS|Income Plus';
+  const core = { ...catalogue(), run_date: '2026-11-28' };
+  const moves = withBundledBankRateHistory(core, sha).exact_rate_moves!.TD![product];
+  expect(moves[10]).toEqual(['2026-11-23', 0.053, '2026-11-24', 0.055]);
+  expect(moves[9][3]).toBeCloseTo(0.056, 12);
+  expect(withBundledBankRateHistory(core, null)).toBe(core);
+});
