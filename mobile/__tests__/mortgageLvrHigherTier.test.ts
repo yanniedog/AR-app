@@ -1,4 +1,4 @@
-import { higherLvrTierFallbacks, mortgageComparisonRows, mortgageComparisonValues } from '../src/data/mortgageComparison';
+import { higherLvrTierFallbacks, mortgageComparisonRows, mortgageComparisonRowsCooperatively, mortgageComparisonValues } from '../src/data/mortgageComparison';
 import type { RateRow } from '../src/types';
 
 const row = (product_key: string, lvr_tier: string, rate: string, extra: Partial<RateRow> = {}) => ({
@@ -24,4 +24,18 @@ test('separate repayment variants fall back independently; tiers ending below th
     row('q', 'lvr_0-80%', '0.06')];
   expect(mortgageComparisonRows(rows, at('50')).rows).toHaveLength(3);
   expect(mortgageComparisonRows(rows, at('85')).rows.map(r => r.product_key)).toEqual(['p', 'p']);
+});
+
+test('a ranked prefix only offers a fallback the full catalogue would also offer, in ranked order', async () => {
+  const contained = row('v', 'lvr_0-80%', '0.06'), above = row('v', 'lvr_80-90%', '0.065'), other = row('w', 'lvr_80-90%', '0.064');
+  const control = { yieldControl: async () => undefined, now: () => 0 };
+  // The prefix lacks v's containing tier; the full set shows v is offered at 0-80%, not 80-90%.
+  const prefix = await mortgageComparisonRowsCooperatively([other, above], at('70'), undefined, { ...control, tierRows: [other, above, contained] });
+  expect(prefix!.rows).toEqual([other]);
+  const full = await mortgageComparisonRowsCooperatively([other, above, contained], at('70'), undefined, control);
+  expect(full!.rows).toEqual([other, contained]);
+});
+
+test('a loan already chosen for comparison needs a tier containing the LVR', () => {
+  expect(mortgageComparisonRows([row('p', 'lvr_80-90%', '0.065')], at('70'), undefined, { upperBounds: false }).rows).toEqual([]);
 });

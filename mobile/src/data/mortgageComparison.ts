@@ -142,7 +142,8 @@ function containsLvr(range: NonNullable<ReturnType<typeof parseLvrRange>>, parse
 }
 
 // Fields that identify one priced variant of a product apart from its LVR tier.
-const VARIANT_FIELDS = ['provider', 'product_key', 'rate_type', 'ribbon_rate_structure', 'ribbon_fixed_term', 'term', 'term_months',
+const VARIANT_FIELDS = ['provider', 'product_id', 'product_key', 'product_name', 'category', 'taxonomy_path', 'ribbon_normalized',
+  'account_type', 'rate_type', 'ribbon_rate_structure', 'ribbon_fixed_term', 'term', 'term_months',
   'repayment_type', 'ribbon_repayment_type', 'loan_purpose', 'security_purpose', 'account_class', 'balance_min', 'balance_max',
   'feature_set'] as const;
 const variantKey = (row: RateRow) => JSON.stringify(VARIANT_FIELDS.map(field => row[field as keyof RateRow] ?? null));
@@ -151,24 +152,40 @@ const variantKey = (row: RateRow) => JSON.stringify(VARIANT_FIELDS.map(field => 
  * borrower's LVR but does publish tiers above it, the lowest of those tiers is the
  * most the borrower pays, so that tier stays in scope as an upper bound. Variants
  * whose tiers all end below the borrower's LVR are not available to them. */
-export function higherLvrTierFallbacks(rows: readonly RateRow[], parsed: ReturnType<typeof inputs>): Map<RateRow, number> {
-  const out = new Map<RateRow, number>();
-  if (parsed.lvr === null) return out;
+function fallbackAccumulator(parsed: ReturnType<typeof inputs>) {
   const groups = new Map<string, { contains: boolean; row: RateRow | null; lo: number; point: number }>();
-  for (const row of rows) {
-    const range = parseLvrRange(row.lvr_tier);
-    if (!range) continue;
-    const key = variantKey(row);
-    const group = groups.get(key) ?? { contains: false, row: null, lo: Infinity, point: 0 };
-    if (containsLvr(range, parsed)) group.contains = true;
-    else if ((range.lo > parsed.lvr || range.lo === parsed.lvr && !range.inclusive) && range.lo < group.lo) {
-      group.row = row; group.lo = range.lo;
-      group.point = range.inclusive ? range.lo : Math.min(range.lo + 0.01, (range.lo + range.hi) / 2);
-    }
-    groups.set(key, group);
-  }
-  for (const group of groups.values()) if (!group.contains && group.row) out.set(group.row, group.point);
-  return out;
+  return {
+    add(row: RateRow) {
+      if (parsed.lvr === null) return;
+      const range = parseLvrRange(row.lvr_tier);
+      if (!range) return;
+      const key = variantKey(row);
+      const group = groups.get(key) ?? { contains: false, row: null, lo: Infinity, point: 0 };
+      if (containsLvr(range, parsed)) group.contains = true;
+      else if ((range.lo > parsed.lvr || range.lo === parsed.lvr && !range.inclusive) && range.lo < group.lo) {
+        group.row = row; group.lo = range.lo;
+        group.point = range.inclusive ? range.lo : Math.min(range.lo + 0.01, (range.lo + range.hi) / 2);
+      }
+      groups.set(key, group);
+    },
+    /** Only rows in `scope` are offered; grouping always sees every tier. */
+    result(scope?: ReadonlySet<RateRow>) {
+      const out = new Map<RateRow, number>();
+      for (const group of groups.values()) {
+        if (!group.contains && group.row && (!scope || scope.has(group.row))) out.set(group.row, group.point);
+      }
+      return out;
+    },
+  };
+}
+export function higherLvrTierFallbacks(rows: readonly RateRow[], parsed: ReturnType<typeof inputs>): Map<RateRow, number> {
+  const fallbacks = fallbackAccumulator(parsed);
+  for (const row of rows) fallbacks.add(row);
+  return fallbacks.result();
+}
+export interface MortgageScopeOptions {
+  /** Strict containment only, e.g. for a loan already chosen for comparison. */
+  upperBounds?: boolean;
 }
 const atLvr = (parsed: ReturnType<typeof inputs>, lvr: number): ReturnType<typeof inputs> =>
   ({ ...parsed, lvr, exactLvr: null, lvrFraction: String(lvr / 100) }) as ReturnType<typeof inputs>;
@@ -289,7 +306,8 @@ function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateCo
   if (listed === 'outside' || listed === 'invalid') return listed;
   return listed === 'unverified' || unverified ? 'unverified' : 'listed';
 }
-export function mortgageComparisonRows(rows: RateRow[], value: MortgageComparisonInputs, context?: RateConditionContext) {
+export function mortgageComparisonRows(rows: RateRow[], value: MortgageComparisonInputs, context?: RateConditionContext,
+  options: MortgageScopeOptions = {}) {
   const parsed = inputs(value);
   let unverified = 0;
   const unverifiedRows = new WeakSet<RateRow>();
@@ -298,7 +316,7 @@ export function mortgageComparisonRows(rows: RateRow[], value: MortgageCompariso
   const scopes = !parsed.invalid && !parsed.incompleteFunds && (parsed.lvr !== null || parsed.amount !== null)
     ? scopedRateConditionsForRows(rows.map(sourceRowForPublicRow), 'Mortgage', context)
     : null;
-  const fallbacks = higherLvrTierFallbacks(rows, parsed);
+  const fallbacks = options.upperBounds === false ? new Map<RateRow, number>() : higherLvrTierFallbacks(rows, parsed);
   const selected = rows.filter((row, index) => {
     const point = fallbacks.get(row);
     const state = point === undefined ? match(row, parsed, context, undefined, scopes?.[index])
@@ -332,7 +350,9 @@ export type MortgageComparisonScope = ReturnType<typeof mortgageComparisonRows>;
 /** Amount/LVR matching against published conditions stays off the render path. */
 export async function mortgageComparisonRowsCooperatively(
   rows: RateRow[], value: MortgageComparisonInputs, context?: RateConditionContext,
-  control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
+  control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number;
+    /** Every tier of the catalogue when `rows` is a ranked prefix, so fallbacks match the full pass. */
+    tierRows?: readonly RateRow[] } = {},
 ): Promise<MortgageComparisonScope | null> {
   const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
   const now = control.now ?? (() => performance.now());
@@ -348,10 +368,22 @@ export async function mortgageComparisonRowsCooperatively(
   }
   // Source wording can narrow an LVR tier, and every admitted row must still
   // clear its listed tier. Reject impossible rows before reading that wording.
-  const candidates: RateRow[] = parsed.lvr === null ? rows : [];
+  let candidates: RateRow[] = parsed.lvr === null ? rows : [];
+  let fallbacks = new Map<RateRow, number>();
   let sliceStarted = now();
   if (parsed.lvr !== null) {
     const matchingTiers = new Map<RateRow['lvr_tier'], boolean>();
+    const contained = new Set<RateRow>();
+    const accumulator = fallbackAccumulator(parsed);
+    const tierRows = control.tierRows ?? rows;
+    for (let offset = 0; offset < tierRows.length; offset += 1) {
+      accumulator.add(tierRows[offset]);
+      if ((offset + 1) % 16 === 0 && now() - sliceStarted >= cooperativeSliceMs()) {
+        await yieldControl();
+        sliceStarted = now();
+        if (cancelled()) return null;
+      }
+    }
     for (let offset = 0; offset < rows.length; offset += 1) {
       const row = rows[offset];
       let matches = matchingTiers.get(row.lvr_tier);
@@ -360,16 +392,17 @@ export async function mortgageComparisonRowsCooperatively(
         matches = range !== null && containsLvr(range, parsed);
         matchingTiers.set(row.lvr_tier, matches);
       }
-      if (matches) candidates.push(row);
+      if (matches) contained.add(row);
       if ((offset + 1) % 16 === 0 && now() - sliceStarted >= cooperativeSliceMs()) {
         await yieldControl();
         sliceStarted = now();
         if (cancelled()) return null;
       }
     }
+    fallbacks = accumulator.result(new Set(rows));
+    // Keep the caller's ranked order for contained and fallback rows alike.
+    candidates = rows.filter(row => contained.has(row) || fallbacks.has(row));
   }
-  const fallbacks = higherLvrTierFallbacks(rows, parsed);
-  for (const row of fallbacks.keys()) candidates.push(row);
   const prepared = await prepareMortgageComparisonRowsCooperatively(candidates, context, control);
   if (!prepared || cancelled()) return null;
   let unverified = 0;
