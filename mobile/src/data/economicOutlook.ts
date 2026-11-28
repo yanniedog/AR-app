@@ -81,7 +81,7 @@ export function slowRefreshMessage(
   slowest?: { label: string; ms: number } | null,
 ): string | null {
   if (fetchMs <= SLOW_FETCH_MS && parseMs <= SLOW_PARSE_MS) return null;
-  const detail = slowest && parseMs > SLOW_PARSE_MS ? ` (slowest ${slowest.label} ${slowest.ms} ms)` : '';
+  const detail = slowest && parseMs > SLOW_PARSE_MS ? ` (slowest ${slowest.label} ${Math.round(slowest.ms)} ms)` : '';
   return `slow refresh: fetch ${fetchMs} ms, parse ${parseMs} ms${detail}`;
 }
 
@@ -297,7 +297,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       } finally {
         const elapsed = monotonicNow() - startedAt;
         parseMs += elapsed;
-        if (!slowest || elapsed > slowest.ms) slowest = { label: tableLabel(url), ms: Math.round(elapsed) };
+        if (!slowest || elapsed > slowest.ms) slowest = { label: tableLabel(url), ms: elapsed };
       }
     };
     // An audit can start while the thread is yielded, so re-check before the parse begins.
