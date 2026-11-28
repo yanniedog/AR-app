@@ -1,18 +1,45 @@
 import { uiDecimal, uiJoin } from '../lib/uiCopy';
 import { parseLvrRange } from './lvrRange';
 
-/** The market benchmark for a mortgage tier is every published rate available
- * at one LVR inside the product's band: its upper limit, or just above the lower
- * limit for an open-ended band. Requiring each market row to span the whole band
- * would drop every lender that publishes narrower bands, which is all of the
- * pre-November history, so the ribbon would only cover recent days. */
-export function mortgageHistoryLvr(tier: string | undefined): string | null {
+export const DEFAULT_BENCHMARK_LVR = 80;
+
+/** The user's LVR as a percentage from a scenario ratio (0.8 is 80%). Scenario
+ * LVRs are always ratios, so a refinance above 100% is read as such, not as a
+ * small percentage, and gives no benchmark point. */
+export function userLvrPercent(value: string | number | null | undefined): number | null {
+  const n = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const pct = Math.round(n * 10000) / 100;
+  return pct > 0 && pct <= 100 ? pct : null;
+}
+
+/** The market benchmark for a mortgage is every published rate whose LVR band
+ * reaches the user's LVR, so the borrower could take it up. The point is the user's
+ * LVR (profile band upper limit, then 80%), moved just inside the product's own band
+ * when that band cannot hold it. Using the product's top band instead (98% for a
+ * first-home loan) leaves only the few lenders that lend that high. */
+export function mortgageHistoryLvr(tier: string | undefined, userLvr?: number | null): string | null {
   const range = parseLvrRange(tier);
   if (!range) return null;
-  const point = range.hi !== Infinity
-    ? range.hiInclusive === false ? Math.round((range.hi - 0.01) * 100) / 100 : range.hi
-    : range.inclusive ? range.lo : Math.round((range.lo + 0.01) * 100) / 100;
+  const want = userLvr && userLvr > 0 ? userLvr : DEFAULT_BENCHMARK_LVR;
+  const top = range.hi !== Infinity
+    ? range.hiInclusive === false ? Math.round((range.hi - 0.01) * 100) / 100 : range.hi : 100;
+  const bottom = range.inclusive ? range.lo : Math.round((range.lo + 0.01) * 100) / 100;
+  const point = Math.round(Math.min(Math.max(want, bottom), top) * 100) / 100;
   return point > 0 && point <= 100 ? `lvr_>=${point}-${point}%` : null;
+}
+
+/** Highest LVR the saved profile bands reach; an open-ended band such as >90
+ * counts from just above its lower limit, so it stays inside the selection. */
+export function profileLvrPercent(tiers: readonly string[] | undefined): number | null {
+  let best: number | null = null;
+  for (const tier of tiers ?? []) {
+    const r = parseLvrRange(tier);
+    if (!r) continue;
+    const point = r.hi !== Infinity ? (r.hiInclusive === false ? Math.round((r.hi - 0.01) * 100) / 100 : r.hi) : r.inclusive ? r.lo : Math.round((r.lo + 0.01) * 100) / 100;
+    if (point > 0 && point <= 100 && (best === null || point > best)) best = point;
+  }
+  return best;
 }
 
 export function mortgageHistoryLvrLabel(tier: string | null) {

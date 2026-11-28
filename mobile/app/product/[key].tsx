@@ -58,7 +58,7 @@ import { isMandatoryEligibilityReady, mandatoryProductAllowed } from '../../src/
 import { findEligibleByKey } from '../../src/data/selectors';
 import { rowsForProductKey } from '../../src/data/rateRowIndex';
 import { selectBankHistoryChartModel, selectBankHistoryChartModelCooperatively } from '../../src/data/historySelectors';
-import { mortgageHistoryLvr, mortgageHistoryLvrLabel } from '../../src/data/mortgageHistoryLvr';
+import { mortgageHistoryLvr, mortgageHistoryLvrLabel, profileLvrPercent, userLvrPercent } from '../../src/data/mortgageHistoryLvr';
 import { mergeProductHistoryTimeline, rateHistoryChartModel } from '../../src/data/rateHistoryCharts';
 import {
   countFiniteSeriesPoints,
@@ -308,7 +308,15 @@ export default function ProductDetail() {
     [boundRow, found, publicCatalogue, scenarioFor]);
   const row = useMemo(() => boundRow && publicResolution ? { ...boundRow, rate: publicResolution.status === 'exact' && publicResolution.verifiedCurrent ? publicResolution.payableRate ?? '' : '' } : boundRow,
     [boundRow, publicResolution]);
-  const mortgageLvr = found?.section === 'Mortgage' ? mortgageHistoryLvr(row?.lvr_tier) : undefined;
+  // The saved scenario sets the benchmark LVR whether or not the public catalogue lists this product.
+  const benchmarkScenarioLvr = useMemo(() => {
+    if (found?.section !== 'Mortgage') return undefined;
+    const saved = publicRateScenario('Mortgage', scenario, profile, row ?? undefined);
+    return (fromRatesComparison ? ratesComparisonScenario('Mortgage', saved, comparisonInputs, mortgageFilters) : saved).lvr;
+  }, [found?.section, scenario, profile, row, fromRatesComparison, comparisonInputs, mortgageFilters]);
+  const userLvr = found?.section === 'Mortgage'
+    ? userLvrPercent(benchmarkScenarioLvr) ?? profileLvrPercent(profile?.lvrTiers) : null;
+  const mortgageLvr = found?.section === 'Mortgage' ? mortgageHistoryLvr(row?.lvr_tier, userLvr) : undefined;
   const rateHistory = useBankRateHistory(historyEnabled && !!found && historySurfaceReady, mortgageLvr);
   const calculationScenario = useMemo(() => found ? scenarioWithLocalCurrentRate(found.section, scenario,
     resolveLocalCurrentRate(found.section, scenario, publicCatalogue.references, undefined, publicCatalogue, profile)) : scenario,
