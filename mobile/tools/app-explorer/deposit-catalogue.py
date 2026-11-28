@@ -25,6 +25,9 @@ def product_url(register, brand, product):
     parts = urlsplit(base)
     if parts.scheme != "https" or not parts.hostname or parts.username or parts.password:
         return None
+    # An identity-service URI is not a public bank product disclosure endpoint.
+    if "identity" in parts.path.lower().split("/"):
+        return None
     if not base.endswith("/cds-au/v1/banking/products"):
         base += "/cds-au/v1/banking/products"
     return base + "/" + quote(product, safe="")
@@ -174,8 +177,8 @@ def live_read(url, versions=(7, 6, 5, 4, 3, 2, 1)):
     # Version negotiation is per data holder. Do not retry missing products.
     import subprocess
     for version in versions:
-        response = subprocess.run(["curl", "--silent", "--show-error", "--compressed", "--location",
-            "--proto", "=https", "--proto-redir", "=https", "--max-redirs", "3", "--connect-timeout", "8",
+        response = subprocess.run(["curl", "--silent", "--show-error", "--compressed",
+            "--proto", "=https", "--connect-timeout", "8",
             "--max-time", "15", "--max-filesize", "8388608", "-H", f"x-v: {version}", "-H", "Accept: application/json",
             "-A", "AustralianRates-Deposit-Audit/1.0", "-w", "\n%{response_code}", url], capture_output=True)
         body, _, code = response.stdout.rpartition(b"\n")

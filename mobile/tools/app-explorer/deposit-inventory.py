@@ -100,7 +100,10 @@ def report(core, registry, read=catalogue.live_read):
         result = dict(provider=brand, index=base, indexState="unverified", missing=[])
         try:
             if not base:
-                raise ValueError("registered endpoint missing")
+                uri = register[brand].get("productBaseUri") or register[brand].get("publicBaseUri") or ""
+                if "identity" in urlsplit(uri).path.lower().split("/"):
+                    raise ValueError("register lists an identity service; no product request sent")
+                raise ValueError("registered product endpoint missing or invalid")
             with limit:
                 indexed = listed_products(base, read, check_budget)
             result.update(indexState="complete", indexedDepositProducts=len(indexed))
