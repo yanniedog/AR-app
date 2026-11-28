@@ -1,0 +1,193 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Offset account",
+  "at": [
+   291,
+   540
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   540
+  ]
+ },
+ {
+  "label": "Availability",
+  "at": [
+   228,
+   592
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   568,
+   592
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   268,
+   644
+  ]
+ },
+ {
+  "label": "Published · 8",
+  "at": [
+   608,
+   644
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   360,
+   796
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "flags": "tap",
+  "at": [
+   360,
+   914
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "at": [
+   386,
+   914
+  ]
+ },
+ {
+  "label": "Hide Fees",
+  "flags": "tap",
+  "at": [
+   360,
+   1140
+  ]
+ },
+ {
+  "label": "Fees",
+  "at": [
+   328,
+   1140
+  ]
+ },
+ {
+  "label": "Event fee",
+  "at": [
+   190,
+   1240
+  ]
+ },
+ {
+  "label": "$300 · Conditions: Unverified",
+  "at": [
+   530,
+   1260
+  ]
+ },
+ {
+  "label": "Ongoing fee",
+  "at": [
+   190,
+   1340
+  ]
+ },
+ {
+  "label": "$4 · every 6 months · Conditions: Unverified",
+  "at": [
+   530,
+   1356
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

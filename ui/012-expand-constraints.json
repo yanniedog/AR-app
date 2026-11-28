@@ -1,0 +1,215 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Minimum age",
+  "at": [
+   190,
+   200
+  ]
+ },
+ {
+  "label": "18 years",
+  "at": [
+   530,
+   200
+  ]
+ },
+ {
+  "label": "Other criterion",
+  "at": [
+   190,
+   242
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   530,
+   242
+  ]
+ },
+ {
+  "label": "Other criterion",
+  "at": [
+   190,
+   302
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   530,
+   302
+  ]
+ },
+ {
+  "label": "Other criterion",
+  "at": [
+   190,
+   362
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   530,
+   362
+  ]
+ },
+ {
+  "label": "Hide Constraints",
+  "flags": "tap",
+  "at": [
+   360,
+   591
+  ]
+ },
+ {
+  "label": "Constraints",
+  "at": [
+   328,
+   591
+  ]
+ },
+ {
+  "label": "Minimum LVR",
+  "at": [
+   190,
+   691
+  ]
+ },
+ {
+  "label": "0% · Conditions: Unverified",
+  "at": [
+   530,
+   711
+  ]
+ },
+ {
+  "label": "Maximum LVR",
+  "at": [
+   190,
+   791
+  ]
+ },
+ {
+  "label": "100% · Conditions: Unverified",
+  "at": [
+   530,
+   811
+  ]
+ },
+ {
+  "label": "Show Terms",
+  "flags": "tap",
+  "at": [
+   360,
+   1060
+  ]
+ },
+ {
+  "label": "Terms",
+  "at": [
+   328,
+   1060
+  ]
+ },
+ {
+  "label": "Show Source criteria",
+  "flags": "tap",
+  "at": [
+   360,
+   1301
+  ]
+ },
+ {
+  "label": "Source criteria",
+  "at": [
+   328,
+   1301
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

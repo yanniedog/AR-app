@@ -1,0 +1,195 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   212
+  ]
+ },
+ {
+  "label": "Redraw facility",
+  "at": [
+   190,
+   267
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   287
+  ]
+ },
+ {
+  "label": "Show Documents",
+  "flags": "tap",
+  "at": [
+   360,
+   536
+  ]
+ },
+ {
+  "label": "Documents",
+  "at": [
+   328,
+   536
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   360,
+   700
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   286,
+   752
+  ]
+ },
+ {
+  "label": "Unverified",
+  "at": [
+   626,
+   752
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   273,
+   804
+  ]
+ },
+ {
+  "label": "Unassessed",
+  "at": [
+   613,
+   804
+  ]
+ },
+ {
+  "label": "Show Recorded criteria",
+  "flags": "tap",
+  "at": [
+   360,
+   969
+  ]
+ },
+ {
+  "label": "Recorded criteria",
+  "at": [
+   328,
+   969
+  ]
+ },
+ {
+  "label": "Show Mortgage · History",
+  "flags": "tap",
+  "at": [
+   360,
+   1210
+  ]
+ },
+ {
+  "label": "Mortgage · History",
+  "at": [
+   328,
+   1210
+  ]
+ },
+ {
+  "label": "Show Eligibility",
+  "flags": "tap",
+  "at": [
+   360,
+   1390
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

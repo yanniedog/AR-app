@@ -1,0 +1,230 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Benchmarks · LVR 80.0%",
+  "flags": "tap,sel",
+  "at": [
+   209,
+   223
+  ]
+ },
+ {
+  "label": "Benchmarks · LVR 80.0%",
+  "at": [
+   209,
+   209
+  ]
+ },
+ {
+  "label": "Home loans · 1 year · 190 Observed · 28 Nov 2026 · Virgin Money Lite Home Loan 6.34% · Leading advertised · All tiers · ",
+  "at": [
+   360,
+   475
+  ]
+ },
+ {
+  "label": "History",
+  "at": [
+   396,
+   467
+  ]
+ },
+ {
+  "label": "28 Nov 2026",
+  "at": [
+   360,
+   717
+  ]
+ },
+ {
+  "label": "Previous date",
+  "flags": "tap",
+  "at": [
+   80,
+   837
+  ]
+ },
+ {
+  "label": "6.34% · Leading advertised · All tiers",
+  "at": [
+   360,
+   777
+  ]
+ },
+ {
+  "label": "Market rate range · 5.94% – 11.7%",
+  "at": [
+   360,
+   837
+  ]
+ },
+ {
+  "label": "Market median · 7.19%",
+  "at": [
+   360,
+   877
+  ]
+ },
+ {
+  "label": "Next date",
+  "flags": "tap,off",
+  "at": [
+   640,
+   837
+  ]
+ },
+ {
+  "label": "Market mean · 7.53%",
+  "at": [
+   360,
+   917
+  ]
+ },
+ {
+  "label": "RBA cash rate · 4.85%",
+  "at": [
+   360,
+   957
+  ]
+ },
+ {
+  "label": "Missing observations: 10 · Unknown",
+  "at": [
+   360,
+   997
+  ]
+ },
+ {
+  "label": "Product rate",
+  "at": [
+   165,
+   1053
+  ]
+ },
+ {
+  "label": "Market rate range",
+  "at": [
+   430,
+   1053
+  ]
+ },
+ {
+  "label": "Market median",
+  "at": [
+   181,
+   1117
+  ]
+ },
+ {
+  "label": "Market mean",
+  "at": [
+   436,
+   1117
+  ]
+ },
+ {
+  "label": "RBA cash rate",
+  "at": [
+   175,
+   1181
+  ]
+ },
+ {
+  "label": "Hide Product facts",
+  "flags": "tap",
+  "at": [
+   360,
+   1369
+  ]
+ },
+ {
+  "label": "Product facts",
+  "at": [
+   328,
+   1389
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
