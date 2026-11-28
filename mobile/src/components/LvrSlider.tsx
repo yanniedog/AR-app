@@ -66,10 +66,10 @@ export function LvrSlider({ value, fallback, onChange, onClear }: {
       accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
       onAccessibilityAction={event => adjust(event.nativeEvent.actionName === 'increment' ? LVR_SLIDER_STEP : -LVR_SLIDER_STEP)}
       style={{ height: 48, justifyContent: 'center' }}>
-      <View style={{ height: TRACK_HEIGHT, borderRadius: TRACK_HEIGHT / 2, backgroundColor: theme.colors.border, marginHorizontal: THUMB / 2 }} />
-      <View style={{ position: 'absolute', left: THUMB / 2, height: TRACK_HEIGHT, borderRadius: TRACK_HEIGHT / 2, width: left,
+      <View pointerEvents="none" style={{ height: TRACK_HEIGHT, borderRadius: TRACK_HEIGHT / 2, backgroundColor: theme.colors.border, marginHorizontal: THUMB / 2 }} />
+      <View pointerEvents="none" style={{ position: 'absolute', left: THUMB / 2, height: TRACK_HEIGHT, borderRadius: TRACK_HEIGHT / 2, width: left,
         backgroundColor: explicit ? theme.colors.primary : theme.colors.textMuted }} />
-      <View style={{ position: 'absolute', left, width: THUMB, height: THUMB, borderRadius: THUMB / 2, borderWidth: 2,
+      <View pointerEvents="none" style={{ position: 'absolute', left, width: THUMB, height: THUMB, borderRadius: THUMB / 2, borderWidth: 2,
         borderColor: explicit ? theme.colors.primary : theme.colors.textMuted, backgroundColor: theme.colors.surface }} />
     </View>
   </View>;
