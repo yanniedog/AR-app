@@ -2,7 +2,7 @@ import type { ConditionalRateFact, ConditionalRatePresentation } from '../data/r
 import type { EvidenceFact, EvidencePresentation } from '../data/displayEvidenceFacts';
 import type { NumericConditionBoundary, PublishedNumericConditionFact } from '../data/scopedFinancialConditionFacts';
 import { advertisedTermMonths } from '../data/calc';
-import { formatMoneyShort } from '../data/format';
+import { formatMoneyShort, formatTerm } from '../data/format';
 import { parseLvrRange } from '../data/lvrRange';
 import type { RateRow } from '../types';
 import type { SelectedTargetConstraint } from './selectedTargetConstraints';
@@ -105,7 +105,7 @@ export function uiListedLvrRange(row: Pick<RateRow, 'lvr_tier'>): UiText {
     Number.isFinite(range.hi) ? { state: 'known', value: range.hi, inclusive: range.hiInclusive !== false } : { state: 'unspecified' }, 'percent');
 }
 export function uiListedLvr(row: Pick<RateRow, 'lvr_tier'>): UiText { return uiJoin('Listed LVR', ' ', uiListedLvrRange(row)); }
-export function uiPublishedTerm(row: RateRow): UiText { const months = advertisedTermMonths(row); return months === null ? uiJoin('Term', ' ', 'Unknown') : uiDuration(months, 'months'); }
+export function uiPublishedTerm(row: RateRow): UiText { const months = advertisedTermMonths(row); return months === null ? formatTerm(row) || uiJoin('Term', ' ', 'Unknown') : uiDuration(months, 'months'); }
 export function uiRateStructure(row: RateRow): UiText {
   const value = (row.ribbon_rate_structure ?? row.rate_type ?? '').toLowerCase().trim();
   return uiLabel(value === 'fixed' ? 'Fixed' : value === 'variable' ? 'Variable' : value === 'base' ? 'Ongoing' : value === 'bonus' ? 'Bonus rate' : ['intro', 'introductory'].includes(value) ? 'Introductory' : 'Unknown');

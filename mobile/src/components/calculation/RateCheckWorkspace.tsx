@@ -430,7 +430,9 @@ export function RateCheckWorkspace() {
         });
       } else {
         const unavailableReason: UiCopy | null = quickEstimateUnavailableReason(row, section)
-          ? section === 'TD' && advertisedTermMonths(row) == null ? 'Maturity unpublished' : 'Eligibility / rate conditions unverified'
+          ? section === 'TD' && advertisedTermMonths(row) == null
+            ? row.term ? 'Maturity estimate unavailable' : 'Maturity unpublished'
+            : 'Eligibility / rate conditions unverified'
           : section === 'Savings' && !scenario.projections.savings.holdVariableRate
             ? 'Rate assumption missing' : null;
         if (unavailableReason) {
