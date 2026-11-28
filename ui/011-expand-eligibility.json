@@ -1,0 +1,202 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I No Offset Mortgage",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Show Mortgage · History",
+  "flags": "tap",
+  "at": [
+   360,
+   366
+  ]
+ },
+ {
+  "label": "Mortgage · History",
+  "at": [
+   328,
+   366
+  ]
+ },
+ {
+  "label": "Hide Eligibility",
+  "flags": "tap",
+  "at": [
+   360,
+   607
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   328,
+   607
+  ]
+ },
+ {
+  "label": "Minimum age",
+  "at": [
+   190,
+   707
+  ]
+ },
+ {
+  "label": "18 years",
+  "at": [
+   530,
+   707
+  ]
+ },
+ {
+  "label": "Residency status",
+  "at": [
+   190,
+   767
+  ]
+ },
+ {
+  "label": "Australian resident",
+  "at": [
+   530,
+   767
+  ]
+ },
+ {
+  "label": "Individual applicants",
+  "at": [
+   190,
+   827
+  ]
+ },
+ {
+  "label": "Required",
+  "at": [
+   530,
+   827
+  ]
+ },
+ {
+  "label": "Other criterion",
+  "at": [
+   190,
+   887
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   530,
+   887
+  ]
+ },
+ {
+  "label": "Show Constraints",
+  "flags": "tap",
+  "at": [
+   360,
+   1116
+  ]
+ },
+ {
+  "label": "Constraints",
+  "at": [
+   328,
+   1116
+  ]
+ },
+ {
+  "label": "Show Terms",
+  "flags": "tap",
+  "at": [
+   360,
+   1343
+  ]
+ },
+ {
+  "label": "Terms",
+  "at": [
+   328,
+   1357
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

@@ -1,0 +1,253 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Term Deposit",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Save",
+  "flags": "tap",
+  "at": [
+   190,
+   227
+  ]
+ },
+ {
+  "label": "Save",
+  "at": [
+   217,
+   214
+  ]
+ },
+ {
+  "label": "Calculate",
+  "flags": "tap",
+  "at": [
+   530,
+   228
+  ]
+ },
+ {
+  "label": "Calculate",
+  "at": [
+   531,
+   214
+  ]
+ },
+ {
+  "label": "Hide Rate details",
+  "flags": "tap",
+  "at": [
+   360,
+   435
+  ]
+ },
+ {
+  "label": "Rate details",
+  "at": [
+   328,
+   435
+  ]
+ },
+ {
+  "label": "Rate type",
+  "at": [
+   315,
+   535
+  ]
+ },
+ {
+  "label": "Fixed",
+  "at": [
+   655,
+   535
+  ]
+ },
+ {
+  "label": "Term",
+  "at": [
+   308,
+   587
+  ]
+ },
+ {
+  "label": "11 mo",
+  "at": [
+   648,
+   587
+  ]
+ },
+ {
+  "label": "Balance",
+  "at": [
+   291,
+   639
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   639
+  ]
+ },
+ {
+  "label": "Interest paid",
+  "at": [
+   282,
+   691
+  ]
+ },
+ {
+  "label": "at maturity",
+  "at": [
+   622,
+   691
+  ]
+ },
+ {
+  "label": "Availability",
+  "at": [
+   228,
+   743
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   568,
+   743
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   268,
+   795
+  ]
+ },
+ {
+  "label": "Published · 1",
+  "at": [
+   608,
+   795
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   360,
+   947
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "flags": "tap",
+  "at": [
+   360,
+   1065
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "at": [
+   386,
+   1065
+  ]
+ },
+ {
+  "label": "Show Fees",
+  "flags": "tap",
+  "at": [
+   360,
+   1291
+  ]
+ },
+ {
+  "label": "Fees",
+  "at": [
+   328,
+   1291
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

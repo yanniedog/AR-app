@@ -1,0 +1,230 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Settings",
+  "at": [
+   224,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "App update",
+  "at": [
+   364,
+   265
+  ]
+ },
+ {
+  "label": "Status",
+  "at": [
+   360,
+   365
+  ]
+ },
+ {
+  "label": "Up to date",
+  "at": [
+   360,
+   413
+  ]
+ },
+ {
+  "label": "Version",
+  "at": [
+   360,
+   477
+  ]
+ },
+ {
+  "label": "1.0.393 (449)",
+  "at": [
+   360,
+   525
+  ]
+ },
+ {
+  "label": "Source",
+  "at": [
+   360,
+   589
+  ]
+ },
+ {
+  "label": "GitHub",
+  "at": [
+   360,
+   637
+  ]
+ },
+ {
+  "label": "APK",
+  "at": [
+   360,
+   701
+  ]
+ },
+ {
+  "label": "Verified",
+  "at": [
+   360,
+   749
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   360,
+   813
+  ]
+ },
+ {
+  "label": "Android installation permission",
+  "at": [
+   360,
+   861
+  ]
+ },
+ {
+  "label": "Check for update",
+  "flags": "tap",
+  "at": [
+   360,
+   971
+  ]
+ },
+ {
+  "label": "Check for update",
+  "at": [
+   387,
+   971
+  ]
+ },
+ {
+  "label": "Appearance",
+  "at": [
+   364,
+   1164
+  ]
+ },
+ {
+  "label": "Theme",
+  "at": [
+   360,
+   1252
+  ]
+ },
+ {
+  "label": "System",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   1340
+  ]
+ },
+ {
+  "label": "System",
+  "at": [
+   133,
+   1338
+  ]
+ },
+ {
+  "label": "Light",
+  "flags": "tap",
+  "at": [
+   360,
+   1340
+  ]
+ },
+ {
+  "label": "Light",
+  "at": [
+   360,
+   1338
+  ]
+ },
+ {
+  "label": "Dark",
+  "flags": "tap",
+  "at": [
+   587,
+   1340
+  ]
+ },
+ {
+  "label": "Dark",
+  "at": [
+   586,
+   1338
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
