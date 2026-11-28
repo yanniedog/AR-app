@@ -99,7 +99,7 @@ jest.mock('../src/components/ChartErrorBoundary', () => ({ ChartErrorBoundary: '
 jest.mock('../src/components/feedback', () => ({ EmptyState: 'EmptyState' }));
 jest.mock('../src/components/product/ProductRateChangeLine', () => ({ ProductRateChangeLine: 'ProductRateChangeLine' }));
 jest.mock('../src/components/product/ProductTermsDisclosure', () => ({ ProductTermsDisclosure: 'ProductTermsDisclosure' }));
-jest.mock('../src/components/product/ProductPageLink', () => ({ ProductPageLinks: 'ProductPageLinks', ProductPageLink: 'ProductPageLink' }));
+jest.mock('../src/components/product/ProductPageLink', () => ({ ProductPageLinks: 'ProductPageLinks', ProductPageLink: 'ProductPageLink', ProductWebLink: 'ProductWebLink' }));
 jest.mock('../src/components/product/ProductDetailParts', () => ({
   AccessNotice: 'AccessNotice',
   DetailGroup: 'DetailGroup',

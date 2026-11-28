@@ -1,6 +1,6 @@
 import { useProductCriteria } from '../../src/hooks/useProductCriteria';
 import { ProductDocuments } from '../../src/components/product/ProductDocuments';
-import { ProductPageLinks } from '../../src/components/product/ProductPageLink';
+import { ProductPageLinks, ProductWebLink } from '../../src/components/product/ProductPageLink';
 import type { RateRow, SectionKey } from '../../src/types';
 import { useRatesSession } from '../../src/data/ratesSession';
 import { useMortgageComparison } from '../../src/data/mortgageComparison';
@@ -795,6 +795,7 @@ export default function ProductDetail() {
             <AppText variant="small" color="textMuted">{uiSectionName(section)}</AppText>
           </View>
         </Row>
+        <ProductWebLink />
 
         <View style={{ marginBottom: 16, gap: 4 }}>
           <AppText variant="small" color="textMuted">

@@ -147,6 +147,12 @@ jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision
 const mockScenario = normalizeUserRateScenario(undefined);
 Object.assign(mockScenario.mortgage, { mode: 'refi', loanBalance: '100000', propertyValue: '800000', currentRate: '8' });
 let mockCatalogue: any;
+// The slider's own behaviour is covered in lvrSlider.test; here it stands in as a text field.
+jest.mock('../src/components/LvrSlider', () => {
+  const { TextInput } = require('react-native');
+  return { LvrSlider: ({ value, onChange, onClear }: any) => <TextInput accessibilityLabel="LVR" keyboardType="decimal-pad"
+    value={value === null ? '' : String(value)} onChangeText={(text: string) => (text.trim() ? onChange(text) : onClear())} /> };
+});
 jest.mock('../src/data/publicRateCatalogue', () => ({ usePublicRateCatalogue: () => mockCatalogue }));
 jest.mock('../src/components/scenario/PublicRateEvidence', () => ({ PublicRateEvidence: 'PublicRateEvidence' }));
 jest.mock('../src/components/scenario/PublicCostComparison', () => ({ PublicCostComparison: 'PublicCostComparison' }));

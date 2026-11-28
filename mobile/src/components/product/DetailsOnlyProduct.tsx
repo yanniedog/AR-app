@@ -1,6 +1,6 @@
 import { useProductCriteria } from '../../hooks/useProductCriteria';
 import { ProductDocuments } from './ProductDocuments';
-import { ProductPageLinks } from './ProductPageLink';
+import { ProductPageLinks, ProductWebLink } from './ProductPageLink';
 import type { RateScenario } from '../../data/publicRateModel';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
 import { DiscoveryRateStatus, PublicRateEvidence } from '../scenario/PublicRateEvidence';
@@ -35,6 +35,7 @@ export function DetailsOnlyProduct({ productKey, programmeId, rateScenario }: { 
     <AppText weight="700">{product ? uiPublicProductName(product) : identity.name ? uiProductName({ product_name: identity.name }) : uiLabel('Product')}
     </AppText>
     {provider ? <ProductProviderLink provider={provider} /> : null}
+    <ProductWebLink />
     {identity.productCategory ? <AppText variant="small">{humanizeEnum(identity.productCategory)}</AppText> : null}
     {hasProgrammes && <PublicRateEvidence productKey={productKey} programmeId={programmeId} scenario={rateScenario} />}
     {!hasProgrammes && product?.status === 'legacy' && (

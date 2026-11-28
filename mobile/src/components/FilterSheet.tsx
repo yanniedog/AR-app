@@ -6,7 +6,6 @@ import type { Filters } from '../data/selectors';
 import type { SearchFilterOptions } from '../data/searchFilterOptions';
 import { humanizeEnum } from '../data/format';
 import { uiLoanPurpose } from '../lib/financialUiCopy';
-import { lvrTierDisplay } from '../data/lvrTier';
 import {
   boundedPublishedFactFilterOptions,
   factCriterionId,
@@ -24,7 +23,6 @@ function filterGroupTitle(field: string): UiCopy {
     case 'loan_purpose': return uiLabel('Loan purpose');
     case 'rate_type': return uiLabel('Rate type');
     case 'ribbon_repayment_type': return uiLabel('Repayment');
-    case 'lvr_tier': return uiJoin('LVR', ' · ', 'Tier');
     case 'interest_payment': return uiLabel('Interest paid');
     case 'ribbon_deposit_kind': return uiLabel('Account type');
     default: return uiLabel('Filter');
@@ -249,7 +247,7 @@ function FilterSheetInner({
                     groupKey: g.key,
                     options,
                     selected: draft[g.key] as string[],
-                    label: (o) => (g.field === 'lvr_tier' ? lvrTierDisplay(o) : g.field === 'loan_purpose' ? uiLoanPurpose({ loan_purpose: o }) : humanizeEnum(o)),
+                    label: (o) => (g.field === 'loan_purpose' ? uiLoanPurpose({ loan_purpose: o }) : humanizeEnum(o)),
                     onToggle: (o) => toggle(g.key, o),
                   })}
                 </View>

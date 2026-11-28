@@ -2,13 +2,13 @@ import { canonicalPurpose, canonicalRepayment } from '../data/mortgageFacets';
 import { isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../data/mortgageFacetScope';
 import { publicCataloguePricingKey, type PublicCatalogueView } from '../data/publicRateIntegration';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, TextInput, useWindowDimensions, View } from 'react-native';
+import { ScrollView, useWindowDimensions, View } from 'react-native';
 import { useMortgageComparison, mortgageComparisonValues, type MortgageComparisonInputs } from '../data/mortgageComparison';
 import { openMortgageComparisonProfile, saveMortgageComparisonFacets, saveMortgageComparisonInputs,
   clearSavedMortgageComparison, useMortgageComparisonProfile } from '../data/mortgageComparisonProfile';
 import { profileAttributeOptions } from '../data/profileRequirements';
 import { humanizeEnum } from '../data/format';
-import { DEFAULT_MORTGAGE_BROWSE_FACETS, effectiveMortgageBrowseAssumptions } from '../data/mortgageComparisonScenario';
+import { DEFAULT_MORTGAGE_BROWSE_FACETS } from '../data/mortgageComparisonScenario';
 import { LIST_REPAYMENT_TERM_YEARS } from '../data/mortgageRepayment';
 import type { Filters } from '../data/selectors';
 import type { RateRow } from '../types';
@@ -16,9 +16,9 @@ import { useStore } from '../data/store';
 import { updateRatesSection, useRatesSession } from '../data/ratesSession';
 import { uiCount, uiJoin, uiLabel, uiMoney, uiMortgageComparisonInput, uiRate } from '../lib/uiCopy';
 import { yieldToUi } from '../lib/yieldToUi';
-import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Chip, Row } from './ui';
 import { IconAction } from './IconAction';
+import { LvrSlider } from './LvrSlider';
 import { SegmentedControl } from './controls';
 import { CurrencyInput } from './CurrencyInput';
 import { SharedInputConflicts } from './SharedInputConflicts';
@@ -149,7 +149,6 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
   /** Controlled expansion for collapsible controls (e.g. opened from an empty state). */
   open?: boolean; onOpenChange?: (open: boolean) => void;
 }) {
-  const theme = useTheme();
   const liveValue = useMortgageComparison();
   const profileValue = useMortgageComparisonProfile(state => profile ? state.profile.inputs : null);
   const storeValue = profileValue ?? liveValue;
@@ -302,8 +301,6 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
   };
   const fields: NumericInputField[] = mode === 'lvr' ? ['loanAmount', 'lvr']
     : fundsType === 'offset' ? ['loanAmount', 'fundsAvailable', 'propertyValue'] : ['loanAmount', 'fundsAvailable'];
-  // Rates keeps each unreplaced default (purpose, repayment, LVR 80%) in force.
-  const assumed = profile ? null : effectiveMortgageBrowseAssumptions('Mortgage', withResolvedMode(draft), filters);
   const shownFacets = (key: FacetKey): readonly string[] => profile || filters[key].length ? filters[key] : DEFAULT_MORTGAGE_BROWSE_FACETS[key];
   const fieldLabel = (field: NumericInputField) =>
     uiLabel(field === 'loanAmount' ? 'Loan amount' : field === 'propertyValue' ? 'Property value'
@@ -375,18 +372,9 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
           accessibilityLabel={fieldLabel(field)}
           value={draft[field] ?? ''} onChangeText={text => change(field, text)} />
       </View>;
-      return <View key={field} style={{ flexBasis: Math.min(220, 120 * Math.max(1, fontScale)), flexGrow: 1, minWidth: 0, gap: 4 }}>
-        <AppText variant="small" color={fieldRequired ? 'warning' : 'text'} weight={fieldRequired ? '700' : undefined}>
-          {fieldRequired ? uiJoin(fieldLabel(field), ' · ', 'Required') : fieldLabel(field)}
-        </AppText>
-        <View style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 4,
-          borderColor: theme.colors.border, borderWidth: 1, borderRadius: 6, paddingHorizontal: 8 }}>
-          <TextInput value={uiMortgageComparisonInput(draft, field)} onChangeText={text => change(field, text)}
-            keyboardType="decimal-pad" autoCapitalize="none" autoCorrect={false} maxLength={62}
-            accessibilityLabel={fieldLabel(field)}
-            placeholder={assumed && !draft.lvr.trim() ? uiJoin(uiCount(80), '%') : uiLabel('%')}
-            style={{ flex: 1, minWidth: 0, minHeight: 48, color: theme.colors.text, padding: 0, fontSize: theme.font.body }} />
-        </View>
+      return <View key={field} style={{ flexBasis: Math.min(320, 200 * Math.max(1, fontScale)), flexGrow: 1, minWidth: 0 }}>
+        <LvrSlider value={values.lvr !== null && draft.lvr.trim() ? values.lvr : null} fallback={values.lvr ?? 80}
+          onChange={next => change('lvr', String(next))} onClear={() => change('lvr', '')} />
       </View>;
     })}<IconAction icon="close" word="Clear" accessibilityLabel="Clear comparison inputs" onPress={clearInputs} /></Row>
     {mode === 'funds' ? <Row gap={12} style={{ flexWrap: 'wrap' }}>

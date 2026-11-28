@@ -117,7 +117,7 @@ export const useStore = create<AppState>()(
           diagnosticsEnabled: false,
           ...migratedMortgageRatePreference(persistedPrefs),
           interests: normalizeInterests(persistedPrefs?.interests ?? DEFAULT_INTERESTS),
-          profileFilters: normalizeProfileFilters(persistedPrefs?.profileFilters),
+          profileFilters: { ...normalizeProfileFilters(persistedPrefs?.profileFilters), lvrTiers: [] },
           ratesPageSize: normalizeRatesPageSize(persistedPrefs?.ratesPageSize),
           calc: normalizeCalcInputs(persistedPrefs?.calc),
         };
@@ -132,7 +132,7 @@ export const useStore = create<AppState>()(
           ...current,
           ...p,
           ...(Array.isArray(p?.subscriptions)
-            ? { subscriptions: refreshProductSubscriptionLabels(normalizeProductSubscriptionIds(p.subscriptions)) }
+            ? { subscriptions: refreshProductSubscriptionLabels(normalizeProductSubscriptionIds(p.subscriptions)).map(sub => ('filters' in sub && sub.filters?.lvrTiers?.length ? { ...sub, filters: { ...sub.filters, lvrTiers: [] } } : sub)) }
             : {}),
           prefs,
           savedRates,
