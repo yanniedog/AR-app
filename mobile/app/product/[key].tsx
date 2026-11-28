@@ -325,7 +325,8 @@ export default function ProductDetail() {
   // The all-tier chart uses the same unfiltered catalogue as its historical series.
   const currentBest = useMemo(() => bestRateForProduct(core, productKey), [core, productKey]);
   const selectedRate = row ? toFraction(row.rate) : null;
-  const plotSelectedOnly = selectedRate != null && selectedRate !== currentBest;
+  const plotSelectedOnly = found?.section === 'Mortgage' && selectedRate != null
+    && currentBest != null && selectedRate !== currentBest;
   const auditProductError = core && isMandatoryEligibilityReady() && !row
     ? !mandatoryProductAllowed(productKey)
       ? 'The selected product does not meet the current mandatory profile requirements'
@@ -722,6 +723,10 @@ export default function ProductDetail() {
   const presentation = ratePresentation(row, section, mortgageRateMetric);
 
   const observedProductPoints = countFiniteSeriesPoints(seededProductValues);
+  const selectedHistoryContext = !plotSelectedOnly && currentBest !== null && toFraction(row.rate) !== currentBest
+    ? uiJoin('Selected rate', ' ', formatRate(row.rate), ' · ', 'Leading advertised', ' ', formatRate(currentBest), ' · ', 'All tiers')
+    : null;
+
   const onShare = () =>
     Share.share({
       message: rateReceiptShareText(buildRateReceipt({ row, section, evidenceDate: core?.run_date ?? '', detail,
@@ -903,6 +908,11 @@ export default function ProductDetail() {
           <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
             {uiJoin('Leading advertised', ' · ', 'All tiers', ' · ', 'Conditional rate', ' / ', 'Restricted')}
           </AppText>
+          {selectedHistoryContext ? (
+            <AppText variant="tiny" color="textMuted" style={{ marginBottom: 8 }}>
+              {selectedHistoryContext}
+            </AppText>
+          ) : null}
           {historyEnabled ? (
             !historySurfaceReady || historyPreparing || (!rateHistory.failed && (historyWaitingForInsights || rateHistory.updating) && (!historyModel || historyModel.dates.length < 2)) ? (
               <AppText variant="small" color="textMuted">
