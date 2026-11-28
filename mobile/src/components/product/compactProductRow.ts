@@ -1,4 +1,4 @@
-import { formatMoneyShort, formatRate, formatTerm } from '../../data/format';
+import { formatMoneyShort, formatRate, formatTerm, humanizeEnum } from '../../data/format';
 import type { ScopedFinancialConditionPresentation } from '../../data/scopedFinancialConditionFacts';
 import { uiConditionRange, uiListedLvrRange } from '../../lib/financialUiCopy';
 import { uiCount, uiJoin, uiLabel, type UiCopy, type UiText } from '../../lib/uiCopy';
@@ -61,7 +61,12 @@ export function compactProductFacet(row: RateRow, section: SectionKey,
       && (fact.subject === 'balance' || fact.subject === 'deposit-balance'));
   const value = source.length > 1 ? uiLabel('Unknown') : source.length ? uiConditionRange(source[0], true) : kind === 'LVR' ? uiListedLvrRange(row)
     : kind === 'Term' ? formatTerm(row) || uiLabel('Unknown') : balanceValue(row);
-  return { kind, value, known: !['Unknown', 'Unverified'].includes(value) };
+  const known = !['Unknown', 'Unverified'].includes(value);
+  if (section === 'TD') {
+    const payment = humanizeEnum(row.interest_payment) || uiLabel('Unknown');
+    return { kind, value: uiJoin(value, ' · ', payment), known: known && payment !== 'Unknown' };
+  }
+  return { kind, value, known };
 }
 
 /** Conservative tabular-number budget; native text measurements can enlarge it. */
