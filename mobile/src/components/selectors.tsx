@@ -177,7 +177,7 @@ export function OptionSelect<T extends string>({
   onChange: (value: T) => void;
   multiple?: boolean;
   emptyLabel?: UiCopy;
-  /** Shown as the first sheet row in multi-select mode. */
+  /** Shown as the first sheet row; clears the choice. */
   onClear?: () => void;
   auditId?: string;
   last?: boolean;
@@ -243,8 +243,11 @@ export function OptionSelect<T extends string>({
       >
         {/* Long lists, landscape and large text scroll inside the sheet; the footer stays reachable. */}
         <ScrollView style={{ maxHeight: Math.max(160, windowHeight * 0.55) }} keyboardShouldPersistTaps="handled">
-          {multiple && onClear ? (
-            <SelectRow label={emptyLabel} checked={!active} multiple={false} onPress={() => { if (active) { hapticSelection(); onClear(); } }} />
+          {onClear ? (
+            <SelectRow label={emptyLabel} checked={!active} multiple={false} onPress={() => {
+              if (active) { hapticSelection(); onClear(); }
+              if (!multiple) setOpen(false);
+            }} />
           ) : null}
           {options.map(option => (
             <SelectRow

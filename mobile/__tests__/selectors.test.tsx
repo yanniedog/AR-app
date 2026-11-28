@@ -51,3 +51,14 @@ test('a single-select closes after a choice; the strip keeps 48 dp touch targets
   expect(target?.minHeight ?? 48).toBeGreaterThanOrEqual(48);
   act(() => tree.unmount());
 });
+
+test('a single-select with a clear action shows Any first, clears and closes', () => {
+  const onChange = jest.fn(); const onClear = jest.fn(); let tree!: ReactTestRenderer;
+  act(() => { tree = TestRenderer.create(<OptionSelect label="Repayment" options={OPTIONS.slice(0, 3)} value={['o1']} onChange={onChange} onClear={onClear} />); });
+  act(() => pressable(tree, 'Repayment: Option 1').props.onPress());
+  expect(pressable(tree, 'Option 1').props.accessibilityRole).toBe('radio');
+  act(() => pressable(tree, 'Any').props.onPress());
+  expect(onClear).toHaveBeenCalledTimes(1);
+  expect(tree.root.findAllByType('Sheet' as never)).toHaveLength(0);
+  act(() => tree.unmount());
+});

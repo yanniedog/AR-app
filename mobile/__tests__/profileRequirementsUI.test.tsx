@@ -132,3 +132,19 @@ test('ProfileEditor offers no LVR band options', () => {
     expect(labels.filter(label => /^(<60|60-70|70-80|80-90|>90)$/.test(label) || label.includes('lvr_'))).toEqual([]);
   } finally { act(() => tree.unmount()); }
 });
+
+test('single-choice groups use radio rows; saved extras show as ticks until removed and Features stay ticks', () => {
+  mockCore = core(['FIXED', 'VARIABLE']);
+  const onChange = jest.fn(); let tree: any;
+  const field = (label: string) => tree.root.findAllByType('OptionSelect').find((n: any) => n.props.label === label);
+  act(() => { tree = TestRenderer.create(<ProfileEditor sections={['Mortgage']} value={{ ...EMPTY_PROFILE, rateTypes: ['FIXED'] }} onChange={onChange} />); });
+  try {
+    expect(field('Rate type').props.multiple).toBe(false);
+    act(() => tree.update(<ProfileEditor sections={['Mortgage']} value={{ ...EMPTY_PROFILE, rateTypes: ['FIXED', 'VARIABLE'] }} onChange={onChange} />));
+    expect(field('Rate type').props.multiple).toBe(true);
+    act(() => field('Rate type').props.onChange('VARIABLE'));
+    expect(onChange.mock.calls[0][0].rateTypes).toEqual(['FIXED']);
+    const features = field('Features');
+    if (features) expect(features.props.multiple).toBe(true);
+  } finally { act(() => tree.unmount()); }
+});
