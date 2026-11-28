@@ -81,7 +81,7 @@ export function decodeCompactDiagnosticJson(text: string): unknown {
     }
     const decoded = decompressCatalogue(input);
     // A diagnostic is an object; null is also the codec's invalid-input result.
-    if (!decoded || typeof decoded !== 'object') throw new Error('Invalid compressed diagnostic report');
+    if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) throw new Error('Invalid compressed diagnostic report');
     return decoded;
   }
   if (input?.format !== 'ar-audit-dict-v1') return input;
