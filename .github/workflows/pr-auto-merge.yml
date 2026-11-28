@@ -1,10 +1,8 @@
 name: pr-auto-merge
 
-# Owner PRs to main merge by themselves. scripts/pr-auto-merge-reconcile.mjs
-# enables squash auto-merge on non-draft owner PRs whose commits all come from
-# trusted authors, keeps behind branches updated, and disables auto-merge for
-# drafts or the `hold` label. GitHub still merges only after the required gates
-# (mobile-ci, bot-feedback-gate, resolved threads) pass on main.
+# The reconciler updates behind owner PRs, clears standing native auto-merge
+# requests and squash-merges eligible PRs after the review window and required
+# gates. Each merge request pins the evaluated head SHA.
 #
 # A schedule reconciles every open PR (covering missed or failed events) and
 # dispatches the APK release when main has unreleased mobile changes, which
@@ -23,6 +21,14 @@ on:
   schedule:
     - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
+    inputs:
+      pr_number:
+        type: string
+        description: Pull request number (blank for all open pull requests)
+      skip_branch_update:
+        type: boolean
+        description: Leave a behind branch for the author to update
+        default: false
 
 permissions:
   contents: read
@@ -33,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
-      group: pr-auto-merge-${{ github.event.pull_request.number || 'all' }}
+      group: pr-auto-merge-${{ github.event.pull_request.number || inputs.pr_number || 'all' }}
       cancel-in-progress: false
     permissions:
       contents: write
@@ -48,14 +54,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.BOT_GATE_TOKEN || github.token }}
           OWNER_TOKEN_CONFIGURED: ${{ secrets.BOT_GATE_TOKEN != '' }}
-          PR: ${{ github.event.pull_request.number }}
+          PR: ${{ github.event.pull_request.number || inputs.pr_number }}
+          PR_AUTO_MERGE_SKIP_BRANCH_UPDATE: ${{ inputs.skip_branch_update }}
         run: |
-          if [ -n "$PR" ]; then node scripts/pr-auto-merge-reconcile.mjs prs --pr "$PR"
-          else node scripts/pr-auto-merge-reconcile.mjs prs; fi
+          if [ -n "$PR" ]; then
+            [[ "$PR" =~ ^[1-9][0-9]*$ ]] || { echo "::error::PR number must be a positive integer"; exit 1; }
+            node scripts/pr-auto-merge-reconcile.mjs prs --pr "$PR"
+          else
+            node scripts/pr-auto-merge-reconcile.mjs prs
+          fi
 
   release-catch-up:
     name: Dispatch APK release for unreleased main
-    if: github.event_name != 'pull_request_target'
+    if: github.event_name != 'pull_request_target' && !inputs.pr_number
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:

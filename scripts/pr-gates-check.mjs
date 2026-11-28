@@ -60,7 +60,7 @@ Gates enforced:
   feedback-plan            ## Feedback plan when bot wait ready and threads open
   merge-subgates          wait + thread gates required before merge
 
-Use this script for AR-app merge-readiness before enabling auto-merge or squash merge.`);
+Use this script to check AR-app readiness for guarded squash merge.`);
     process.exit(0);
   }
 

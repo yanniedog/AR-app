@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Apply squash-only + auto-merge + delete-branch-on-merge repo settings.
+ * Apply squash-only settings for the guarded merge workflow.
  * Requires admin:repo scope on GH_TOKEN or gh auth.
  *
  * Usage: npm run repo-merge-settings:apply [-- --dry-run]
@@ -27,7 +27,7 @@ const DESIRED = {
   allow_merge_commit: false,
   allow_rebase_merge: false,
   delete_branch_on_merge: true,
-  allow_auto_merge: true,
+  allow_auto_merge: false,
 };
 
 function parseArgs(argv) {
@@ -49,11 +49,10 @@ Manual steps for ${repo} → Settings → General → Pull Requests:
 1. Allow squash merging: ON
 2. Allow merge commits: OFF
 3. Allow rebase merging: OFF
-4. Allow auto-merge: ON
+4. Allow auto-merge: OFF (the repository workflow checks the review window)
 5. Automatically delete head branches: ON
 
-Agents merge with: gh pr merge <n> --auto --squash --delete-branch
-(or: npm run pr:merge -- --pr <n> after pr:gates:check exit 0)
+Request guarded reconciliation with: npm run pr:merge -- --pr <n>
 
 Squash is selected at merge time, not when opening a PR with gh pr create.
 `);

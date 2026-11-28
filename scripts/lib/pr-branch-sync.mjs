@@ -1,8 +1,7 @@
 /**
- * PR branch freshness + squash auto-merge progression.
+ * PR branch freshness and native auto-merge diagnostics.
  */
 import { spawnSync } from 'node:child_process';
-import { mergePullRequest } from './pr-merge.mjs';
 import { ghJson } from './gh-pr-review-threads.mjs';
 
 const GH_TIMEOUT_MS = 120_000;
@@ -50,10 +49,6 @@ export function classifyBranchState(meta) {
     canUpdate: true,
     detail: `merge state ${ms} — try gh pr update-branch if checks require fresh base`,
   };
-}
-
-export function isAutoMergeEnabled(meta) {
-  return Boolean(meta?.autoMergeRequest?.enabledAt);
 }
 
 export function fetchPrMergeMeta(prNumber) {
@@ -129,67 +124,6 @@ export function updatePrBranch(prNumber, { dryRun = false, force = false } = {})
   };
 }
 
-export function enableSquashAutoMerge(prNumber, { dryRun = false } = {}) {
-  const meta = fetchPrMergeMeta(prNumber);
-  if (isAutoMergeEnabled(meta)) {
-    return {
-      ok: true,
-      action: 'skipped',
-      detail: `squash auto-merge already enabled (${meta.autoMergeRequest?.enabledAt})`,
-      exitCode: 0,
-    };
-  }
-  const result = mergePullRequest(prNumber, { dryRun });
-  if (!result.ok) {
-    return {
-      ok: false,
-      action: 'failed',
-      detail: result.stderr || result.stdout || `gh pr merge exit ${result.exitCode}`,
-      exitCode: result.exitCode || 1,
-    };
-  }
-  return {
-    ok: true,
-    action: dryRun ? 'skipped' : 'enabled',
-    detail: dryRun ? result.stdout : 'squash auto-merge enabled',
-    exitCode: 0,
-  };
-}
-
-export function progressPullRequest(prNumber, { dryRun = false, syncBranch = true, enableAuto = true } = {}) {
-  const meta = fetchPrMergeMeta(prNumber);
-  const state = classifyBranchState(meta);
-  const out = {
-    prNumber,
-    headRefName: meta.headRefName,
-    branchState: state,
-    sync: null,
-    autoMerge: null,
-    blocked: false,
-    ok: true,
-  };
-  if (state.status === 'conflict') {
-    out.blocked = true;
-    out.ok = false;
-    return out;
-  }
-  if (syncBranch && state.behind) {
-    out.sync = updatePrBranch(prNumber, { dryRun, force: state.behind });
-    if (!out.sync.ok) {
-      out.blocked = true;
-      out.ok = false;
-      return out;
-    }
-  } else if (syncBranch) {
-    out.sync = { ok: true, action: 'skipped', detail: state.detail, exitCode: 0 };
-  }
-  if (enableAuto) {
-    out.autoMerge = enableSquashAutoMerge(prNumber, { dryRun });
-    if (!out.autoMerge.ok) out.ok = false;
-  }
-  return out;
-}
-
 export function gateBranchFreshMeta(meta) {
   const state = classifyBranchState(meta);
   if (state.status === 'conflict') {
@@ -215,14 +149,14 @@ export function gateBranchFreshMeta(meta) {
   };
 }
 
-export function gateAutoMergeEnabled(meta) {
-  const enabled = isAutoMergeEnabled(meta);
+export function gateNativeAutoMergeDisabled(meta) {
+  const enabled = meta.autoMergeRequest != null;
   return {
-    id: 'auto-merge',
-    pass: enabled,
+    id: 'native-auto-merge-disabled',
+    pass: !enabled,
     detail: enabled
-      ? `Squash auto-merge enabled (${meta?.autoMergeRequest?.enabledAt || 'active'})`
-      : 'Squash auto-merge not enabled',
-    action: enabled ? undefined : `npm run pr:merge -- --pr ${meta?.number} --enable-only`,
+      ? 'A native auto-merge request is active and can bypass guarded reconciliation'
+      : 'Guarded reconciliation controls the merge',
+    action: enabled ? `npm run pr:merge -- --pr ${meta.number}` : undefined,
   };
 }

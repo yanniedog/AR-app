@@ -2,7 +2,7 @@
 /**
  * Unattended merge and release reconciler (run by .github/workflows/pr-auto-merge.yml).
  *
- *   node scripts/pr-auto-merge-reconcile.mjs prs [--pr N]   enable/disable auto-merge, update behind branches
+ *   node scripts/pr-auto-merge-reconcile.mjs prs [--pr N]   reconcile guarded merges and branch updates
  *   node scripts/pr-auto-merge-reconcile.mjs release        dispatch the APK release for unreleased main
  *   node scripts/pr-auto-merge-reconcile.mjs explore        dispatch the full explorer audit for the newest untested APK
  *
@@ -14,7 +14,7 @@ import { EXPLORE_AUTO_RUN_NAMES, EXPLORE_RETRY_COOLDOWN_MS, decideExploreDispatc
 const REPO = process.env.GITHUB_REPOSITORY || 'yanniedog/AR-app';
 const OWNER = process.env.GITHUB_REPOSITORY_OWNER || REPO.split('/')[0];
 // Agent commits are attributed to these accounts; anything else needs a human.
-const WORKFLOW_ACTOR = 'github-actions[bot]';
+
 // clean: all checks green. unstable: required gates green, an advisory check failed.
 // Branch protection still enforces the required gates on the merge call itself.
 const MERGEABLE_STATES = new Set(['clean', 'unstable']);
@@ -48,16 +48,18 @@ function reconcilePull(number) {
   const decision = decidePullRequest(pr, { owner: OWNER, repo: REPO, trustedAuthors: TRUSTED_AUTHORS,
     commitAuthors: authored.map(commit => commit.author?.login ?? null) });
   const enabled = pr.state === 'open' && pr.auto_merge != null;
-  const enabledBy = pr.auto_merge?.enabled_by?.login ?? null;
   console.log(`#${number}: ${decision.action} (${decision.reason}); auto-merge ${enabled ? 'on' : 'off'}; state ${pr.mergeable_state}`);
-  if (decision.action === 'disable' && enabled) {
+  // A standing native auto-merge request can fire before this reconciler observes a new head.
+  if (enabled && pr.user?.login === OWNER && pr.head?.repo?.full_name === REPO) {
     gh(['pr', 'merge', String(number), '--repo', REPO, '--disable-auto'], { json: false });
-    console.log(`#${number}: auto-merge disabled`);
+    console.log(`#${number}: native auto-merge disabled; reevaluating on the next run`);
     return;
   }
   if (decision.action !== 'enable') return;
   if (needsBranchUpdate(pr)) {
-    if (process.env.OWNER_TOKEN_CONFIGURED === 'true') {
+    if (process.env.PR_AUTO_MERGE_SKIP_BRANCH_UPDATE === 'true') {
+      console.log(`#${number}: behind main; branch update skipped for this request`);
+    } else if (process.env.OWNER_TOKEN_CONFIGURED === 'true') {
       // An owner-token push fires the normal pull_request workflows, so every
       // required check (including dependency review) reruns on the new head.
       const updated = gh(['api', '-X', 'PUT', `repos/${REPO}/pulls/${number}/update-branch`,
@@ -68,27 +70,37 @@ function reconcilePull(number) {
       // reduced dispatched checks for the real ones. Leave the update to the agent.
       console.log(`#${number}: behind main; branch update needs BOT_GATE_TOKEN, left for the author`);
     }
-  }
-  if (process.env.OWNER_TOKEN_CONFIGURED === 'true') {
-    if (!enabled) {
-      gh(['pr', 'merge', String(number), '--repo', REPO, '--auto', '--squash', '--delete-branch'], { json: false });
-      console.log(`#${number}: auto-merge enabled`);
-    }
     return;
   }
-  // Workflow token only: a merge made with it fires no push workflows, so
-  // auto-merge would land without a release. Merge directly once GitHub reports
-  // every required gate satisfied, then dispatch the release ourselves.
-  if (enabled && enabledBy !== WORKFLOW_ACTOR) { console.log(`#${number}: auto-merge enabled by ${enabledBy}; GitHub merges it`); return; }
-  if (enabled) {
-    // Left by an earlier workflow-token run; it would merge without a release.
-    gh(['pr', 'merge', String(number), '--repo', REPO, '--disable-auto'], { json: false });
-    console.log(`#${number}: workflow-token auto-merge replaced by direct merge`);
-  }
   if (!MERGEABLE_STATES.has(pr.mergeable_state)) { console.log(`#${number}: waiting for required gates (${pr.mergeable_state})`); return; }
+  // Anchor to GitHub's lifecycle timestamp for this head. Comments, replies and
+  // reviews run the feedback gate separately and cannot keep resetting the clock.
+  const headRuns = event => gh(['api', '--paginate', '--slurp',
+    `repos/${REPO}/actions/workflows/pr-bot-feedback-check.yml/runs?event=${event}&head_sha=${pr.head.sha}&per_page=100`])
+    .flatMap(page => page.workflow_runs)
+    .filter(run => run.head_sha === pr.head.sha && run.head_branch === pr.head.ref &&
+      run.head_repository?.full_name === REPO);
+  const lifecycleRuns = headRuns('pull_request').filter(run => run.pull_requests.some(link => link.number === number));
+  // Historical or unassociated checks fall back to the latest PR change. The
+  // fallback can wait longer when the PR is active but cannot use an old commit date.
+  // Token-generated branches can have only a manually dispatched gate; the first
+  // dispatch after PR creation starts the clock. Later refreshes do not reset it.
+  const dispatchStarts = lifecycleRuns.length ? [] : headRuns('workflow_dispatch')
+    .map(run => Date.parse(run.created_at)).filter(start => start >= Date.parse(pr.created_at));
+  const headObservedAt = lifecycleRuns.length
+    ? Math.max(...lifecycleRuns.map(run => Date.parse(run.created_at)))
+    : dispatchStarts.length ? Math.min(...dispatchStarts) : Date.parse(pr.updated_at);
+  const timeline = paginate(`repos/${REPO}/issues/${number}/timeline?per_page=100`);
+  const ready = timeline.filter(event => ['ready_for_review', 'reopened'].includes(event.event));
+  const anchor = Math.max(Date.parse(pr.created_at), ...ready.map(event => Date.parse(event.created_at)),
+    headObservedAt);
+  if (!(Date.now() - anchor >= 10 * 60_000)) {
+    console.log(`#${number}: waiting for a ten-minute review window on the current head`);
+    return;
+  }
   // Re-read just before merging so a hold, draft or new push since the decision wins.
   const fresh = api(`repos/${REPO}/pulls/${number}`);
-  if (fresh.head.sha !== pr.head.sha || decidePullRequest(fresh, { owner: OWNER, repo: REPO, trustedAuthors: TRUSTED_AUTHORS,
+  if (fresh.updated_at !== pr.updated_at || fresh.head.sha !== pr.head.sha || decidePullRequest(fresh, { owner: OWNER, repo: REPO, trustedAuthors: TRUSTED_AUTHORS,
     commitAuthors: authored.map(commit => commit.author?.login ?? null) }).action !== 'enable' || !MERGEABLE_STATES.has(fresh.mergeable_state)) {
     console.log(`#${number}: changed since evaluation; retrying on the next run`);
     return;
@@ -98,6 +110,8 @@ function reconcilePull(number) {
   if (!merged?.merged) { console.log(`#${number}: merge refused (head moved or gates changed); retrying on the next run`); return; }
   // The repository deletes merged head branches itself (delete_branch_on_merge).
   console.log(`#${number}: merged as ${merged.sha.slice(0, 7)}`);
+  // Owner-token merges trigger the normal push release workflow.
+  if (process.env.OWNER_TOKEN_CONFIGURED === 'true') return;
   const files = paginate(`repos/${REPO}/pulls/${number}/files?per_page=100`).map(file => file.filename);
   const runs = api(`repos/${REPO}/actions/workflows/mobile-android-apk.yml/runs?head_sha=${merged.sha}&per_page=1`).total_count;
   if (files.some(isReleasePath) && runs === 0) {
@@ -107,7 +121,7 @@ function reconcilePull(number) {
 }
 
 function reconcilePulls(only) {
-  const numbers = only ? [only] : paginate(`repos/${REPO}/pulls?state=open&base=main&per_page=100`).map(pr => pr.number);
+  const numbers = only ? [only] : paginate(`repos/${REPO}/pulls?state=open&per_page=100`).map(pr => pr.number);
   let failures = 0;
   for (const number of numbers) {
     try { reconcilePull(number); } catch (error) { failures += 1; console.error(`#${number}: ${error.message}`); }

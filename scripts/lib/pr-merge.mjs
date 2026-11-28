@@ -1,22 +1,17 @@
-/**
- * Canonical PR merge flags for AR-app.
- * Squash + auto-merge + delete branch is the default for all automation.
- */
 import { spawnSync } from 'node:child_process';
-
-/** gh pr merge flags used by agents and CI workflows. */
-export const PR_MERGE_FLAGS = ['--auto', '--squash', '--delete-branch'];
+import { PROTECTED_BASE } from './pr-auto-merge-policy.mjs';
 
 const GH_TIMEOUT_MS = 120_000;
 
 /**
  * @param {number} prNumber
- * @param {{ dryRun?: boolean, extraArgs?: string[] }} [opts]
+ * @param {{ repo: string, dryRun?: boolean, skipBranchUpdate?: boolean }} opts
  * @returns {{ ok: boolean, stdout: string, stderr: string, exitCode: number }}
  */
-export function mergePullRequest(prNumber, opts = {}) {
-  const { dryRun = false, extraArgs = [] } = opts;
-  const args = ['pr', 'merge', String(prNumber), ...PR_MERGE_FLAGS, ...extraArgs];
+export function requestPullRequestReconciliation(prNumber, { repo, dryRun = false, skipBranchUpdate = false }) {
+  if (!Number.isSafeInteger(prNumber) || prNumber < 1) throw new Error('PR number must be a positive integer');
+  const args = ['workflow', 'run', 'pr-auto-merge.yml', '--repo', repo, '--ref', PROTECTED_BASE,
+    '-f', `pr_number=${prNumber}`, '-f', `skip_branch_update=${skipBranchUpdate}`];
   if (dryRun) {
     return { ok: true, stdout: `gh ${args.join(' ')}`, stderr: '', exitCode: 0 };
   }
@@ -43,9 +38,4 @@ export function mergePullRequest(prNumber, opts = {}) {
     stderr: (r.stderr || '').trim(),
     exitCode: r.status ?? 1,
   };
-}
-
-/** Human/agent one-liner. */
-export function mergeCommandLine(prNumber) {
-  return `gh pr merge ${prNumber} ${PR_MERGE_FLAGS.join(' ')}`;
 }
