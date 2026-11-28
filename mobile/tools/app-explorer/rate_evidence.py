@@ -18,7 +18,7 @@ CHECKPOINTS = {
     'restore home loans': ('Mortgage', 'Home loans'),
 }
 METRIC = re.compile(r', (Comparison rate|Advertised rate|Rate|Public payable rate|Calculated payable rate|Last verified pricing|Pricing unresolved) ')
-CHANGE = re.compile(r'Best advertised ([↑↓]) ([\d.]+) bps · ([^,]+)')
+CHANGE = re.compile(r', (Best advertised|Rate) ([↑↓]) ([\d.]+) bps · ([^,]+)')
 SECTIONS = ('Mortgage', 'Savings', 'TD')
 CONDITIONS = ('rate_type', 'term', 'term_months', 'interest_payment', 'balance_min', 'balance_max',
               'loan_purpose', 'repayment_type', 'lvr_tier', 'ongoing_rate', 'account_class', 'feature_set')
@@ -74,7 +74,8 @@ def checkpoint(capture, step, section, tab, by_label):
         claim = CHANGE.search(label)
         entry = dict(product=row['product_key'], provider=row['provider'], tier=row.get('rate_index'), label=label)
         if claim:
-            entry['movement'] = {'bps': float(claim[2]) * (1 if claim[1] == '↑' else -1), 'dateLabel': claim[3]}
+            entry['movement'] = {'basis': 'product_best' if claim[1] == 'Best advertised' else 'selected_tier',
+                                 'bps': float(claim[3]) * (1 if claim[2] == '↑' else -1), 'dateLabel': claim[4]}
         if step['name'] == 'verify Macquarie result' and 'macquarie' not in normal(label[:metric.start()]):
             errors.append('Unrelated product in Macquarie search results')
         observed = re.match(r'(\d+(?:\.\d+)?)%', label[metric.end():])
@@ -146,7 +147,14 @@ def best(section, rows):
     return price, [r for n, r in rates if n == price]
 
 
-def movement_receipts(checks, index, device_days):
+def tier_identity(row):
+    # Prices, timestamps and array positions can change without changing the offer.
+    observation = {'rate', 'comparison_rate', 'ongoing_rate', 'last_updated', 'rate_index',
+                   'exact_alert_eligible', 'bank_rate_tier'}
+    return {k: v for k, v in row.items() if k not in observation}
+
+
+def movement_receipts(checks, index, device_days, products):
     wanted = defaultdict(set)
     claims = {}
     dates = sorted(index['dates'])
@@ -156,10 +164,14 @@ def movement_receipts(checks, index, device_days):
             if not movement:
                 continue
             day = claim_date(movement['dateLabel'], device_days.get(check['step']))
-            key = check['section'], row['product'], day, movement['bps'], movement['dateLabel']
+            selected = movement['basis'] == 'selected_tier'
+            key = (check['section'], row['product'], day, movement['bps'], movement['dateLabel'],
+                   row['tier'] if selected else None, row.get('field') if selected else None, movement['basis'])
             if key in claims:
                 continue
             receipt = dict(section=key[0], product=key[1], **movement, day=day, state='history_unavailable')
+            if selected:
+                receipt.update(tier=row['tier'], metric=row.get('field'))
             claims[key] = receipt
             if day not in dates or dates.index(day) == 0:
                 continue
@@ -190,7 +202,13 @@ def movement_receipts(checks, index, device_days):
         pairs = []
         for day in (previous, key[2]):
             groups, source = records[day]
-            price, winners = best(key[0], groups.get(key[:2], []))
+            rows_on_day = groups.get(key[:2], [])
+            if receipt['basis'] == 'selected_tier':
+                current = [r for r in products[key[:2]] if r.get('rate_index') == receipt['tier']]
+                winners = [r for r in rows_on_day if len(current) == 1 and tier_identity(r) == tier_identity(current[0])]
+                price = number(winners[0].get(receipt['metric'])) if len(winners) == 1 else None
+            else:
+                price, winners = best(key[0], rows_on_day)
             receipt.setdefault('observations', []).append(dict(day=day, **source, rate=str(price) if price is not None else None,
                 tiers=[{k: r[k] for k in ('rate_index', *CONDITIONS) if k in r} for r in winners]))
             pairs.append((price, winners))
@@ -199,10 +217,11 @@ def movement_receipts(checks, index, device_days):
             continue
         delta = (new - old) * 10000
         receipt['observedBps'] = float(delta)
-        signature = lambda r: tuple(r.get(k) for k in CONDITIONS)
-        overlap = {signature(r) for r in before} & {signature(r) for r in after}
+        overlap = any(tier_identity(a) == tier_identity(b) for a in before for b in after)
         if abs(delta - Decimal(str(key[3]))) > Decimal('0.05'):
             receipt['state'] = 'movement_differs'
+        elif receipt['basis'] == 'selected_tier':
+            receipt['state'] = 'selected_tier_core_delta_matches'
         elif not overlap:
             receipt['state'] = 'best_tier_conditions_changed'
         else:
@@ -262,7 +281,7 @@ def run(directory, result):
             publishedBanks=len(banks), capturedBanks=len(seen), banksWithoutUICapture=sorted(banks - seen))
     result['retailCheckedAt'] = datetime.now(timezone.utc).isoformat()
     result['retail'] = retail_checks(products)
-    result['movements'] = movement_receipts(result['checkpoints'], index, {k:v.get('deviceDay') for k,v in steps.items()})
+    result['movements'] = movement_receipts(result['checkpoints'], index, {k:v.get('deviceDay') for k,v in steps.items()}, products)
     result['bankCheckedAt'] = datetime.now(timezone.utc).isoformat()
     try:
         result['banks'] = bank_checks(products, observed, day)
