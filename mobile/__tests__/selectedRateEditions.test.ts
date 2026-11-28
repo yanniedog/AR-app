@@ -33,12 +33,13 @@ it('withholds the ANZ cross-tier badge and retains the BCU six-month monthly inc
   expect(productRateChangeText(change)).toContain('5.30% → 5.45%');
 
   const original = useStore.getState();
-  let tree: ReturnType<typeof TestRenderer.create> | undefined;
+  type MountedLine = ReturnType<typeof TestRenderer.create> & { toJSON(): unknown };
+  let tree: MountedLine | undefined;
   try {
     useStore.setState({ core: after.core, coreIntegrity: after.coreIntegrity, details: after.details,
       manifest: after.manifest, previousRateEdition: before });
     const line = (row: typeof bcu) => React.createElement(ProductRateChangeLine, { row, section: 'TD', metric: 'rate' });
-    act(() => { tree = TestRenderer.create(line(bcu)); });
+    act(() => { tree = TestRenderer.create(line(bcu)) as MountedLine; });
     expect(JSON.stringify(tree!.toJSON())).toContain('5.30% → 5.45%');
     act(() => tree!.update(line(anz)));
     expect(tree!.toJSON()).toBeNull();
