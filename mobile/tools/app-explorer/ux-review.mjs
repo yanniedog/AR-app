@@ -172,8 +172,10 @@ export async function reviewRun(dir, { sample } = {}) {
     const r = checkScreen({ screen: s.name, nodes: s.nodes, size: s.size, density, pkg: PKG, settleTimedOut: !!s.step.settleTimedOut, allowProse: legal });
     const list = [...r.findings];
     const png = loadPng(path.join(dir, 'screens', `${s.slug}.png`));
-    if (png && s.step.keyboardMeasurement !== 'measured') keyboardMeasurementGaps += 1;
-    if (png && s.step.keyboardMeasurement === 'measured') {
+    const measuredKeyboard = s.step.keyboardMeasurement === 'measured' && (s.step.keyboardBounds === null ||
+      (Array.isArray(s.step.keyboardBounds) && s.step.keyboardBounds.length === 4 && s.step.keyboardBounds.every(Number.isFinite)));
+    if (png && !measuredKeyboard) keyboardMeasurementGaps += 1;
+    if (png && measuredKeyboard) {
       list.push(...contrastFindings({ screen: s.name, nodes: s.nodes, png, pkg: PKG, density, size: s.size, keyboardBounds: s.step.keyboardBounds }));
       contrastMeasured += 1;
     }
@@ -224,9 +226,9 @@ export async function reviewRun(dir, { sample } = {}) {
   const reviewed = perScreen.length;
   if (keyboardMeasurementGaps) {
     findings.push({ check: 'contrast-not-measured', severity: 'minor', screen: 'all', text: '', at: [0, 0],
-      detail: `Android keyboard bounds unavailable or unstable on ${keyboardMeasurementGaps} captures`, fix: FIXES['contrast-not-measured'] });
+      detail: `Android keyboard bounds unavailable or unstable on ${keyboardMeasurementGaps} captures`, fix: 'Capture stable Android IME bounds alongside the screenshot' });
   }
-  if (reviewed && !contrastMeasured) findings.push({ check: 'contrast-not-measured', severity: 'minor', screen: 'all', text: '', at: [0, 0], detail: 'no screenshot could be read, so contrast was not checked', fix: FIXES['contrast-not-measured'] });
+  if (reviewed && !contrastMeasured && !keyboardMeasurementGaps) findings.push({ check: 'contrast-not-measured', severity: 'minor', screen: 'all', text: '', at: [0, 0], detail: 'no screenshot could be read, so contrast was not checked', fix: FIXES['contrast-not-measured'] });
   const productDuplicates = { sourceRecordsRemoved: report.audit?.sourceDuplicateItemsRemoved ?? null,
     visible: visibleProductDuplicates(screens) };
   for (const group of productDuplicates.visible.evidence) {

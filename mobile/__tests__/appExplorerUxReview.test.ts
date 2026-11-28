@@ -295,8 +295,9 @@ describe('app explorer UX review', () => {
     const faint = (x: number, y: number) => (x > 20 && x < 300 && y > 300 && y < 340 && (x + y) % 3 === 0 ? [200, 200, 200] : [255, 255, 255]);
     const bold = (x: number, y: number) => (x > 20 && x < 300 && y > 300 && y < 340 && (x + y) % 3 === 0 ? [20, 20, 20] : [255, 255, 255]);
     const node = { text: 'Rate', bounds: [20, 300, 300, 340] };
-    expect(checks(review({ rates: [node] }, [], { png: { rates: faint } }))).toContain('contrast');
-    expect(checks(review({ rates: [node] }, [], { png: { rates: bold } }))).not.toContain('contrast');
+    const measured = [{ keyboardMeasurement: 'measured', keyboardBounds: null }];
+    expect(checks(review({ rates: [node] }, measured, { png: { rates: faint } }))).toContain('contrast');
+    expect(checks(review({ rates: [node] }, measured, { png: { rates: bold } }))).not.toContain('contrast');
     const none = review({ rates: [node] });
     expect(checks(none)).toContain('contrast-not-measured');
     expect(none.summaryLines.join('\n')).toMatch(/Contrast not measured/);
