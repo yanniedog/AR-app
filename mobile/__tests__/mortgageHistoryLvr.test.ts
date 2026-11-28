@@ -23,6 +23,9 @@ test('user LVR parsing and profile band', () => {
   expect(userLvrPercent('')).toBeNull();
   expect(userLvrPercent(undefined)).toBeNull();
   expect(profileLvrPercent(['lvr_80-90%', 'lvr_<=70%'])).toBe(90);
+  expect(profileLvrPercent(['>90'])).toBe(90.01);
+  expect(profileLvrPercent(['lvr_>=95%'])).toBe(95);
+  expect(mortgageHistoryLvr('lvr_<=98%', profileLvrPercent(['>90']))).toBe('lvr_>=90.01-90.01%');
   expect(profileLvrPercent([])).toBeNull();
 });
 

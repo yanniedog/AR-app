@@ -27,12 +27,15 @@ export function mortgageHistoryLvr(tier: string | undefined, userLvr?: number | 
   return point > 0 && point <= 100 ? `lvr_>=${point}-${point}%` : null;
 }
 
-/** Upper limit of the saved profile LVR band, used when no exact LVR is known. */
+/** Highest LVR the saved profile bands reach; an open-ended band such as >90
+ * counts from just above its lower limit, so it stays inside the selection. */
 export function profileLvrPercent(tiers: readonly string[] | undefined): number | null {
   let best: number | null = null;
   for (const tier of tiers ?? []) {
     const r = parseLvrRange(tier);
-    if (r && r.hi !== Infinity && (best === null || r.hi > best)) best = r.hi;
+    if (!r) continue;
+    const point = r.hi !== Infinity ? r.hi : r.inclusive ? r.lo : Math.round((r.lo + 0.01) * 100) / 100;
+    if (point > 0 && point <= 100 && (best === null || point > best)) best = point;
   }
   return best;
 }

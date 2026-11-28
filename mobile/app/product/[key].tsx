@@ -308,8 +308,14 @@ export default function ProductDetail() {
     [boundRow, found, publicCatalogue, scenarioFor]);
   const row = useMemo(() => boundRow && publicResolution ? { ...boundRow, rate: publicResolution.status === 'exact' && publicResolution.verifiedCurrent ? publicResolution.payableRate ?? '' : '' } : boundRow,
     [boundRow, publicResolution]);
+  // The saved scenario sets the benchmark LVR whether or not the public catalogue lists this product.
+  const benchmarkScenarioLvr = useMemo(() => {
+    if (found?.section !== 'Mortgage') return undefined;
+    const saved = publicRateScenario('Mortgage', scenario, profile, row ?? undefined);
+    return (fromRatesComparison ? ratesComparisonScenario('Mortgage', saved, comparisonInputs, mortgageFilters) : saved).lvr;
+  }, [found?.section, scenario, profile, row, fromRatesComparison, comparisonInputs, mortgageFilters]);
   const userLvr = found?.section === 'Mortgage'
-    ? userLvrPercent(scenarioFor('Mortgage', row ?? undefined).lvr) ?? profileLvrPercent(profile?.lvrTiers) : null;
+    ? userLvrPercent(benchmarkScenarioLvr) ?? profileLvrPercent(profile?.lvrTiers) : null;
   const mortgageLvr = found?.section === 'Mortgage' ? mortgageHistoryLvr(row?.lvr_tier, userLvr) : undefined;
   const rateHistory = useBankRateHistory(historyEnabled && !!found && historySurfaceReady, mortgageLvr);
   const calculationScenario = useMemo(() => found ? scenarioWithLocalCurrentRate(found.section, scenario,
