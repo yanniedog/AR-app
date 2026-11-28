@@ -1,0 +1,224 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Choice Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Choice Home Loan",
+  "at": [
+   414,
+   269
+  ]
+ },
+ {
+  "label": "Broken Hill Bank",
+  "at": [
+   72,
+   337
+  ]
+ },
+ {
+  "label": "Broken Hill Bank",
+  "flags": "tap",
+  "at": [
+   241,
+   341
+  ]
+ },
+ {
+  "label": "Broken Hill Bank",
+  "at": [
+   241,
+   313
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   414,
+   409
+  ]
+ },
+ {
+  "label": "Provider website",
+  "flags": "tap",
+  "at": [
+   215,
+   559
+  ]
+ },
+ {
+  "label": "Provider website",
+  "at": [
+   241,
+   559
+  ]
+ },
+ {
+  "label": "Comparison rate",
+  "at": [
+   360,
+   700
+  ]
+ },
+ {
+  "label": "5.99%",
+  "at": [
+   360,
+   768
+  ]
+ },
+ {
+  "label": "5.94% Advertised rate",
+  "at": [
+   360,
+   836
+  ]
+ },
+ {
+  "label": "Bank updated 14 Sept 2026 · Checked 29 Nov 2026",
+  "at": [
+   360,
+   896
+  ]
+ },
+ {
+  "label": "Save",
+  "flags": "tap",
+  "at": [
+   190,
+   1046
+  ]
+ },
+ {
+  "label": "Save",
+  "at": [
+   217,
+   1047
+  ]
+ },
+ {
+  "label": "Calculate",
+  "flags": "tap",
+  "at": [
+   530,
+   1046
+  ]
+ },
+ {
+  "label": "Calculate",
+  "at": [
+   531,
+   1046
+  ]
+ },
+ {
+  "label": "Hide Rate details",
+  "flags": "tap",
+  "at": [
+   360,
+   1272
+  ]
+ },
+ {
+  "label": "Rate details",
+  "at": [
+   328,
+   1272
+  ]
+ },
+ {
+  "label": "Rate type",
+  "at": [
+   297,
+   1372
+  ]
+ },
+ {
+  "label": "Variable",
+  "at": [
+   637,
+   1372
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
