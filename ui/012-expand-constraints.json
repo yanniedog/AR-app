@@ -1,0 +1,244 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I With Offset Mortgage",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Show Recorded criteria",
+  "flags": "tap",
+  "at": [
+   360,
+   223
+  ]
+ },
+ {
+  "label": "Recorded criteria",
+  "at": [
+   328,
+   203
+  ]
+ },
+ {
+  "label": "Show Mortgage · History",
+  "flags": "tap",
+  "at": [
+   360,
+   425
+  ]
+ },
+ {
+  "label": "Mortgage · History",
+  "at": [
+   328,
+   425
+  ]
+ },
+ {
+  "label": "Hide Eligibility",
+  "flags": "tap",
+  "at": [
+   360,
+   666
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   328,
+   666
+  ]
+ },
+ {
+  "label": "Residency status",
+  "at": [
+   190,
+   766
+  ]
+ },
+ {
+  "label": "Australian resident",
+  "at": [
+   530,
+   766
+  ]
+ },
+ {
+  "label": "Minimum age",
+  "at": [
+   190,
+   826
+  ]
+ },
+ {
+  "label": "18 years",
+  "at": [
+   530,
+   826
+  ]
+ },
+ {
+  "label": "Other criterion",
+  "at": [
+   190,
+   886
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   530,
+   886
+  ]
+ },
+ {
+  "label": "Individual applicants",
+  "at": [
+   190,
+   946
+  ]
+ },
+ {
+  "label": "Required",
+  "at": [
+   530,
+   946
+  ]
+ },
+ {
+  "label": "Hide Constraints",
+  "flags": "tap",
+  "at": [
+   360,
+   1175
+  ]
+ },
+ {
+  "label": "Constraints",
+  "at": [
+   328,
+   1175
+  ]
+ },
+ {
+  "label": "Maximum limit",
+  "at": [
+   190,
+   1275
+  ]
+ },
+ {
+  "label": "$3,000k",
+  "at": [
+   530,
+   1275
+  ]
+ },
+ {
+  "label": "Other criterion",
+  "at": [
+   190,
+   1335
+  ]
+ },
+ {
+  "label": "30 years",
+  "at": [
+   530,
+   1335
+  ]
+ },
+ {
+  "label": "Other criterion",
+  "at": [
+   190,
+   1384
+  ]
+ },
+ {
+  "label": "1 year",
+  "at": [
+   530,
+   1384
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
