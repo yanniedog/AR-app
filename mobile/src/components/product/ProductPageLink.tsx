@@ -19,11 +19,12 @@ const WEB_KINDS = ['overview', 'fees', 'eligibility', 'terms', 'bundle'] as cons
 const NON_PAGE_URL = /\.(?:pdf|json|xml|ya?ml)\/?$/i;
 
 /** The lender's own web page for the product: the product overview when it is a
- * real page, otherwise any other approved lender link, otherwise the overview
+ * real page, otherwise any other approved lender link or the public source page, otherwise the overview
  * even when it is a landing page. Documents, feeds and API hosts never qualify. */
-export function productWebUrl(links: ProductDetail['links'] | undefined, preferred: string | null): string | null {
+export function productWebUrl(links: ProductDetail['links'] | undefined, preferred: string | null, fallbackUrl?: string | null): string | null {
   if (preferred) return preferred;
-  const candidates = WEB_KINDS.flatMap(kind => links?.[kind] ? [links[kind] as string] : []);
+  // A public-only product has no CDR links; the page its rate was read from is its web page.
+  const candidates = [...WEB_KINDS.flatMap(kind => links?.[kind] ? [links[kind] as string] : []), ...(fallbackUrl ? [fallbackUrl] : [])];
   const landing = (path: string) => /^\/(?:index\.(?:html?|php)\/?|home\/?|(?:en|en-au)\/?)?$/i.test(path);
   for (const allowLanding of [false, true]) for (const url of candidates) {
     const result = trustedExternalUrl({ url, purpose: 'lender_source', label: 'Product' });
@@ -38,7 +39,7 @@ export function productWebUrl(links: ProductDetail['links'] | undefined, preferr
   return null;
 }
 
-export function ProductPageLinks({ overview, productDetails, children }: { overview?: string; productDetails?: ProductDetail | null; children: UiChild }) {
+export function ProductPageLinks({ overview, productDetails, fallbackUrl, children }: { overview?: string; productDetails?: ProductDetail | null; fallbackUrl?: string | null; children: UiChild }) {
   const link = useMemo(() => {
     if (!overview) return null;
     const result = trustedExternalUrl({ url: overview, purpose: 'lender_source', label: 'Product' });
@@ -57,7 +58,7 @@ export function ProductPageLinks({ overview, productDetails, children }: { overv
       || /(?:^|\/)(?:apis?|cds-au|open-?banking)(?:\/|$)/i.test(path)) return null;
     return result.url;
   }, [overview]);
-  const webLink = useMemo(() => productWebUrl(productDetails?.links ?? (overview ? { overview } : undefined), link), [productDetails?.links, overview, link]);
+  const webLink = useMemo(() => productWebUrl(productDetails?.links ?? (overview ? { overview } : undefined), link, fallbackUrl), [productDetails?.links, overview, link, fallbackUrl]);
   useAuditExternalLinks(webLink ? [{ url: webLink, purpose: 'lender_source', label: 'Product' }] : []);
   return <ProductPageContext.Provider value={productDetails ?? null}><ProductWebContext.Provider value={webLink}>{children}</ProductWebContext.Provider></ProductPageContext.Provider>;
 }

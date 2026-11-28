@@ -40,3 +40,17 @@ test('discovery-only legacy details preserve application availability and actual
     if (tree) act(() => tree.unmount());
   }
 });
+
+test('a public-only product with no lender links offers the provider website from its source page', async () => {
+  mockCatalogue = { details: { products: { product: {} } }, manifest: { run_date: '2026-09-15' }, loading: false };
+  mockPublicProduct = { name: 'Portfolio Loan', status: 'current', programmeIds: [],
+    sourceEvidence: { evidenceId: 'e1', url: 'https://www.mortgagemart.example.au/portfolio-loan', sha256: 'a', locator: 'rates' } };
+  let tree: any;
+  try {
+    await act(async () => { tree = TestRenderer.create(<DetailsOnlyProduct productKey="product" />); });
+    expect(tree.root.findAllByType('Button').map((button: any) => button.props.title)).toContain('Provider website');
+  } finally {
+    mockPublicProduct = undefined;
+    if (tree) act(() => tree.unmount());
+  }
+});
