@@ -1,9 +1,25 @@
 import fixture from './fixtures/bankwest-easy-saver-eligibility-20260913.json';
 import siblings from './fixtures/suitability-conditional-siblings-20260913.json';
+import explorerCapture from './fixtures/app-explorer-45897919403.json';
 import sample from '../assets/sample/details.json';
 import type { ProductDetail } from '../src/types';
-import { dedupeDetailItems, dedupeFacts, isAnnualFee, uiDetailItem, uiNormalizedProductFact } from '../src/lib/productUiFacts';
-import { uiPublishedFeeName, uiProductKeyLabel, uiPublishedText } from '../src/lib/uiCopy';
+import { dedupeDetailItems, dedupeFacts, groupUnlinkedGenericFacts, isAnnualFee, uiDetailItem, uiNormalizedProductFact, uiProductFactValue } from '../src/lib/productUiFacts';
+import { uiCount, uiJoin, uiLabel, uiPublishedFeeName, uiProductKeyLabel, uiPublishedText } from '../src/lib/uiCopy';
+
+test('groups the indistinguishable feature rows captured on the Virgin Money product', () => {
+  const capture = explorerCapture['scroll product fees'];
+  const label = uiLabel('Other feature');
+  const expectedValue = 'Conditions apply · Conditions: Unverified';
+  const rows = capture.flatMap((node, i) => node.text === label && capture[i + 1]?.text === expectedValue
+    ? [{ label, value: uiLabel('Conditions apply'), reference: uiCount(i),
+      conditions: 'source-review-required' as const, conditionsUnverified: true, scope: [] }]
+    : []);
+  expect(rows.length).toBeGreaterThan(1);
+  const grouped = groupUnlinkedGenericFacts(rows, () => false);
+  expect(grouped).toHaveLength(1);
+  expect(grouped[0].label).toBe(uiJoin(label, ' · ', uiCount(rows.length)));
+  expect(uiProductFactValue(grouped[0])).toBe(expectedValue);
+});
 
 const detail = fixture.detail as ProductDetail;
 

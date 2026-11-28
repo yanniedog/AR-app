@@ -50,6 +50,31 @@ export function uiProductFactValue(fact: ProductPresentationFact): UiText {
   if (fact.sourceFact?.evidenceState === 'conditional') return uiJoin(fact.value, ' · ', 'Conditional');
   return uiJoin(fact.value, fact.conditionsUnverified ? uiJoin(' · ', 'Conditions', ': ', 'Unverified') : null);
 }
+
+/** Combine rows with the same generic wording and tier while retaining their
+ * occurrence count. A source link makes a row individually useful. */
+export function groupUnlinkedGenericFacts(facts: readonly ProductPresentationFact[],
+  hasSourceLink: (fact: NormalizedProductFact) => boolean): ProductPresentationFact[] {
+  const groups = new Map<string, { fact: ProductPresentationFact; count: number }>();
+  const rows: { fact: ProductPresentationFact; count: number }[] = [];
+  for (const fact of facts) {
+    if ((fact.label !== 'Other feature' && fact.label !== 'Other criterion') ||
+      (fact.sourceFact && hasSourceLink(fact.sourceFact))) {
+      rows.push({ fact, count: 1 });
+      continue;
+    }
+    const key = JSON.stringify([fact.label, uiProductFactValue(fact), fact.scope]);
+    const group = groups.get(key);
+    if (group) {
+      group.count++;
+    } else {
+      const row = { fact, count: 1 };
+      groups.set(key, row);
+      rows.push(row);
+    }
+  }
+  return rows.map(({ fact, count }) => count === 1 ? fact : { ...fact, label: uiJoin(fact.label, ' · ', uiCount(count)) });
+}
 const CASHBACK_VALUE_MAX_LENGTH = 80;
 function number(value: unknown): number | null {
   if (typeof value !== 'number' && (typeof value !== 'string' || !/^\s*\$?\s*[+-]?(?:\d+|[1-9]\d{0,2}(?:,\d{3})+)(?:\.\d+)?\s*$/.test(value))) return null;

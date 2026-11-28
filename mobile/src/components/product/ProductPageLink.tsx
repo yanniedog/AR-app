@@ -52,8 +52,16 @@ function LinkedFact({ url, action, label, children }: { url: string; action: Pro
   </Pressable>;
 }
 
+export function useProductPageDetails() {
+  return useContext(ProductPageContext);
+}
+
+export function productFactLink(detail: ProductDetail | null, fact: NormalizedProductFact) {
+  return factDocumentActions(detail, fact).find(value => value.url);
+}
+
 export function ProductPageLink({ label, fact, children }: { label: UiCopy; fact?: NormalizedProductFact; children: UiChild }) {
-  const detail = useContext(ProductPageContext);
-  const action = fact && factDocumentActions(detail, fact).find(value => value.url);
+  const detail = useProductPageDetails();
+  const action = fact && productFactLink(detail, fact);
   return action?.url ? <LinkedFact url={action.url} action={action} label={label}>{children}</LinkedFact> : <>{children}</>;
 }

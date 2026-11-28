@@ -60,10 +60,13 @@
     "why": "Mortgage projection inputs: balance and Years remaining finish above the Variable rate and Fixed rate strip, with 48 dp controls"
   },
   {
-    "name": "research",
-    "open": "/research",
-    "scroll": 0,
-    "why": "research"
+    "name": "product-facts",
+    "open": "/product/Virgin%20Money%7Cd52579cd-508e-ee11-be36-000d3a79efd0%7CRESIDENTIAL_MORTGAGES%7CVirgin%20Money%20Loaded%20Home%20Loan",
+    "taps": [
+      "Product facts"
+    ],
+    "scroll": 1,
+    "why": "Expanded mortgage facts: check grouped generic rows, their occurrence counts, and linked source rows"
   },
   {
     "name": "rba",
