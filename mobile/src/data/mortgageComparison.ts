@@ -153,18 +153,20 @@ const variantKey = (row: RateRow) => JSON.stringify(VARIANT_FIELDS.map(field => 
  * most the borrower pays, so that tier stays in scope as an upper bound. Variants
  * whose tiers all end below the borrower's LVR are not available to them. */
 function fallbackAccumulator(parsed: ReturnType<typeof inputs>) {
-  const groups = new Map<string, { contains: boolean; row: RateRow | null; lo: number; point: number }>();
+  const groups = new Map<string, { contains: boolean; rows: RateRow[]; lo: number; point: number }>();
   return {
     add(row: RateRow) {
       if (parsed.lvr === null) return;
       const range = parseLvrRange(row.lvr_tier);
       if (!range) return;
       const key = variantKey(row);
-      const group = groups.get(key) ?? { contains: false, row: null, lo: Infinity, point: 0 };
+      const group = groups.get(key) ?? { contains: false, rows: [], lo: Infinity, point: 0 };
       if (containsLvr(range, parsed)) group.contains = true;
-      else if ((range.lo > parsed.lvr || range.lo === parsed.lvr && !range.inclusive) && range.lo < group.lo) {
-        group.row = row; group.lo = range.lo;
-        group.point = range.inclusive ? range.lo : Math.min(range.lo + 0.01, (range.lo + range.hi) / 2);
+      else if (range.lo > parsed.lvr || range.lo === parsed.lvr && !range.inclusive) {
+        const point = range.inclusive ? range.lo : Math.min(range.lo + 0.01, (range.lo + range.hi) / 2);
+        // Every offer in the lowest band above the LVR stays; none is dropped for source order.
+        if (range.lo < group.lo) { group.rows = [row]; group.lo = range.lo; group.point = point; }
+        else if (range.lo === group.lo) { group.rows.push(row); group.point = Math.min(group.point, point); }
       }
       groups.set(key, group);
     },
@@ -172,7 +174,8 @@ function fallbackAccumulator(parsed: ReturnType<typeof inputs>) {
     result(scope?: ReadonlySet<RateRow>) {
       const out = new Map<RateRow, number>();
       for (const group of groups.values()) {
-        if (!group.contains && group.row && (!scope || scope.has(group.row))) out.set(group.row, group.point);
+        if (group.contains) continue;
+        for (const row of group.rows) if (!scope || scope.has(row)) out.set(row, group.point);
       }
       return out;
     },

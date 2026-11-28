@@ -39,3 +39,9 @@ test('a ranked prefix only offers a fallback the full catalogue would also offer
 test('a loan already chosen for comparison needs a tier containing the LVR', () => {
   expect(mortgageComparisonRows([row('p', 'lvr_80-90%', '0.065')], at('70'), undefined, { upperBounds: false }).rows).toEqual([]);
 });
+
+test('every offer in the lowest band above the LVR stays', () => {
+  const a = row('o', 'lvr_70-80%', '0.063', { comparison_rate: '0.063' } as Partial<RateRow>);
+  const b = row('o', 'lvr_70-80%', '0.062', { comparison_rate: '0.062' } as Partial<RateRow>);
+  expect([...higherLvrTierFallbacks([a, b, row('o', 'lvr_80-90%', '0.07')], mortgageComparisonValues(at('50'))).keys()]).toEqual([a, b]);
+});
