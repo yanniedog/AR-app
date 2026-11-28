@@ -36,6 +36,7 @@ import { PressFeedback } from './PressFeedback';
 import { IconAction } from './IconAction';
 import { useWordBubble, type IconWord } from './WordBubble';
 import { COMPACT_ROW, compactFactWidth, compactProductFacet, compactProductRowLayout, compactTierIndex } from './product/compactProductRow';
+import { rateEvidenceId } from '../data/exactRateMove';
 import { sourceRowForPublicRow } from '../data/publicRateIntegration';
 import { scopedRateConditions } from '../data/rateConditions';
 import { scopedFinancialConditionFacts, type ScopedFinancialConditionPresentation } from '../data/scopedFinancialConditionFacts';
@@ -198,8 +199,14 @@ function ProductCardView({
       : []),
     ...tags,
   ];
-  const rateChange = useProductRateChangeSummary(row.product_key);
+  const advertisedValue = !hasDisplayedRateOverride && resolution
+    ? resolution.status === 'exact' && resolution.verifiedCurrent ? resolution.payableRate : null
+    : rateValue;
+  const rateChange = useProductRateChangeSummary(row, section,
+    showingComparisonRate || rateLabel === 'Ongoing rate' ? null : advertisedValue);
   const rateChangeText = productRateChangeText(rateChange, true);
+  const cardId = section === 'Mortgage' ? undefined : `rate-card-${section}`;
+  const movementId = rateChangeText ? rateEvidenceId('rate-move', manifest, section, row) : undefined;
   const receipt = rowVerificationReceipt(row);
   const freshnessLabel = ({ current: 'Current', overdue: 'Overdue', stale: 'Stale', unknown: 'Unknown' } as const)
   [rateFreshness(row, receipt, Date.now())];
@@ -356,9 +363,10 @@ function ProductCardView({
           </PressFeedback>
         </View>
       ) : null}
-      <View ref={detailsBubble.anchorRef} collapsable={false} style={{ flex: 1, minWidth: 0 }}>
+      <View ref={detailsBubble.anchorRef} collapsable={false} testID={cardId ? movementId : undefined}
+        importantForAccessibility={cardId && movementId ? 'yes' : 'auto'} style={{ flex: 1, minWidth: 0 }}>
         <PressFeedback
-          testID={section === 'Mortgage' ? undefined : `rate-card-${section}`}
+          testID={cardId ?? movementId}
           auditControlId={`rate-details:${row.product_key}:${row.rate_index ?? ''}`}
           onPressIn={() => { held.current = false; }}
           onPress={() => { if (!held.current) { detailsBubble.dismiss(); onPress?.(); } held.current = false; }}

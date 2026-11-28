@@ -1,15 +1,12 @@
 import React, { useMemo } from 'react';
 
 import { formatRate, formatRateChangeDate } from '../../data/format';
-import {
-  bestRateForProduct,
-  summarizeProductBestRateSeries,
-  type CurrentProductBestRate,
-  type ProductBestRateSummary,
-} from '../../data/productHistory';
+import type { ProductBestRateSummary } from '../../data/productHistoryModel';
+import { exactRateMove, rateEvidenceId } from '../../data/exactRateMove';
+import { sourceRowForPublicRow } from '../../data/publicRateIntegration';
 import { useStore } from '../../data/store';
 import { moveTone } from '../../lib/moveSemantics';
-import type { SectionKey } from '../../types';
+import type { RateRow, SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { AppText } from '../ui';
 import { uiJoin, uiNumber, type UiText } from '../../lib/uiCopy';
@@ -29,39 +26,29 @@ export function productRateChangeText(
   const arrow = summary.bps > 0 ? '↑' : '↓';
   const when = formatRateChangeDate(summary.observedOn);
   return compact
-    ? uiJoin('Best advertised', ' ', arrow, ' ', bpsMagnitude(summary.bps), ' · ', when)
-    : uiJoin('Best advertised', ' ', arrow, ' ', bpsMagnitude(summary.bps), ' · ', when, ' · ', formatRate(summary.fromRate), ' → ', formatRate(summary.toRate));
+    ? uiJoin('Advertised rate', ' ', arrow, ' ', bpsMagnitude(summary.bps), ' · ', when)
+    : uiJoin('Advertised rate', ' ', arrow, ' ', bpsMagnitude(summary.bps), ' · ', when, ' · ', formatRate(summary.fromRate), ' → ', formatRate(summary.toRate));
 }
 
 export function useProductRateChangeSummary(
-  productKey: string,
-  current?: CurrentProductBestRate,
+  row: RateRow, section: SectionKey, displayed: number | string | null | undefined,
 ): ProductBestRateSummary | null {
-  const runDates = useStore((state) => state.productHistory?.run_dates ?? null);
-  const series = useStore((state) => state.productHistory?.products?.[productKey] ?? null);
-  const coreRunDate = useStore((state) => state.core?.run_date ?? null);
-  const coreBestRate = useStore((state) => bestRateForProduct(state.core, productKey));
-  const currentDate = current?.date ?? coreRunDate;
-  const currentRate = current?.rate ?? coreBestRate;
-  return useMemo(
-    () => {
-      return summarizeProductBestRateSeries(runDates, series, {
-        date: currentDate,
-        rate: currentRate,
-      });
-    },
-    [currentDate, currentRate, runDates, series],
-  );
+  const core = useStore(state => state.core);
+  const integrity = useStore(state => state.coreIntegrity);
+  return useMemo(() => exactRateMove(core, section, sourceRowForPublicRow(row), displayed, integrity),
+    [core, row, section, displayed, integrity]);
 }
 
 export function ProductRateChangeSummaryLine({
   section,
   compact = false,
   model,
+  evidenceId,
 }: {
   section: SectionKey;
   compact?: boolean;
   model: ProductBestRateSummary | null;
+  evidenceId?: string;
 }) {
   const theme = useTheme();
   const text = productRateChangeText(model, compact);
@@ -80,6 +67,7 @@ export function ProductRateChangeSummaryLine({
       variant="tiny"
       weight={model?.kind === 'changed' ? '700' : '400'}
       style={{ color, marginTop: compact ? 3 : 8, textAlign: compact ? 'left' : 'center' }}
+      testID={evidenceId}
       accessibilityLabel={text}
     >
       {text}
@@ -88,18 +76,19 @@ export function ProductRateChangeSummaryLine({
 }
 
 export function ProductRateChangeLine({
-  productKey,
+  row,
   section,
-  current,
+  displayed,
   compact = false,
 }: {
-  productKey: string;
+  row: RateRow;
   section: SectionKey;
-  current?: CurrentProductBestRate;
+  displayed: number | string | null | undefined;
   compact?: boolean;
 }) {
-  const summary = useProductRateChangeSummary(productKey, current);
+  const manifest = useStore(state => state.manifest);
+  const summary = useProductRateChangeSummary(row, section, displayed);
   return (
-    <ProductRateChangeSummaryLine model={summary} section={section} compact={compact} />
+    <ProductRateChangeSummaryLine evidenceId={summary ? rateEvidenceId('rate-move', manifest, section, row) : undefined} model={summary} section={section} compact={compact} />
   );
 }

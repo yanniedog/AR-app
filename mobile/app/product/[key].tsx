@@ -63,6 +63,7 @@ import { mergeProductHistoryTimeline, rateHistoryChartModel } from '../../src/da
 import {
   countFiniteSeriesPoints,
   productSeriesRecordForChart,
+  bestRateForProduct,
   productSeriesRecordWithCurrent,
 } from '../../src/data/productHistory';
 import { useStore } from '../../src/data/store';
@@ -93,7 +94,8 @@ import {
 } from '../../src/lib/performanceAuditActionParams';
 import { ratePresentation } from '../../src/data/ratePresentation';
 import { usePublicRateCatalogue } from '../../src/data/publicRateCatalogue';
-import { bindCurrentPublicRow, publicOfferDedupKey, publicProductOfferRows, publicRateScenario, publicScenarioForRow, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../../src/data/publicRateIntegration';
+import { matchesPublishedRate, rateEvidenceId } from '../../src/data/exactRateMove';
+import { sourceRowForPublicRow, bindCurrentPublicRow, publicOfferDedupKey, publicProductOfferRows, publicRateScenario, publicScenarioForRow, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../../src/data/publicRateIntegration';
 import { publicRateOriginLabel, publicRateText } from '../../src/data/publicRatePresentation';
 import { PublicRateEvidence } from '../../src/components/scenario/PublicRateEvidence';
 import { PublicCostComparison } from '../../src/components/scenario/PublicCostComparison';
@@ -321,22 +323,10 @@ export default function ProductDetail() {
   const calculationScenario = useMemo(() => found ? scenarioWithLocalCurrentRate(found.section, scenario,
     resolveLocalCurrentRate(found.section, scenario, publicCatalogue.references, undefined, publicCatalogue, profile)) : scenario,
   [found, scenario, publicCatalogue, profile]);
-  // Product history is explicitly product-wide: preserve the section-best
-  // headline across every eligible sibling, independently of the selected tier.
-  const currentBest = useMemo(() => {
-    let best: number | null = null;
-    for (const sibling of found?.siblings ?? []) {
-      const rate = toFraction(sibling.rate);
-      if (rate == null || rate <= 0) continue;
-      best = best == null ? rate : found?.section === 'Mortgage' ? Math.min(best, rate) : Math.max(best, rate);
-    }
-    return best;
-  }, [found]);
-  // A home loan's product history is its lowest rate across every tier. When the
-  // selected tier prices differently that line is not this loan's rate, so the
-  // chart shows the selected rate itself rather than another tier's history.
+  // The all-tier chart uses the same unfiltered catalogue as its historical series.
+  const currentBest = useMemo(() => bestRateForProduct(core, productKey), [core, productKey]);
   const selectedRate = row ? toFraction(row.rate) : null;
-  const plotSelectedOnly = found?.section === 'Mortgage' && selectedRate != null && selectedRate > 0
+  const plotSelectedOnly = found?.section === 'Mortgage' && selectedRate != null
     && currentBest != null && selectedRate !== currentBest;
   const auditProductError = core && isMandatoryEligibilityReady() && !row
     ? !mandatoryProductAllowed(productKey)
@@ -732,6 +722,9 @@ export default function ProductDetail() {
   );
   const qualifier = rateQualifier(row, section);
   const presentation = ratePresentation(row, section, mortgageRateMetric);
+  const displayedAdvertisedRate = publicResolution ? row.rate : presentation.primaryLabel === 'Comparison rate' ? null : presentation.primary;
+  const priceEvidenceId = matchesPublishedRate(core, section, sourceRowForPublicRow(boundRow ?? row), displayedAdvertisedRate)
+    ? rateEvidenceId('rate-evidence', manifest, section, row) : undefined;
 
   const observedProductPoints = countFiniteSeriesPoints(seededProductValues);
   const selectedHistoryContext = !plotSelectedOnly && currentBest !== null && toFraction(row.rate) !== currentBest
@@ -809,7 +802,7 @@ export default function ProductDetail() {
           <AppText variant="small" color="textMuted">
             {publicResolution ? publicRateOriginLabel(publicResolution) : presentation.primaryLabel}
           </AppText>
-          <AppText variant="rateHero" weight="700" style={{ color: theme.colors.text }}>
+          <AppText testID={priceEvidenceId} variant="rateHero" weight="700" style={{ color: theme.colors.text }}>
             {publicResolution ? publicRateText(publicResolution) : formatRate(presentation.primary)}
           </AppText>
           {presentation.secondary !== null && presentation.secondaryLabel ? (
@@ -818,9 +811,9 @@ export default function ProductDetail() {
             </AppText>
           ) : null}
           <ProductRateChangeLine
-            productKey={productKey}
+            row={boundRow ?? row}
             section={section}
-            current={{ date: core?.run_date, rate: currentBest }}
+            displayed={displayedAdvertisedRate}
           />
           <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
             {row.last_updated ? uiJoin('Bank updated', ' ', uiDate(row.last_updated), ' · ', 'Checked', ' ', uiDate(core?.run_date)) : uiJoin('Checked', ' ', uiDate(core?.run_date))}
