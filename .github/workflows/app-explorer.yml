@@ -291,7 +291,11 @@ jobs:
           git config user.name github-actions
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
-          git commit -qm "app-explorer run $GITHUB_RUN_ID"
+          if [ "$GITHUB_RUN_ATTEMPT" -gt 1 ] && git ls-remote --exit-code "$remote" "refs/heads/$branch" >/dev/null; then
+            git fetch --depth 1 "$remote" "refs/heads/$branch"
+            git reset --soft FETCH_HEAD
+          fi
+          git commit --allow-empty -qm "app-explorer run $GITHUB_RUN_ID"
           git push -q "$remote" "HEAD:refs/heads/$branch"
           echo "Results: branch $branch"
           tag=$(node -e 'try{console.log(require("./run.json").tag||"")}catch{console.log("")}')

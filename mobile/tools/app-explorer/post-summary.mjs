@@ -20,8 +20,8 @@ const reportData = json('report.json');
 const sessionVerdict = reportData.session;
 const auditLine = (report.match(/^\*\*Audit.*$/m) || report.match(/^Mode .*$/m) || ['no run summary'])[0];
 out.push(`explorer run ${runId} on ${run.tag || '?'} (${run.mode || '?'})`, '');
-if (['session', 'full', 'audit'].includes(run.mode)) out.push(...rateSummary(dir));
 if (sessionVerdict) out.push(...renderOutcome(sessionVerdict));
+if (['session', 'full', 'audit'].includes(run.mode)) out.push(...rateSummary(dir));
 out.push(...renderSessionCoverage(reportData));
 let decoded;
 if (fs.existsSync(path.join(dir, 'audit-log.txt'))) {

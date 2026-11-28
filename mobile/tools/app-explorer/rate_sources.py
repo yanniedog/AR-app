@@ -2,6 +2,8 @@
 import gzip
 import hashlib
 import io
+import ipaddress
+import socket
 import json
 import re
 import subprocess
@@ -13,9 +15,18 @@ REGISTER = 'https://api.cdr.gov.au/cdr-register/v1/banking/data-holders/brands/s
 MAX_BYTES = 8 * 1024 * 1024
 
 
-def fetch(url, *headers):
+def fetch(url, *headers, public_bank=False):
     cmd = ['curl', '--silent', '--show-error', '--fail', '--proto', '=https',
            '--connect-timeout', '12', '--max-time', '25', '--max-filesize', str(MAX_BYTES)]
+    if public_bank:
+        host = urlsplit(url).hostname
+        addresses = [ipaddress.ip_address(entry[4][0]) for entry in socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)]
+        if not addresses or any(not ip.is_global or ip.is_multicast for ip in addresses):
+            raise ValueError('Register endpoint does not resolve exclusively to public addresses')
+        # Direct HTTPS with the validated IP pinned while TLS checks the registered name.
+        ip = next((ip for ip in addresses if ip.version == 4), addresses[0])
+        address = str(ip) if ip.version == 4 else f'[{ip}]'
+        cmd.extend(['--noproxy', '*', '--resolve', f'{host}:443:{address}'])
     for header in headers:
         cmd.extend(['-H', header])
     result = subprocess.run([*cmd, '--', url], capture_output=True, timeout=30)
@@ -70,12 +81,16 @@ def bank_receipt(job, brands):
     if len(matches) != 1:
         return {**receipt, 'state': 'register_brand_unresolved'}
     base = urlsplit(matches[0]['publicBaseUri'])
-    if base.scheme != 'https' or not base.hostname or base.username or base.password or base.query or base.fragment:
+    if (base.scheme != 'https' or not base.hostname or not re.fullmatch(r'[a-z0-9.-]+', base.hostname) or
+            base.netloc.lower() not in (base.hostname, base.hostname + ':443') or base.query or base.fragment):
         return {**receipt, 'state': 'invalid_register_endpoint'}
-    url = base.geturl().rstrip('/') + '/cds-au/v1/banking/products/' + quote(row['product_id'], safe='')
+    root = base.geturl().rstrip('/')
+    if not root.endswith('/cds-au/v1'):
+        root += '/cds-au/v1'
+    url = root + '/banking/products/' + quote(row['product_id'], safe='')
     receipt['url'] = url
     try:
-        product = json.loads(fetch(url, 'x-v: 7', 'x-min-v: 3', 'Accept: application/json'))['data']
+        product = json.loads(fetch(url, 'x-v: 7', 'x-min-v: 3', 'Accept: application/json', public_bank=True))['data']
         if product['productId'] != row['product_id'] or product.get('productCategory') != row['category']:
             return {**receipt, 'state': 'product_identity_unresolved'}
         field = 'lendingRates' if section == 'Mortgage' else 'depositRates'
@@ -110,5 +125,5 @@ def bank_receipt(job, brands):
                                     'bankValues': [[i, x.get('rate'), x.get('comparisonRate')] for i, x in candidates]})
             counts[state] = counts.get(state, 0) + 1
         return {**receipt, 'state': 'read', 'counts': counts, 'differences': differences}
-    except (ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
+    except (ValueError, KeyError, TypeError, OSError, subprocess.TimeoutExpired) as error:
         return {**receipt, 'state': 'bank_response_unavailable', 'error': str(error)[:220]}

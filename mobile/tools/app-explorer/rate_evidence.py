@@ -43,6 +43,11 @@ def catalog(core):
     return by_label, products
 
 
+def matches_quote(value, fraction):
+    tolerance = Decimal(1).scaleb(value.as_tuple().exponent) / 2
+    return abs(value - fraction * 100) <= tolerance
+
+
 def checkpoint(capture, step, section, tab, by_label):
     nodes = [n for n in capture['nodes'] if visible(n, capture['size'], step.get('keyboardBounds'))]
     selected = [n['desc'] for n in nodes if n['clickable'] and n['selected'] and n['desc'] in ('Home loans', 'Savings', 'Term deposits')]
@@ -80,9 +85,8 @@ def checkpoint(capture, step, section, tab, by_label):
         else:
             # Compare at the precision actually quoted on the APK.
             value = Decimal(observed[1])
-            tolerance = Decimal(1).scaleb(value.as_tuple().exponent) / 2
             entry.update(field=field, coreFraction=str(expected), displayedPercent=str(value),
-                         state='matched' if abs(value - expected * 100) <= tolerance else 'rate_differs')
+                         state='matched' if matches_quote(value, expected) else 'rate_differs')
             if entry['state'] == 'rate_differs':
                 errors.append('Displayed rate differs from published tier')
         rows.append(entry)
@@ -110,12 +114,16 @@ def quote_check(directory, step, section, by_label):
               if visible(n, capture['size'], step.get('keyboardBounds'))}
     row = candidates[0]
     price = re.match(r'(\d+(?:\.\d+)?%)', label[metric.end():])
-    if not price:
+    field = {'Rate': 'rate', 'Advertised rate': 'rate', 'Comparison rate': 'comparison_rate'}.get(metric[1])
+    expected = number(row.get(field)) if field else None
+    if not price or expected is None:
         return result
+    source_matches = matches_quote(Decimal(price[1][:-1]), expected)
     required = [row['product_name'], row['provider'], metric[1], price[1]]
     missing = [label for label in required if normal(label) not in labels]
     return {**result, 'product': row['product_key'], 'tier': row['rate_index'],
-            'missing': missing, 'state': 'detail_differs' if missing else 'matched'}
+            'missing': missing, 'publishedField': field, 'publishedFraction': str(expected),
+            'state': 'matched' if source_matches and not missing else 'detail_differs'}
 
 
 def claim_date(label, device_day):
@@ -211,8 +219,7 @@ def bank_checks(products, observed, day):
         groups[rows[0]['provider'], key[0]].append(key)
     keys = set(observed)
     for candidates in groups.values():
-        if not keys.intersection(candidates):
-            keys.add(sorted(candidates)[date.fromisoformat(day).toordinal() % len(candidates)])
+        keys.add(sorted(candidates)[date.fromisoformat(day).toordinal() % len(candidates)])
     jobs = [(s, products[s, k]) for s, k in sorted(keys)]
     with ThreadPoolExecutor(max_workers=6) as pool:
         return list(pool.map(lambda job: bank_receipt(job, brands), jobs))

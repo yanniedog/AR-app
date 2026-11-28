@@ -482,6 +482,7 @@ class Explorer {
     const slug = `${index}-${String(name).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 50).toLowerCase()}`;
     const anrBefore = systemDialogs.filter(d => d.ours).length;
     const before = this.current.nodes.length ? fingerprint(this.current.nodes) : null;
+    const captureDay = this.sessionFlag ? sh('date +%F', { allowFail: true })?.trim() : undefined;
     const settled = await settle(settleTimeout, since, before, { scrolling: Boolean(this.scrollStep), until });
     const appAnr = systemDialogs.filter(d => d.ours).length > anrBefore;
     this.current = settled;
@@ -508,7 +509,7 @@ class Explorer {
       waitedMs: settled.waitedMs,
       shifts: settled.shifts || undefined,
       errorState: this.sessionFlag && settled.errorState ? settled.errorState : undefined,
-      deviceDay: this.sessionFlag ? sh('date +%F', { allowFail: true })?.trim() : undefined,
+      deviceDay: captureDay && captureDay === sh('date +%F', { allowFail: true })?.trim() ? captureDay : undefined,
       dumpMs: settled.dumpMs,
       session: this.sessionFlag || undefined,
       alive: Boolean(pid),
@@ -938,6 +939,8 @@ class Explorer {
       if (matched) {
         // Retain the exact hierarchy that satisfied a delayed assertion.
         if (nodes !== initialNodes) {
+          if (rec.deviceDay !== sh('date +%F', { allowFail: true })?.trim()) delete rec.deviceDay;
+          delete rec.keyboardBounds;
           Object.assign(rec, this.captureScreen(rec.slug));
           const screen = summarize(nodes);
           fs.writeFileSync(path.join(this.out, 'ui', `${rec.slug}.json`), JSON.stringify(screen, null, 1));
