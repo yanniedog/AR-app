@@ -304,8 +304,9 @@ function jargon({ screen, app, allowProse }) {
 function crowded({ screen, app, density, size }) {
   const dp = DP(density);
   const barTop = bottomBarTop(app, size);
-  // Keep visible content targets, including controls ending flush with the bar.
-  const underBar = n => n.bounds[3] > barTop && n.bounds[1] > size[1] * 0.5 && !TAB_LABELS.test((n.text || n.desc || '').trim());
+  const scrollers = app.filter(n => n.scrollable && area(n.bounds) > 0);
+  const underBar = n => n.bounds[1] > size[1] * 0.5 && !TAB_LABELS.test((n.text || n.desc || '').trim())
+    && (n.bounds[3] > barTop || (n.bounds[3] >= barTop - 2 && clippedByScroller(n, scrollers, app)));
   const taps = app.filter(n => n.clickable && n.enabled && !n.scrollable && area(n.bounds) < 400000 && !underBar(n));
   const out = [];
   for (let i = 0; i < taps.length && out.length < 4; i++) {
