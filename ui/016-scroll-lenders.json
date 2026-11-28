@@ -1,0 +1,402 @@
+[
+ {
+  "label": "",
+  "flags": "tap",
+  "at": [
+   360,
+   800
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "at": [
+   300,
+   224
+  ]
+ },
+ {
+  "label": "Close Temporary filters",
+  "flags": "tap",
+  "at": [
+   640,
+   224
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   859
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   195
+  ]
+ },
+ {
+  "label": "Fixed",
+  "flags": "tap",
+  "at": [
+   90,
+   195
+  ]
+ },
+ {
+  "label": "Fixed",
+  "at": [
+   90,
+   180
+  ]
+ },
+ {
+  "label": "Variable",
+  "flags": "tap",
+  "at": [
+   234,
+   195
+  ]
+ },
+ {
+  "label": "Variable",
+  "at": [
+   234,
+   180
+  ]
+ },
+ {
+  "label": "Fixed · bundle",
+  "flags": "tap",
+  "at": [
+   431,
+   195
+  ]
+ },
+ {
+  "label": "Fixed · bundle",
+  "at": [
+   431,
+   180
+  ]
+ },
+ {
+  "label": "Introductory",
+  "flags": "tap",
+  "at": [
+   621,
+   195
+  ]
+ },
+ {
+  "label": "Introductory",
+  "at": [
+   633,
+   180
+  ]
+ },
+ {
+  "label": "Repayment",
+  "at": [
+   360,
+   239
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   297
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "flags": "tap",
+  "at": [
+   173,
+   297
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "at": [
+   173,
+   282
+  ]
+ },
+ {
+  "label": "Interest only",
+  "flags": "tap",
+  "at": [
+   425,
+   297
+  ]
+ },
+ {
+  "label": "Interest only",
+  "at": [
+   425,
+   282
+  ]
+ },
+ {
+  "label": "Account features",
+  "at": [
+   360,
+   372
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   460
+  ]
+ },
+ {
+  "label": "Bill payment",
+  "flags": "tap",
+  "at": [
+   133,
+   460
+  ]
+ },
+ {
+  "label": "Bill payment",
+  "at": [
+   133,
+   460
+  ]
+ },
+ {
+  "label": "Card access",
+  "flags": "tap",
+  "at": [
+   346,
+   460
+  ]
+ },
+ {
+  "label": "Card access",
+  "at": [
+   346,
+   460
+  ]
+ },
+ {
+  "label": "Digital banking",
+  "flags": "tap",
+  "at": [
+   573,
+   460
+  ]
+ },
+ {
+  "label": "Digital banking",
+  "at": [
+   574,
+   460
+  ]
+ },
+ {
+  "label": "Early / extra repayments",
+  "flags": "tap",
+  "at": [
+   695,
+   460
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   360,
+   576
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   664
+  ]
+ },
+ {
+  "label": "Business applicants",
+  "flags": "tap",
+  "at": [
+   180,
+   664
+  ]
+ },
+ {
+  "label": "Business applicants",
+  "at": [
+   180,
+   664
+  ]
+ },
+ {
+  "label": "Employment status",
+  "flags": "tap",
+  "at": [
+   483,
+   664
+  ]
+ },
+ {
+  "label": "Employment status",
+  "at": [
+   483,
+   664
+  ]
+ },
+ {
+  "label": "Individual applicants",
+  "flags": "tap",
+  "at": [
+   664,
+   664
+  ]
+ },
+ {
+  "label": "Individual applicants",
+  "at": [
+   676,
+   664
+  ]
+ },
+ {
+  "label": "Show Published details",
+  "flags": "tap",
+  "at": [
+   360,
+   857
+  ]
+ },
+ {
+  "label": "Published details",
+  "at": [
+   328,
+   857
+  ]
+ },
+ {
+  "label": "Lenders",
+  "at": [
+   360,
+   1021
+  ]
+ },
+ {
+  "label": "Search lenders",
+  "flags": "tap",
+  "at": [
+   386,
+   1119
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1245
+  ]
+ },
+ {
+  "label": "360 MMS",
+  "flags": "tap",
+  "at": [
+   116,
+   1245
+  ]
+ },
+ {
+  "label": "360 MMS",
+  "at": [
+   116,
+   1245
+  ]
+ },
+ {
+  "label": "AAA Financial Corporation",
+  "flags": "tap",
+  "at": [
+   399,
+   1245
+  ]
+ },
+ {
+  "label": "AAA Financial Corporation",
+  "at": [
+   399,
+   1245
+  ]
+ },
+ {
+  "label": "Abacus Home Loans",
+  "flags": "tap",
+  "at": [
+   643,
+   1245
+  ]
+ },
+ {
+  "label": "Abacus Home Loans",
+  "at": [
+   655,
+   1245
+  ]
+ },
+ {
+  "label": "Show All 140 Lenders",
+  "flags": "tap",
+  "at": [
+   187,
+   1349
+  ]
+ },
+ {
+  "label": "Show All 140 Lenders",
+  "at": [
+   187,
+   1350
+  ]
+ },
+ {
+  "label": "Reset",
+  "flags": "tap",
+  "at": [
+   154,
+   1502
+  ]
+ },
+ {
+  "label": "Reset",
+  "at": [
+   154,
+   1503
+  ]
+ },
+ {
+  "label": "Show 7,657 rates",
+  "flags": "tap",
+  "at": [
+   494,
+   1502
+  ]
+ },
+ {
+  "label": "Show 7,657 rates",
+  "at": [
+   494,
+   1503
+  ]
+ }
+]

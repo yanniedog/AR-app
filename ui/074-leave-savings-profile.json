@@ -1,0 +1,209 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Profile",
+  "at": [
+   207,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Account type: Any",
+  "id": "profile:Savings:depositKinds:open",
+  "flags": "tap",
+  "at": [
+   360,
+   198
+  ]
+ },
+ {
+  "label": "Features: Any",
+  "id": "profile:Savings:accountFeatures:open",
+  "flags": "tap",
+  "at": [
+   360,
+   246
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   95,
+   246
+  ]
+ },
+ {
+  "label": "Term deposits · Saved requirements 0",
+  "at": [
+   360,
+   350
+  ]
+ },
+ {
+  "label": "Interest paid: Any",
+  "id": "profile:TD:interestPayments:open",
+  "flags": "tap",
+  "at": [
+   360,
+   442
+  ]
+ },
+ {
+  "label": "Interest paid",
+  "at": [
+   121,
+   441
+  ]
+ },
+ {
+  "label": "Features: Any",
+  "id": "profile:TD:accountFeatures:open",
+  "flags": "tap",
+  "at": [
+   360,
+   538
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   95,
+   538
+  ]
+ },
+ {
+  "label": "Shared requirements · Savings accounts / Term deposits",
+  "at": [
+   360,
+   662
+  ]
+ },
+ {
+  "label": "Digital banking",
+  "at": [
+   303,
+   766
+  ]
+ },
+ {
+  "label": "Digital banking",
+  "flags": "tap",
+  "at": [
+   641,
+   766
+  ]
+ },
+ {
+  "label": "Show Mortgage comparison",
+  "flags": "tap",
+  "at": [
+   360,
+   991
+  ]
+ },
+ {
+  "label": "Mortgage comparison",
+  "at": [
+   328,
+   991
+  ]
+ },
+ {
+  "label": "Show Private customer inputs",
+  "flags": "tap",
+  "at": [
+   360,
+   1232
+  ]
+ },
+ {
+  "label": "Private customer inputs",
+  "at": [
+   328,
+   1232
+  ]
+ },
+ {
+  "label": "Removed",
+  "at": [
+   315,
+   1310
+  ]
+ },
+ {
+  "label": "Undo",
+  "flags": "tap",
+  "at": [
+   621,
+   1310
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

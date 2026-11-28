@@ -1,0 +1,241 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Profile",
+  "at": [
+   207,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Saved requirements",
+  "at": [
+   360,
+   305
+  ]
+ },
+ {
+  "label": "Scope · All screens",
+  "at": [
+   360,
+   353
+  ]
+ },
+ {
+  "label": "Home loans · Saved requirements 0",
+  "at": [
+   360,
+   393
+  ]
+ },
+ {
+  "label": "Loan purpose: Any",
+  "id": "profile:Mortgage:loanPurposes:open",
+  "flags": "tap",
+  "at": [
+   360,
+   485
+  ]
+ },
+ {
+  "label": "Loan purpose",
+  "at": [
+   130,
+   484
+  ]
+ },
+ {
+  "label": "Rate type: Any",
+  "id": "profile:Mortgage:rateTypes:open",
+  "flags": "tap",
+  "at": [
+   360,
+   581
+  ]
+ },
+ {
+  "label": "Rate type",
+  "at": [
+   98,
+   580
+  ]
+ },
+ {
+  "label": "Repayment: Any",
+  "id": "profile:Mortgage:repaymentTypes:open",
+  "flags": "tap",
+  "at": [
+   360,
+   677
+  ]
+ },
+ {
+  "label": "Repayment",
+  "at": [
+   112,
+   676
+  ]
+ },
+ {
+  "label": "Features: Any",
+  "id": "profile:Mortgage:accountFeatures:open",
+  "flags": "tap",
+  "at": [
+   360,
+   773
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   95,
+   773
+  ]
+ },
+ {
+  "label": "Savings · Saved requirements 5",
+  "at": [
+   360,
+   877
+  ]
+ },
+ {
+  "label": "Account type: Ongoing",
+  "id": "profile:Savings:depositKinds:open",
+  "flags": "tap",
+  "at": [
+   360,
+   969
+  ]
+ },
+ {
+  "label": "Account type",
+  "at": [
+   126,
+   968
+  ]
+ },
+ {
+  "label": "Features: Card access +3",
+  "id": "profile:Savings:accountFeatures:open",
+  "flags": "tap",
+  "at": [
+   360,
+   1065
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   95,
+   1065
+  ]
+ },
+ {
+  "label": "Term deposits · Saved requirements 0",
+  "at": [
+   360,
+   1169
+  ]
+ },
+ {
+  "label": "Interest paid: Any",
+  "id": "profile:TD:interestPayments:open",
+  "flags": "tap",
+  "at": [
+   360,
+   1261
+  ]
+ },
+ {
+  "label": "Interest paid",
+  "at": [
+   121,
+   1260
+  ]
+ },
+ {
+  "label": "Features: Any",
+  "id": "profile:TD:accountFeatures:open",
+  "flags": "tap",
+  "at": [
+   360,
+   1351
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   95,
+   1357
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

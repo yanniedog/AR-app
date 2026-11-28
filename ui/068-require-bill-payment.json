@@ -1,0 +1,104 @@
+[
+ {
+  "label": "",
+  "flags": "tap",
+  "at": [
+   360,
+   800
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   300,
+   690
+  ]
+ },
+ {
+  "label": "Close Features",
+  "flags": "tap",
+  "at": [
+   640,
+   690
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1104
+  ]
+ },
+ {
+  "label": "Any",
+  "flags": "tap",
+  "at": [
+   360,
+   804
+  ]
+ },
+ {
+  "label": "Card access",
+  "flags": "tap,on",
+  "at": [
+   360,
+   904
+  ]
+ },
+ {
+  "label": "PayID",
+  "flags": "tap,on",
+  "at": [
+   360,
+   1004
+  ]
+ },
+ {
+  "label": "Unlimited transactions",
+  "flags": "tap,on",
+  "at": [
+   360,
+   1104
+  ]
+ },
+ {
+  "label": "Bill payment",
+  "flags": "tap",
+  "at": [
+   360,
+   1204
+  ]
+ },
+ {
+  "label": "Overdraft",
+  "flags": "tap",
+  "at": [
+   360,
+   1304
+  ]
+ },
+ {
+  "label": "Free transactions",
+  "flags": "tap",
+  "at": [
+   360,
+   1404
+  ]
+ },
+ {
+  "label": "Done",
+  "flags": "tap",
+  "at": [
+   360,
+   1502
+  ]
+ },
+ {
+  "label": "Done",
+  "at": [
+   360,
+   1503
+  ]
+ }
+]

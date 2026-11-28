@@ -1,0 +1,211 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Income Plus",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Income Plus",
+  "at": [
+   414,
+   269
+  ]
+ },
+ {
+  "label": "Australian Military Bank",
+  "at": [
+   72,
+   337
+  ]
+ },
+ {
+  "label": "Australian Military Bank",
+  "flags": "tap",
+  "at": [
+   285,
+   341
+  ]
+ },
+ {
+  "label": "Australian Military Bank",
+  "at": [
+   285,
+   313
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   414,
+   409
+  ]
+ },
+ {
+  "label": "Provider website",
+  "flags": "tap",
+  "at": [
+   215,
+   559
+  ]
+ },
+ {
+  "label": "Provider website",
+  "at": [
+   241,
+   559
+  ]
+ },
+ {
+  "label": "Rate",
+  "at": [
+   360,
+   700
+  ]
+ },
+ {
+  "label": "5.50%",
+  "at": [
+   360,
+   768
+  ]
+ },
+ {
+  "label": "Best advertised ↑ 25 bps · 4 days ago · 5.35% → 5.60%",
+  "at": [
+   360,
+   872
+  ]
+ },
+ {
+  "label": "Bank updated 23 Nov 2026 · Checked 29 Nov 2026",
+  "at": [
+   360,
+   952
+  ]
+ },
+ {
+  "label": "Save",
+  "flags": "tap",
+  "at": [
+   190,
+   1102
+  ]
+ },
+ {
+  "label": "Save",
+  "at": [
+   217,
+   1103
+  ]
+ },
+ {
+  "label": "Calculate",
+  "flags": "tap",
+  "at": [
+   530,
+   1102
+  ]
+ },
+ {
+  "label": "Calculate",
+  "at": [
+   531,
+   1102
+  ]
+ },
+ {
+  "label": "Hide Rate details",
+  "flags": "tap",
+  "at": [
+   360,
+   1328
+  ]
+ },
+ {
+  "label": "Rate details",
+  "at": [
+   328,
+   1328
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
