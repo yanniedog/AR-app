@@ -1,0 +1,202 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I No Offset Mortgage",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   211
+  ]
+ },
+ {
+  "label": "Redraw facility",
+  "at": [
+   190,
+   265
+  ]
+ },
+ {
+  "label": "Included",
+  "at": [
+   530,
+   265
+  ]
+ },
+ {
+  "label": "Show Documents",
+  "flags": "tap",
+  "at": [
+   360,
+   494
+  ]
+ },
+ {
+  "label": "Documents",
+  "at": [
+   328,
+   494
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   360,
+   658
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   286,
+   710
+  ]
+ },
+ {
+  "label": "Unverified",
+  "at": [
+   626,
+   710
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   273,
+   762
+  ]
+ },
+ {
+  "label": "Unassessed",
+  "at": [
+   613,
+   762
+  ]
+ },
+ {
+  "label": "Show Recorded criteria",
+  "flags": "tap",
+  "at": [
+   360,
+   927
+  ]
+ },
+ {
+  "label": "Recorded criteria",
+  "at": [
+   328,
+   927
+  ]
+ },
+ {
+  "label": "Show Mortgage · History",
+  "flags": "tap",
+  "at": [
+   360,
+   1168
+  ]
+ },
+ {
+  "label": "Mortgage · History",
+  "at": [
+   328,
+   1168
+  ]
+ },
+ {
+  "label": "Show Eligibility",
+  "flags": "tap",
+  "at": [
+   360,
+   1369
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   328,
+   1389
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

@@ -1,0 +1,284 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I No Offset Mortgage",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   227
+  ]
+ },
+ {
+  "label": "30 days",
+  "flags": "tap",
+  "at": [
+   105,
+   227
+  ]
+ },
+ {
+  "label": "30 days",
+  "at": [
+   105,
+   213
+  ]
+ },
+ {
+  "label": "90 days",
+  "flags": "tap",
+  "at": [
+   254,
+   227
+  ]
+ },
+ {
+  "label": "90 days",
+  "at": [
+   254,
+   213
+  ]
+ },
+ {
+  "label": "1 year",
+  "flags": "tap,sel",
+  "at": [
+   392,
+   227
+  ]
+ },
+ {
+  "label": "1 year",
+  "at": [
+   392,
+   213
+  ]
+ },
+ {
+  "label": "All",
+  "flags": "tap",
+  "at": [
+   505,
+   227
+  ]
+ },
+ {
+  "label": "All",
+  "at": [
+   505,
+   213
+  ]
+ },
+ {
+  "label": "Benchmarks · LVR ≥80.0%",
+  "flags": "tap,sel",
+  "at": [
+   217,
+   316
+  ]
+ },
+ {
+  "label": "Benchmarks · LVR ≥80.0%",
+  "at": [
+   217,
+   316
+  ]
+ },
+ {
+  "label": "Home loans · 1 year · 1 Observed · 29 Nov 2026 · Owner Occupier P&I No Offset Mortgage 6.29% · Selected rate · Min 5.94%",
+  "at": [
+   360,
+   590
+  ]
+ },
+ {
+  "label": "History",
+  "at": [
+   396,
+   582
+  ]
+ },
+ {
+  "label": "29 Nov 2026",
+  "at": [
+   360,
+   832
+  ]
+ },
+ {
+  "label": "Previous date",
+  "flags": "tap",
+  "at": [
+   80,
+   932
+  ]
+ },
+ {
+  "label": "6.29% · Selected rate",
+  "at": [
+   360,
+   872
+  ]
+ },
+ {
+  "label": "Market rate range · 5.94% – 11.7%",
+  "at": [
+   360,
+   912
+  ]
+ },
+ {
+  "label": "Market median · 7.39%",
+  "at": [
+   360,
+   952
+  ]
+ },
+ {
+  "label": "Market mean · 7.79%",
+  "at": [
+   360,
+   992
+  ]
+ },
+ {
+  "label": "Next date",
+  "flags": "tap,off",
+  "at": [
+   640,
+   932
+  ]
+ },
+ {
+  "label": "RBA cash rate · 4.85%",
+  "at": [
+   360,
+   1032
+  ]
+ },
+ {
+  "label": "Product rate",
+  "at": [
+   165,
+   1088
+  ]
+ },
+ {
+  "label": "Market rate range",
+  "at": [
+   430,
+   1088
+  ]
+ },
+ {
+  "label": "Market median",
+  "at": [
+   181,
+   1152
+  ]
+ },
+ {
+  "label": "Market mean",
+  "at": [
+   436,
+   1152
+  ]
+ },
+ {
+  "label": "RBA cash rate",
+  "at": [
+   175,
+   1216
+  ]
+ },
+ {
+  "label": "Hide Product facts",
+  "flags": "tap",
+  "at": [
+   360,
+   1387
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
