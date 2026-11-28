@@ -2,7 +2,7 @@ import fixture from './fixtures/bankwest-easy-saver-eligibility-20260913.json';
 import siblings from './fixtures/suitability-conditional-siblings-20260913.json';
 import sample from '../assets/sample/details.json';
 import type { ProductDetail } from '../src/types';
-import { dedupeDetailItems, dedupeFacts, isAnnualFee, uiDetailItem, uiNormalizedProductFact } from '../src/lib/productUiFacts';
+import { dedupeDetailItems, dedupeFacts, isAnnualFee, mergeLegacyDetailItems, uiDetailItem, uiNormalizedProductFact } from '../src/lib/productUiFacts';
 import { uiPublishedFeeName, uiProductKeyLabel, uiPublishedText } from '../src/lib/uiCopy';
 
 const detail = fixture.detail as ProductDetail;
@@ -281,6 +281,40 @@ test('annual fees and fee categories use controlled labels, never raw codes', ()
     expect(uiDetailItem({ label: code, amount: '46' }, 0, 'Fees').label).toBe(label);
   }
   expect(uiNormalizedProductFact({ id: 'f', kind: 'fee', canonicalKey: 'fee.annual_fee', value: 395 } as never).label).toBe('Annual fee');
+});
+
+test('a normalized fact does not hide distinct legacy entries in the same category', () => {
+  const normalized = [{
+    id: 'offset',
+    kind: 'feature',
+    canonicalKey: 'feature.offset',
+    sourceType: 'OFFSET',
+  }] as never;
+  const legacy = [
+    { label: 'OFFSET' },
+    { label: 'DIGITAL_WALLET', value: 'Apple Pay' },
+  ];
+  expect(mergeLegacyDetailItems(legacy, normalized, 'Features')).toEqual([
+    { label: 'DIGITAL_WALLET', value: 'Apple Pay' },
+  ]);
+});
+
+test('cross-representation merging preserves different values for the same source type', () => {
+  const normalized = [{
+    id: 'wallet',
+    kind: 'feature',
+    canonicalKey: 'feature.digital_wallet',
+    sourceType: 'DIGITAL_WALLET',
+    unit: 'text',
+    value: 'Apple Pay',
+  }] as never;
+  const legacy = [
+    { label: 'DIGITAL_WALLET', value: 'Apple Pay' },
+    { label: 'DIGITAL_WALLET', value: 'Google Pay' },
+  ];
+  expect(mergeLegacyDetailItems(legacy, normalized, 'Features')).toEqual([
+    { label: 'DIGITAL_WALLET', value: 'Google Pay' },
+  ]);
 });
 
 test('identical normalized facts are one fact', () => {
