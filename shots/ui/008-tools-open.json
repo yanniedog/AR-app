@@ -1,0 +1,318 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Calculate",
+  "at": [
+   236,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "Rate check",
+  "flags": "tap,sel",
+  "at": [
+   190,
+   245
+  ]
+ },
+ {
+  "label": "Rate check",
+  "at": [
+   190,
+   243
+  ]
+ },
+ {
+  "label": "Projection",
+  "flags": "tap",
+  "at": [
+   530,
+   245
+  ]
+ },
+ {
+  "label": "Projection",
+  "at": [
+   530,
+   243
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   843
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   389
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   387
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   389
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   387
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   389
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   387
+  ]
+ },
+ {
+  "label": "Current rate",
+  "flags": "tap,sel",
+  "at": [
+   190,
+   589
+  ]
+ },
+ {
+  "label": "Current rate",
+  "at": [
+   190,
+   587
+  ]
+ },
+ {
+  "label": "Reference + adjustment",
+  "flags": "tap",
+  "at": [
+   530,
+   589
+  ]
+ },
+ {
+  "label": "Reference + adjustment",
+  "at": [
+   530,
+   587
+  ]
+ },
+ {
+  "label": "Current rate (%)",
+  "at": [
+   360,
+   677
+  ]
+ },
+ {
+  "label": "Current interest rate percent",
+  "flags": "tap",
+  "at": [
+   360,
+   749
+  ]
+ },
+ {
+  "label": "Buying",
+  "flags": "tap",
+  "at": [
+   98,
+   840
+  ]
+ },
+ {
+  "label": "Buying",
+  "at": [
+   98,
+   840
+  ]
+ },
+ {
+  "label": "Refinancing",
+  "flags": "tap,sel",
+  "at": [
+   276,
+   840
+  ]
+ },
+ {
+  "label": "Refinancing",
+  "at": [
+   276,
+   840
+  ]
+ },
+ {
+  "label": "Property value ($)",
+  "at": [
+   360,
+   928
+  ]
+ },
+ {
+  "label": "$",
+  "at": [
+   67,
+   1008
+  ]
+ },
+ {
+  "label": "Current property value, thousands of dollars",
+  "flags": "tap",
+  "at": [
+   333,
+   1008
+  ]
+ },
+ {
+  "label": "Amount unit, K",
+  "flags": "tap",
+  "at": [
+   638,
+   1008
+  ]
+ },
+ {
+  "label": "K",
+  "at": [
+   638,
+   1008
+  ]
+ },
+ {
+  "label": "Current loan ($)",
+  "at": [
+   360,
+   1098
+  ]
+ },
+ {
+  "label": "$",
+  "at": [
+   67,
+   1178
+  ]
+ },
+ {
+  "label": "Current loan balance, thousands of dollars",
+  "flags": "tap",
+  "at": [
+   333,
+   1178
+  ]
+ },
+ {
+  "label": "Amount unit, K",
+  "flags": "tap",
+  "at": [
+   638,
+   1178
+  ]
+ },
+ {
+  "label": "K",
+  "at": [
+   638,
+   1178
+  ]
+ },
+ {
+  "label": "Years left",
+  "at": [
+   360,
+   1272
+  ]
+ },
+ {
+  "label": "Years remaining on loan",
+  "flags": "tap",
+  "at": [
+   360,
+   1344
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

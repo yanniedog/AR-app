@@ -1,0 +1,401 @@
+[
+ {
+  "label": "",
+  "flags": "tap",
+  "at": [
+   360,
+   734
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "at": [
+   300,
+   211
+  ]
+ },
+ {
+  "label": "Close Temporary filters",
+  "flags": "tap",
+  "at": [
+   640,
+   211
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   786
+  ]
+ },
+ {
+  "label": "Availability",
+  "at": [
+   360,
+   328
+  ]
+ },
+ {
+  "label": "Listed rate",
+  "flags": "tap,sel",
+  "at": [
+   190,
+   412
+  ]
+ },
+ {
+  "label": "Listed rate",
+  "at": [
+   190,
+   410
+  ]
+ },
+ {
+  "label": "No listed rate",
+  "flags": "tap",
+  "at": [
+   530,
+   412
+  ]
+ },
+ {
+  "label": "No listed rate",
+  "at": [
+   530,
+   410
+  ]
+ },
+ {
+  "label": "Loan purpose",
+  "at": [
+   360,
+   528
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   616
+  ]
+ },
+ {
+  "label": "Investor",
+  "flags": "tap",
+  "at": [
+   106,
+   616
+  ]
+ },
+ {
+  "label": "Investor",
+  "at": [
+   106,
+   616
+  ]
+ },
+ {
+  "label": "Owner occupied",
+  "flags": "tap",
+  "at": [
+   317,
+   616
+  ]
+ },
+ {
+  "label": "Owner occupied",
+  "at": [
+   317,
+   616
+  ]
+ },
+ {
+  "label": "Rate type",
+  "at": [
+   360,
+   732
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   820
+  ]
+ },
+ {
+  "label": "Fixed",
+  "flags": "tap",
+  "at": [
+   90,
+   820
+  ]
+ },
+ {
+  "label": "Fixed",
+  "at": [
+   90,
+   820
+  ]
+ },
+ {
+  "label": "Variable",
+  "flags": "tap",
+  "at": [
+   234,
+   820
+  ]
+ },
+ {
+  "label": "Variable",
+  "at": [
+   234,
+   820
+  ]
+ },
+ {
+  "label": "Fixed · bundle",
+  "flags": "tap",
+  "at": [
+   431,
+   820
+  ]
+ },
+ {
+  "label": "Fixed · bundle",
+  "at": [
+   431,
+   820
+  ]
+ },
+ {
+  "label": "Introductory",
+  "flags": "tap",
+  "at": [
+   621,
+   820
+  ]
+ },
+ {
+  "label": "Introductory",
+  "at": [
+   633,
+   820
+  ]
+ },
+ {
+  "label": "Repayment",
+  "at": [
+   360,
+   936
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1024
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "flags": "tap",
+  "at": [
+   173,
+   1024
+  ]
+ },
+ {
+  "label": "Principal & interest",
+  "at": [
+   173,
+   1024
+  ]
+ },
+ {
+  "label": "Interest only",
+  "flags": "tap",
+  "at": [
+   425,
+   1024
+  ]
+ },
+ {
+  "label": "Interest only",
+  "at": [
+   425,
+   1024
+  ]
+ },
+ {
+  "label": "Account features",
+  "at": [
+   360,
+   1140
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1228
+  ]
+ },
+ {
+  "label": "Bill payment",
+  "flags": "tap",
+  "at": [
+   133,
+   1228
+  ]
+ },
+ {
+  "label": "Bill payment",
+  "at": [
+   133,
+   1228
+  ]
+ },
+ {
+  "label": "Card access",
+  "flags": "tap",
+  "at": [
+   346,
+   1228
+  ]
+ },
+ {
+  "label": "Card access",
+  "at": [
+   346,
+   1228
+  ]
+ },
+ {
+  "label": "Digital banking",
+  "flags": "tap",
+  "at": [
+   573,
+   1228
+  ]
+ },
+ {
+  "label": "Digital banking",
+  "at": [
+   574,
+   1228
+  ]
+ },
+ {
+  "label": "Early / extra repayments",
+  "flags": "tap",
+  "at": [
+   695,
+   1228
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   360,
+   1310
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1340
+  ]
+ },
+ {
+  "label": "Business applicants",
+  "flags": "tap",
+  "at": [
+   180,
+   1340
+  ]
+ },
+ {
+  "label": "Business applicants",
+  "at": [
+   180,
+   1355
+  ]
+ },
+ {
+  "label": "Employment status",
+  "flags": "tap",
+  "at": [
+   483,
+   1340
+  ]
+ },
+ {
+  "label": "Employment status",
+  "at": [
+   483,
+   1355
+  ]
+ },
+ {
+  "label": "Individual applicants",
+  "flags": "tap",
+  "at": [
+   664,
+   1340
+  ]
+ },
+ {
+  "label": "Individual applicants",
+  "at": [
+   676,
+   1355
+  ]
+ },
+ {
+  "label": "Show Published details",
+  "flags": "tap",
+  "at": [
+   360,
+   1429
+  ]
+ },
+ {
+  "label": "Reset",
+  "flags": "tap",
+  "at": [
+   154,
+   1369
+  ]
+ },
+ {
+  "label": "Reset",
+  "at": [
+   154,
+   1370
+  ]
+ },
+ {
+  "label": "Show 4,394 rates",
+  "flags": "tap",
+  "at": [
+   494,
+   1369
+  ]
+ },
+ {
+  "label": "Show 4,394 rates",
+  "at": [
+   494,
+   1370
+  ]
+ }
+]

@@ -1,0 +1,45 @@
+{
+  "kind": "live",
+  "url": "https://paste.c-net.org/d8d176df-8e8f-c8f1-b88d-76b6e19b5bfb",
+  "outcome": null,
+  "elapsedMs": 1070555,
+  "visibleOutcome": [
+    "Verified · 1.0.397",
+    "Install verified update",
+    "Install",
+    "Dismiss update banner",
+    "Back",
+    "App health audit",
+    "Account",
+    "HTTP redirects",
+    "0",
+    "Rejected addresses",
+    "6",
+    "HTTP not attempted",
+    "6",
+    "HTTP attempt evidence missing",
+    "0",
+    "Unverified links",
+    "671",
+    "Executed",
+    "2,883 / 2,885",
+    "Verified upload"
+  ],
+  "logStatus": 200,
+  "logContentUrl": "https://paste.c-net.org/d8d176df-8e8f-c8f1-b88d-76b6e19b5bfb",
+  "logBytes": 858829,
+  "sourceDuplicateItemsRemoved": 137,
+  "completion": {
+    "outcome": "failed",
+    "collectionComplete": true,
+    "coverageComplete": false,
+    "detailsComplete": true
+  },
+  "debugLog": {
+    "url": "https://paste.c-net.org/b95f1835-0f6b-63c3-7bf3-72536279ac55",
+    "uploadMs": 24067,
+    "status": 200,
+    "contentUrl": "https://paste.c-net.org/b95f1835-0f6b-63c3-7bf3-72536279ac55",
+    "bytes": 5715672
+  }
+}

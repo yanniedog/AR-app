@@ -1,0 +1,285 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Trends",
+  "at": [
+   211,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   293
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   291
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   293
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   291
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   293
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   291
+  ]
+ },
+ {
+  "label": "Home loans · Observed: 28 Nov 2026",
+  "at": [
+   360,
+   417
+  ]
+ },
+ {
+  "label": "Comparison rate · Lowest: 5.87% · Median: 7.21% · Spread: 134 bps · 7,725 rates · 86 banks",
+  "at": [
+   360,
+   594
+  ]
+ },
+ {
+  "label": "Lowest",
+  "at": [
+   191,
+   513
+  ]
+ },
+ {
+  "label": "Median",
+  "at": [
+   529,
+   513
+  ]
+ },
+ {
+  "label": "5.87%",
+  "at": [
+   191,
+   569
+  ]
+ },
+ {
+  "label": "7.21%",
+  "at": [
+   529,
+   569
+  ]
+ },
+ {
+  "label": "Comparison rate · 7,725 rates · 86 banks · Spread: 134 bps",
+  "at": [
+   360,
+   679
+  ]
+ },
+ {
+  "label": "Browse these products",
+  "flags": "tap",
+  "at": [
+   360,
+   799
+  ]
+ },
+ {
+  "label": "Browse these products",
+  "at": [
+   361,
+   800
+  ]
+ },
+ {
+  "label": "Hide Rate history",
+  "flags": "tap",
+  "at": [
+   360,
+   1000
+  ]
+ },
+ {
+  "label": "Rate history",
+  "at": [
+   328,
+   1000
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1128
+  ]
+ },
+ {
+  "label": "30 days",
+  "flags": "tap,sel",
+  "at": [
+   105,
+   1128
+  ]
+ },
+ {
+  "label": "30 days",
+  "at": [
+   105,
+   1128
+  ]
+ },
+ {
+  "label": "90 days",
+  "flags": "tap",
+  "at": [
+   254,
+   1128
+  ]
+ },
+ {
+  "label": "90 days",
+  "at": [
+   254,
+   1128
+  ]
+ },
+ {
+  "label": "1 year",
+  "flags": "tap",
+  "at": [
+   392,
+   1128
+  ]
+ },
+ {
+  "label": "1 year",
+  "at": [
+   392,
+   1128
+  ]
+ },
+ {
+  "label": "All",
+  "flags": "tap",
+  "at": [
+   505,
+   1128
+  ]
+ },
+ {
+  "label": "All",
+  "at": [
+   505,
+   1128
+  ]
+ },
+ {
+  "label": "Home loans · 30 days · 31 Observed · 28 Nov 2026 · Min 5.94% · Median 7.15% · Mean 7.31% · Max 8.70%",
+  "at": [
+   360,
+   1290
+  ]
+ },
+ {
+  "label": "History",
+  "at": [
+   396,
+   1318
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap,sel",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "sel",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

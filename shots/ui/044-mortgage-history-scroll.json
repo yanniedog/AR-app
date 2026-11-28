@@ -1,0 +1,215 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Clear Path Variable Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Annual fee",
+  "at": [
+   291,
+   208
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   208
+  ]
+ },
+ {
+  "label": "Upfront fee",
+  "at": [
+   274,
+   250
+  ]
+ },
+ {
+  "label": "$150 · $250",
+  "at": [
+   614,
+   250
+  ]
+ },
+ {
+  "label": "Offset account",
+  "at": [
+   98,
+   322
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   438,
+   302
+  ]
+ },
+ {
+  "label": "Availability",
+  "at": [
+   228,
+   394
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   568,
+   394
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   268,
+   446
+  ]
+ },
+ {
+  "label": "Published · 6",
+  "at": [
+   608,
+   446
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   360,
+   598
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "flags": "tap",
+  "at": [
+   360,
+   716
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "at": [
+   386,
+   716
+  ]
+ },
+ {
+  "label": "Show Fees",
+  "flags": "tap",
+  "at": [
+   360,
+   942
+  ]
+ },
+ {
+  "label": "Fees",
+  "at": [
+   328,
+   942
+  ]
+ },
+ {
+  "label": "Published product history",
+  "at": [
+   360,
+   1106
+  ]
+ },
+ {
+  "label": "Leading advertised · All tiers · Conditional rate / Restricted",
+  "at": [
+   360,
+   1246
+  ]
+ },
+ {
+  "label": "Selected rate 6.79% · Leading advertised 6.64% · All tiers",
+  "at": [
+   360,
+   1342
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
