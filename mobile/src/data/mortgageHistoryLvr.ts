@@ -1,5 +1,5 @@
 import { uiDecimal, uiJoin } from '../lib/uiCopy';
-import { parseLvrRange } from './lvrRange';
+import { benchmarkLvrFloor, parseLvrRange } from './lvrRange';
 
 export const DEFAULT_BENCHMARK_LVR = 80;
 
@@ -14,19 +14,12 @@ export function userLvrPercent(value: string | number | null | undefined): numbe
 }
 
 /** The market benchmark for a mortgage is every published rate whose LVR band
- * reaches the user's LVR, so the borrower could take it up. The point is the user's
- * LVR (profile band upper limit, then 80%), moved just inside the product's own band
- * when that band cannot hold it. Using the product's top band instead (98% for a
- * first-home loan) leaves only the few lenders that lend that high. */
-export function mortgageHistoryLvr(tier: string | undefined, userLvr?: number | null): string | null {
-  const range = parseLvrRange(tier);
-  if (!range) return null;
-  const want = userLvr && userLvr > 0 ? userLvr : DEFAULT_BENCHMARK_LVR;
-  const top = range.hi !== Infinity
-    ? range.hiInclusive === false ? Math.round((range.hi - 0.01) * 100) / 100 : range.hi : 100;
-  const bottom = range.inclusive ? range.lo : Math.round((range.lo + 0.01) * 100) / 100;
-  const point = Math.round(Math.min(Math.max(want, bottom), top) * 100) / 100;
-  return point > 0 && point <= 100 ? `lvr_>=${point}-${point}%` : null;
+ * reaches the user's exact LVR or goes above it. The point is the user's LVR
+ * (profile band, then 80% when none is known) and does not depend on the
+ * product's own band. */
+export function mortgageHistoryLvr(userLvr?: number | null): string | null {
+  const point = Math.round((userLvr && userLvr > 0 ? userLvr : DEFAULT_BENCHMARK_LVR) * 100) / 100;
+  return point > 0 && point <= 100 ? `lvr_atleast_${point}` : null;
 }
 
 /** Highest LVR the saved profile bands reach; an open-ended band such as >90
@@ -43,6 +36,8 @@ export function profileLvrPercent(tiers: readonly string[] | undefined): number 
 }
 
 export function mortgageHistoryLvrLabel(tier: string | null) {
+  const floor = benchmarkLvrFloor(tier);
+  if (floor !== null) return uiJoin('LVR', ' ', '≥', uiDecimal(String(floor), 'percent'));
   const range = parseLvrRange(tier ?? undefined);
   if (!range) return uiJoin('LVR', ' · ', 'Unknown');
   const lo = uiDecimal(String(range.lo), 'percent');

@@ -4,6 +4,13 @@ export interface LvrRange { lo: number; hi: number; inclusive: boolean; hiInclus
 /** A few lenders publish LVR as a ratio (0.7 for 70%); no LVR band is 1% or lower. */
 export const lvrRatioToPercent = (n: number): number => (n > 0 && n <= 1 ? Number((n * 100).toPrecision(12)) : n);
 
+/** `lvr_atleast_80` selects every band that reaches 80% or higher. */
+export function benchmarkLvrFloor(tier: string | undefined | null): number | null {
+  const match = /^lvr_atleast_(\d+(?:\.\d+)?)$/.exec(tier ?? '');
+  const value = match ? Number(match[1]) : NaN;
+  return value > 0 && value <= 100 ? value : null;
+}
+
 export function parseLvrRange(value: string | undefined): LvrRange | null {
   // A "%" in the published tier marks it as already a percentage.
   const asRatio = !(value ?? '').includes('%');
@@ -45,6 +52,9 @@ export function matchesLvrTier(value: string | undefined | null, selected: reado
   if (!available) return false;
   return selected.some(tier => {
     if (tier === '>90') return available.hi > 90;
+    // Benchmark key: the available band reaches the user's LVR or goes above it.
+    const floor = benchmarkLvrFloor(tier);
+    if (floor !== null) return available.hi > floor || (available.hi === floor && available.hiInclusive !== false);
     const required = parseLvrRange(tier);
     if (!required) return false;
     const first = required.inclusive ? required.lo : Math.round((required.lo + 0.01) * 100) / 100;
