@@ -1,0 +1,8 @@
+https://www.rba.gov.au/statistics/tables/csv/f17-forward-rates.csv | 200 0.565500s 544089B | curl-exit=0
+https://www.rba.gov.au/statistics/tables/csv/j1-cash-rate.csv | 200 0.284067s 22349B | curl-exit=0
+https://www.rba.gov.au/statistics/tables/csv/f1-data.csv | 200 0.463497s 310043B | curl-exit=0
+https://www.rba.gov.au/statistics/tables/csv/g1-data.csv | 200 0.241597s 39998B | curl-exit=0
+https://www.rba.gov.au/statistics/tables/csv/g3-data.csv | 200 0.253526s 16902B | curl-exit=0
+https://www.rba.gov.au/statistics/tables/csv/h4-data.csv | 200 0.265147s 19210B | curl-exit=0
+https://www.rba.gov.au/statistics/tables/csv/h5-data.csv | 200 0.312816s 73284B | curl-exit=0
+https://data.api.abs.gov.au/rest/data/ABS,CPI,2.0.0/3.10001.10.50.M | 200 0.330011s 1141B | curl-exit=0

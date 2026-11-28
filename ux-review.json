@@ -1,0 +1,1448 @@
+{
+ "schemaVersion": 1,
+ "productDuplicates": {
+  "sourceRecordsRemoved": null,
+  "visible": {
+   "extraRows": 0,
+   "captures": 5,
+   "rowObservations": 16,
+   "evidence": []
+  }
+ },
+ "screens": 33,
+ "findingsTotal": 82,
+ "major": 2,
+ "counts": {
+  "jargon": 28,
+  "accuracy": 32,
+  "slow": 1,
+  "crowded-targets": 19,
+  "slow-first-value": 1,
+  "no-return-reason": 1
+ },
+ "rubric": [
+  {
+   "key": "designConsistency",
+   "title": "Design consistency",
+   "score": 5,
+   "findings": 0,
+   "top": []
+  },
+  {
+   "key": "layout",
+   "title": "Layout",
+   "score": 5,
+   "findings": 0,
+   "top": []
+  },
+  {
+   "key": "easeOfUse",
+   "title": "Ease of use",
+   "score": 5,
+   "findings": 0,
+   "top": []
+  },
+  {
+   "key": "comfort",
+   "title": "Comfort",
+   "score": 4.7,
+   "findings": 1,
+   "top": [
+    "major open app: slow (99.5 s to settle). Fix: Show content first and defer the slow work"
+   ]
+  },
+  {
+   "key": "helpfulness",
+   "title": "Helpfulness",
+   "score": 5,
+   "findings": 0,
+   "top": []
+  },
+  {
+   "key": "appropriateness",
+   "title": "Appropriateness",
+   "score": 2.6,
+   "findings": 32,
+   "top": [
+    "minor open app: accuracy \"CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank\" (comparison 6% is below advertised 6.54%). Fix: Fix the displayed figure or its sort",
+    "minor open app: accuracy \"Owner Occupier P&I No Offset Mortgage, MoveBank\" (comparison 6.19% is below advertised 6.49%). Fix: Fix the displayed figure or its sort",
+    "minor scroll rates 1: accuracy \"Owner Occupier P&I No Offset Mortgage, MoveBank\" (comparison 6.25% is below advertised 6.44%). Fix: Fix the displayed figure or its sort"
+   ]
+  },
+  {
+   "key": "onboarding",
+   "title": "Onboarding ease",
+   "score": 4.7,
+   "findings": 1,
+   "top": [
+    "major cold start: slow-first-value (49.0 s from launch to rates showing). Fix: Show cached rates on launch before the refresh"
+   ]
+  },
+  {
+   "key": "barriers",
+   "title": "Barriers to entry and use",
+   "score": 4.7,
+   "findings": 1,
+   "top": [
+    "major cold start: slow-first-value (49.0 s from launch to rates showing). Fix: Show cached rates on launch before the refresh"
+   ]
+  },
+  {
+   "key": "engagement",
+   "title": "Engagement hooks",
+   "score": 4.9,
+   "findings": 1,
+   "top": [
+    "minor all: no-return-reason (no change or recency signal and no alerts). Fix: Show what changed since the last visit"
+   ]
+  },
+  {
+   "key": "frustration",
+   "title": "Frustration and abandonment risk",
+   "score": 0.8,
+   "findings": 50,
+   "top": [
+    "major open app: slow (99.5 s to settle). Fix: Show content first and defer the slow work",
+    "major cold start: slow-first-value (49.0 s from launch to rates showing). Fix: Show cached rates on launch before the refresh",
+    "minor open app: jargon \"Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI\" (unexpanded LVR). Fix: Replace the abbreviation with a plain label"
+   ]
+  }
+ ],
+ "tasks": [
+  {
+   "task": "Find the best rate",
+   "taps": 0,
+   "ms": 48950
+  },
+  {
+   "task": "Compare",
+   "taps": null,
+   "ms": null
+  },
+  {
+   "task": "Open a lender",
+   "taps": null,
+   "ms": null
+  },
+  {
+   "task": "Open a product",
+   "taps": 1,
+   "ms": null
+  },
+  {
+   "task": "Save a rate",
+   "taps": null,
+   "ms": null
+  }
+ ],
+ "firstRun": {
+  "firstValueMs": 48950,
+  "ratesShown": true,
+  "gates": []
+ },
+ "hooks": {
+  "saveRow": true,
+  "savedTab": true,
+  "alerts": false
+ },
+ "perScreen": [
+  {
+   "slug": "001-open-app",
+   "name": "open app",
+   "elements": 52,
+   "tappable": 31,
+   "rows": 5,
+   "findings": 5,
+   "major": 1
+  },
+  {
+   "slug": "002-scroll-rates-1",
+   "name": "scroll rates 1",
+   "elements": 49,
+   "tappable": 31,
+   "rows": 7,
+   "findings": 6,
+   "major": 0
+  },
+  {
+   "slug": "003-scroll-rates-2",
+   "name": "scroll rates 2",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 3,
+   "major": 0
+  },
+  {
+   "slug": "004-scroll-rates-back",
+   "name": "scroll rates back",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 3,
+   "major": 0
+  },
+  {
+   "slug": "005-open-product",
+   "name": "open product",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 3,
+   "major": 0
+  },
+  {
+   "slug": "006-scroll-product",
+   "name": "scroll product",
+   "elements": 29,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 2,
+   "major": 0
+  },
+  {
+   "slug": "007-expand-visible-fees",
+   "name": "expand visible fees",
+   "elements": 29,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 2,
+   "major": 0
+  },
+  {
+   "slug": "008-expand-product-facts",
+   "name": "expand product facts",
+   "elements": 32,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 2,
+   "major": 0
+  },
+  {
+   "slug": "009-scroll-product-fees",
+   "name": "scroll product fees",
+   "elements": 26,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "010-scroll-product-eligibility",
+   "name": "scroll product eligibility",
+   "elements": 21,
+   "tappable": 12,
+   "rows": 0,
+   "findings": 4,
+   "major": 0
+  },
+  {
+   "slug": "011-expand-eligibility",
+   "name": "expand eligibility",
+   "elements": 27,
+   "tappable": 11,
+   "rows": 0,
+   "findings": 4,
+   "major": 0
+  },
+  {
+   "slug": "012-expand-constraints",
+   "name": "expand constraints",
+   "elements": 31,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 4,
+   "major": 0
+  },
+  {
+   "slug": "013-scroll-product-sources",
+   "name": "scroll product sources",
+   "elements": 22,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 2,
+   "major": 0
+  },
+  {
+   "slug": "014-back-to-rates",
+   "name": "back to rates",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 3,
+   "major": 0
+  },
+  {
+   "slug": "015-open-lenders",
+   "name": "open lenders",
+   "elements": 35,
+   "tappable": 18,
+   "rows": 0,
+   "findings": 3,
+   "major": 0
+  },
+  {
+   "slug": "016-scroll-lenders",
+   "name": "scroll lenders",
+   "elements": 35,
+   "tappable": 18,
+   "rows": 0,
+   "findings": 3,
+   "major": 0
+  },
+  {
+   "slug": "017-back-from-lenders",
+   "name": "back from lenders",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 3,
+   "major": 0
+  },
+  {
+   "slug": "018-switch-to-savings",
+   "name": "switch to savings",
+   "elements": 49,
+   "tappable": 31,
+   "rows": 6,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "019-switch-to-home-loans",
+   "name": "switch to home loans",
+   "elements": 57,
+   "tappable": 30,
+   "rows": 7,
+   "findings": 3,
+   "major": 0
+  },
+  {
+   "slug": "020-open-filters",
+   "name": "open filters",
+   "elements": 45,
+   "tappable": 20,
+   "rows": 0,
+   "findings": 2,
+   "major": 0
+  },
+  {
+   "slug": "021-close-filters",
+   "name": "close filters",
+   "elements": 57,
+   "tappable": 30,
+   "rows": 7,
+   "findings": 3,
+   "major": 0
+  },
+  {
+   "slug": "022-open-market",
+   "name": "open market",
+   "elements": 42,
+   "tappable": 13,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "023-open-rba",
+   "name": "open rba",
+   "elements": 24,
+   "tappable": 7,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "024-scroll-rba",
+   "name": "scroll rba",
+   "elements": 25,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "025-back-from-rba",
+   "name": "back from rba",
+   "elements": 42,
+   "tappable": 13,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "026-scroll-market",
+   "name": "scroll market",
+   "elements": 32,
+   "tappable": 10,
+   "rows": 0,
+   "findings": 1,
+   "major": 0
+  },
+  {
+   "slug": "027-open-saved",
+   "name": "open saved",
+   "elements": 19,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "028-return-to-rates",
+   "name": "return to rates",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 3,
+   "major": 0
+  },
+  {
+   "slug": "029-start-category-switch",
+   "name": "start category switch",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 3,
+   "major": 0
+  },
+  {
+   "slug": "030-start-search-from-rates",
+   "name": "start search from rates",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 3,
+   "major": 0
+  },
+  {
+   "slug": "031-start-filter-rollback",
+   "name": "start filter rollback",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 3,
+   "major": 0
+  },
+  {
+   "slug": "032-start-save-from-rates",
+   "name": "start save from rates",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 3,
+   "major": 0
+  },
+  {
+   "slug": "033-start-compare-from-rates",
+   "name": "start compare from rates",
+   "elements": 57,
+   "tappable": 27,
+   "rows": 6,
+   "findings": 3,
+   "major": 0
+  }
+ ],
+ "findings": [
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "open app",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    920
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "open app",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    1064
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "open app",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    961
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "open app",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    1361
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "slow",
+   "severity": "major",
+   "screen": "open app",
+   "text": "",
+   "at": [
+    0,
+    0
+   ],
+   "detail": "99.5 s to settle",
+   "fix": "Show content first and defer the slow work"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "Cairns · PLUS HOME LOAN FIXED 2YR 60-80 LVR PI",
+   "at": [
+    384,
+    599
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    1168
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    569
+   ],
+   "detail": "comparison 6.25% is below advertised 6.44%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "PLUS HOME LOAN FIXED 2YR 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    641
+   ],
+   "detail": "comparison 6.28% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "PLUS HOME LOAN FIXED 1YR 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    777
+   ],
+   "detail": "comparison 6.31% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 1",
+   "text": "PLUS HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    921
+   ],
+   "detail": "comparison 6.32% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "scroll rates 2",
+   "text": "MoveBank · Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 2",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    575
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates 2",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    647
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "scroll rates back",
+   "text": "MoveBank · Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates back",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    575
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "scroll rates back",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    647
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "open product",
+   "text": "MoveBank · Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "open product",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    575
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "open product",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    647
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "scroll product",
+   "text": "Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    318,
+    142
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "scroll product",
+   "text": "Listed LVR",
+   "at": [
+    303,
+    857
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "expand visible fees",
+   "text": "Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    318,
+    142
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "expand visible fees",
+   "text": "Listed LVR",
+   "at": [
+    303,
+    857
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "expand product facts",
+   "text": "Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    318,
+    142
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "expand product facts",
+   "text": "Navigate up / Previous date",
+   "at": [
+    56,
+    141
+   ],
+   "detail": "0 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "scroll product fees",
+   "text": "Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    318,
+    142
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "scroll product eligibility",
+   "text": "Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    318,
+    142
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll product eligibility",
+   "text": "Navigate up / Show Recorded criteria",
+   "at": [
+    56,
+    141
+   ],
+   "detail": "0 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll product eligibility",
+   "text": "Share / Show Recorded criteria",
+   "at": [
+    540,
+    141
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll product eligibility",
+   "text": "Account / Show Recorded criteria",
+   "at": [
+    640,
+    141
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "expand eligibility",
+   "text": "Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    318,
+    142
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "expand eligibility",
+   "text": "Navigate up / Show Recorded criteria",
+   "at": [
+    56,
+    141
+   ],
+   "detail": "0 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "expand eligibility",
+   "text": "Share / Show Recorded criteria",
+   "at": [
+    540,
+    141
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "expand eligibility",
+   "text": "Account / Show Recorded criteria",
+   "at": [
+    640,
+    141
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "expand constraints",
+   "text": "Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    318,
+    142
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "expand constraints",
+   "text": "Navigate up / Show Recorded criteria",
+   "at": [
+    56,
+    141
+   ],
+   "detail": "0 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "expand constraints",
+   "text": "Share / Show Recorded criteria",
+   "at": [
+    540,
+    141
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "expand constraints",
+   "text": "Account / Show Recorded criteria",
+   "at": [
+    640,
+    141
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "scroll product sources",
+   "text": "Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    318,
+    142
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "scroll product sources",
+   "text": "Maximum LVR",
+   "at": [
+    190,
+    229
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "back to rates",
+   "text": "MoveBank · Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "back to rates",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    575
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "back to rates",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    647
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "open lenders",
+   "text": "Principal & interest / Interest only",
+   "at": [
+    173,
+    297
+   ],
+   "detail": "6 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "open lenders",
+   "text": "Employment status / Individual applicants",
+   "at": [
+    483,
+    664
+   ],
+   "detail": "6 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "open lenders",
+   "text": "AAA Financial Corporation / Abacus Home Loans",
+   "at": [
+    399,
+    1245
+   ],
+   "detail": "6 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll lenders",
+   "text": "Principal & interest / Interest only",
+   "at": [
+    173,
+    297
+   ],
+   "detail": "6 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll lenders",
+   "text": "Employment status / Individual applicants",
+   "at": [
+    483,
+    664
+   ],
+   "detail": "6 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll lenders",
+   "text": "AAA Financial Corporation / Abacus Home Loans",
+   "at": [
+    399,
+    1245
+   ],
+   "detail": "6 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "back from lenders",
+   "text": "MoveBank · Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "back from lenders",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    575
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "back from lenders",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    647
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "switch to home loans",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "switch to home loans",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    647
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "switch to home loans",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    789
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "open filters",
+   "text": "Business applicants / Employment status",
+   "at": [
+    180,
+    1413
+   ],
+   "detail": "6 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "open filters",
+   "text": "Employment status / Individual applicants",
+   "at": [
+    483,
+    1413
+   ],
+   "detail": "6 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "close filters",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "close filters",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    647
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "close filters",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    789
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll market",
+   "text": "Easy Street · Decrease · Home loans · Average −20.0 bps · 3/13 products · 27 Nov / Credit Union SA · Increase · Home loans · Average +11.7 bps · 9/19 products · 25",
+   "at": [
+    360,
+    237
+   ],
+   "detail": "1 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "return to rates",
+   "text": "MoveBank · Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "return to rates",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    575
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "return to rates",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    647
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "start category switch",
+   "text": "MoveBank · Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start category switch",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    575
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start category switch",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    647
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "start search from rates",
+   "text": "MoveBank · Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start search from rates",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    575
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start search from rates",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    647
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "start filter rollback",
+   "text": "MoveBank · Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start filter rollback",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    575
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start filter rollback",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    647
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "start save from rates",
+   "text": "MoveBank · Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start save from rates",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    575
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start save from rates",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    647
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "start compare from rates",
+   "text": "MoveBank · Owner Occupier P&I With Offset Mortgage",
+   "at": [
+    384,
+    605
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start compare from rates",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    575
+   ],
+   "detail": "comparison 6.39% is below advertised 6.64%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "start compare from rates",
+   "text": "Owner Occupier P&I With Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    647
+   ],
+   "detail": "comparison 6.39% is below advertised 6.69%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "slow-first-value",
+   "severity": "major",
+   "screen": "cold start",
+   "text": "",
+   "at": [
+    0,
+    0
+   ],
+   "detail": "49.0 s from launch to rates showing",
+   "fix": "Show cached rates on launch before the refresh"
+  },
+  {
+   "check": "no-return-reason",
+   "severity": "minor",
+   "screen": "all",
+   "text": "",
+   "at": [
+    0,
+    0
+   ],
+   "detail": "no change or recency signal and no alerts",
+   "fix": "Show what changed since the last visit"
+  }
+ ],
+ "sampleChecked": false,
+ "contrastMeasured": true,
+ "summaryLines": [
+  "UX review: 2 major, 80 minor across 33 screens. Weakest: Frustration and abandonment risk 0.8/5, Appropriateness 2.6/5, Comfort 4.7/5.",
+  "Product details: duplicate source records removed across audited payload: unmeasured; confirmed extra rows visible in captured disclosures: 0 (5 measured captures).",
+  "First value 49.0 s, 0 gate taps. Taps: find the best rate 0, compare unknown, open a lender unknown, open a product 1, save a rate unknown.",
+  "",
+  "Frustration and abandonment risk 0.8/5: 2 major, 48 minor.",
+  "- major | open app: slow, 99.5 s to settle | Fix: Show content first and defer the slow work",
+  "- major | cold start: slow-first-value, 49.0 s from launch to rates showing | Fix: Show cached rates on launch before the refresh",
+  "- minor | open app: jargon \"Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI\", unexpanded LVR | Fix: Replace the abbreviation with a plain label",
+  "- minor | scroll rates 1: jargon \"Cairns · PLUS HOME LOAN FIXED 2YR 60-80 LVR PI\", unexpanded LVR | Fix: Replace the abbreviation with a plain label",
+  "- minor | scroll rates 2: jargon \"MoveBank · Owner Occupier P&I With Offset Mortgage\", unexpanded P&I | Fix: Replace the abbreviation with a plain label",
+  "- minor | scroll rates back: jargon \"MoveBank · Owner Occupier P&I With Offset Mortgage\", unexpanded P&I | Fix: Replace the abbreviation with a plain label"
+ ]
+}
