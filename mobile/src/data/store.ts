@@ -247,10 +247,13 @@ export async function runScheduledBackgroundRefresh(): Promise<BackgroundTask.Ba
   }
 }
 
-let lastShownRunDate: string | null = null;
+let lastShownEdition: string | null = null;
 useStore.subscribe((state) => {
-  const runDate = state.core?.run_date ?? null;
-  if (!runDate || runDate === lastShownRunDate) return;
-  lastShownRunDate = runDate;
-  debugLog.info(PAYLOAD_RUN_DATE_TAG, `shown=${runDate}`);
+  const core = state.core;
+  const integrity = state.coreIntegrity;
+  const digest = core && integrity?.core === core ? integrity.coreSha256 : null;
+  const marker = core ? `shown=${core.run_date} core=${digest ?? 'unknown'}` : null;
+  if (marker === lastShownEdition) return;
+  lastShownEdition = marker;
+  debugLog.info(PAYLOAD_RUN_DATE_TAG, marker ?? 'cleared');
 });
