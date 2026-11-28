@@ -680,6 +680,8 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           closeSuitabilityGateUntilRebuild();
         }
         set({
+          previousRateEdition: previousSource === 'remote' && previousCore && matchesPreviousDetails(previousDetails)
+            ? { core: previousCore, details: previousDetails, manifest: adoptionOwner, coreIntegrity: get().coreIntegrity } : undefined,
           core,
           coreIntegrity: integrity,
           coreAssetState: liveAssetStateForProviderCoverage(integrity, core.coverage),

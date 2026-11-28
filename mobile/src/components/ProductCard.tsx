@@ -198,7 +198,8 @@ function ProductCardView({
       : []),
     ...tags,
   ];
-  const rateChange = useProductRateChangeSummary(row.product_key);
+  const rateChange = useProductRateChangeSummary(row, section,
+    resolution || hasDisplayedRateOverride ? undefined : showingComparisonRate ? 'comparison_rate' : 'rate');
   const rateChangeText = productRateChangeText(rateChange, true);
   const receipt = rowVerificationReceipt(row);
   const freshnessLabel = ({ current: 'Current', overdue: 'Overdue', stale: 'Stale', unknown: 'Unknown' } as const)

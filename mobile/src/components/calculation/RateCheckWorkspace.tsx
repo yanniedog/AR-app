@@ -17,7 +17,7 @@ import { Pressable, TextInput, useWindowDimensions, View } from 'react-native';
 import { IndeterminateProgressBar, ScreenSkeleton } from '../../components/feedback';
 import { BankAvatar } from '../../components/BankAvatar';
 import {
-  ProductRateChangeSummaryLine,
+  ProductRateChangeLine,
 } from '../../components/product/ProductRateChangeLine';
 import { ProfileEditor } from '../../components/ProfileEditor';
 import { CurrentBankPicker } from '../../components/scenario/CurrentBankPicker';
@@ -45,7 +45,6 @@ import {
 } from '../../data/calc';
 import { formatRate, visibleAccountRows } from '../../data/format';
 import type { CurrentProductReference, MortgageSwitchInputs } from '../../data/userRateScenario';
-import { bestRateForProduct, summarizeProductBestRate } from '../../data/productHistory';
 import {
   lvrTierForValue,
   parseLvrTier,
@@ -115,7 +114,6 @@ export function RateCheckWorkspace() {
   const coreIntegrity = useStore((s) => s.coreIntegrity);
   const details = useStore((s) => s.details);
   const detailsLoading = useStore((s) => s.detailsLoading);
-  const productHistory = useStore((s) => s.productHistory);
   const ensureDetails = useStore((s) => s.ensureDetails);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
@@ -954,14 +952,6 @@ export function RateCheckWorkspace() {
           details?.products?.[c.row.product_key] ?? null,
           c.row.provider,
         );
-        const rateChange = summarizeProductBestRate(
-          productHistory,
-          c.row.product_key,
-          {
-            date: core?.run_date,
-            rate: bestRateForProduct(core, c.row.product_key),
-          },
-        );
         const rateDescriptor = section === 'Mortgage'
           ? uiJoin(formatRate(c.projectionRate),' ','Advertised',c.rate !== c.projectionRate ? uiJoin(' · ',formatRate(c.rate),' ','Comparison'):null)
           : uiJoin(formatRate(c.projectionRate),' ',depositRankMetric === 'base' ? 'Ongoing':'Headline');
@@ -989,8 +979,9 @@ export function RateCheckWorkspace() {
                    <AppText variant="tiny" color="textMuted" numberOfLines={1}>
                      {uiJoin(uiProductName(c.row)," · ",rateDescriptor)}
                    </AppText>
-                   <ProductRateChangeSummaryLine
-                     model={rateChange}
+                   <ProductRateChangeLine
+                     row={c.row}
+                     metric={section === 'Mortgage' && c.rate === c.projectionRate && c.rate === Number(c.row.rate) ? 'rate' : undefined}
                      section={section}
                      compact
                    />
