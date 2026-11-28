@@ -1,0 +1,382 @@
+[
+ {
+  "label": "Market",
+  "at": [
+   360,
+   149
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   672,
+   149
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   803
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   117
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   117
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   117
+  ]
+ },
+ {
+  "label": "Recent movements",
+  "at": [
+   260,
+   169
+  ]
+ },
+ {
+  "label": "29 Nov 2026",
+  "at": [
+   608,
+   161
+  ]
+ },
+ {
+  "label": "Last 7 days · 3 banks · ↑ 1 · ↓ 2",
+  "id": "market-pulse",
+  "at": [
+   360,
+   201
+  ]
+ },
+ {
+  "label": "BNK Bank (Goldfields Money_BCHL) · Decrease · Home loans · Average −21.0 bps · 2/4 products · 28 Nov 2026 · Median 7.69%",
+  "flags": "tap",
+  "at": [
+   360,
+   317
+  ]
+ },
+ {
+  "label": "BNK Bank (Goldfields Money_BCHL)",
+  "at": [
+   314,
+   252
+  ]
+ },
+ {
+  "label": "BNK Bank (Goldfields Money_BCHL)",
+  "at": [
+   66,
+   316
+  ]
+ },
+ {
+  "label": "Decrease · Home loans · 2/4 products · 28 Nov 2026",
+  "at": [
+   314,
+   316
+  ]
+ },
+ {
+  "label": "−21.0 bps",
+  "at": [
+   626,
+   294
+  ]
+ },
+ {
+  "label": "Average",
+  "at": [
+   638,
+   338
+  ]
+ },
+ {
+  "label": "Median 7.69% → 7.69%",
+  "at": [
+   314,
+   380
+  ]
+ },
+ {
+  "label": "Easy Street · Decrease · Home loans · Average −20.0 bps · 3/13 products · 27 Nov 2026 · Median 6.69% → 6.69%",
+  "flags": "tap",
+  "at": [
+   360,
+   525
+  ]
+ },
+ {
+  "label": "Easy Street",
+  "at": [
+   314,
+   461
+  ]
+ },
+ {
+  "label": "Easy Street",
+  "at": [
+   66,
+   525
+  ]
+ },
+ {
+  "label": "Decrease · Home loans · 3/13 products · 27 Nov 2026",
+  "at": [
+   314,
+   525
+  ]
+ },
+ {
+  "label": "−20.0 bps",
+  "at": [
+   626,
+   503
+  ]
+ },
+ {
+  "label": "Average",
+  "at": [
+   638,
+   547
+  ]
+ },
+ {
+  "label": "Median 6.69% → 6.69%",
+  "at": [
+   314,
+   589
+  ]
+ },
+ {
+  "label": "Credit Union SA · Increase · Home loans · Average +11.7 bps · 9/19 products · 25 Nov 2026 · Median 7.29% → 7.39%",
+  "flags": "tap",
+  "at": [
+   360,
+   734
+  ]
+ },
+ {
+  "label": "Credit Union SA",
+  "at": [
+   314,
+   670
+  ]
+ },
+ {
+  "label": "Credit Union SA",
+  "at": [
+   66,
+   734
+  ]
+ },
+ {
+  "label": "Increase · Home loans · 9/19 products · 25 Nov 2026",
+  "at": [
+   314,
+   734
+  ]
+ },
+ {
+  "label": "+11.7 bps",
+  "at": [
+   626,
+   712
+  ]
+ },
+ {
+  "label": "Average",
+  "at": [
+   638,
+   756
+  ]
+ },
+ {
+  "label": "Median 7.29% → 7.39%",
+  "at": [
+   314,
+   798
+  ]
+ },
+ {
+  "label": "ME Bank - ME Go · Increase · Home loans · Average +5.0 bps · 2/2 products · 21 Nov 2026 · Median 7.32% → 7.29%",
+  "flags": "tap",
+  "at": [
+   360,
+   943
+  ]
+ },
+ {
+  "label": "ME Bank - ME Go",
+  "at": [
+   322,
+   879
+  ]
+ },
+ {
+  "label": "ME Bank - ME Go",
+  "at": [
+   66,
+   943
+  ]
+ },
+ {
+  "label": "Increase · Home loans · 2/2 products · 21 Nov 2026",
+  "at": [
+   322,
+   943
+  ]
+ },
+ {
+  "label": "+5.0 bps",
+  "at": [
+   634,
+   921
+  ]
+ },
+ {
+  "label": "Average",
+  "at": [
+   638,
+   965
+  ]
+ },
+ {
+  "label": "Median 7.32% → 7.29%",
+  "at": [
+   322,
+   1007
+  ]
+ },
+ {
+  "label": "Macquarie Bank Limited · Increase · Home loans · Average +20.0 bps · 2/2 products · 20 Nov 2026 · Median 6.84% → 6.84%",
+  "flags": "tap",
+  "at": [
+   360,
+   1152
+  ]
+ },
+ {
+  "label": "Macquarie Bank Limited",
+  "at": [
+   314,
+   1088
+  ]
+ },
+ {
+  "label": "Macquarie Bank Limited",
+  "at": [
+   66,
+   1152
+  ]
+ },
+ {
+  "label": "Increase · Home loans · 2/2 products · 20 Nov 2026",
+  "at": [
+   314,
+   1152
+  ]
+ },
+ {
+  "label": "+20.0 bps",
+  "at": [
+   626,
+   1130
+  ]
+ },
+ {
+  "label": "Average",
+  "at": [
+   638,
+   1174
+  ]
+ },
+ {
+  "label": "Median 6.84% → 6.84%",
+  "at": [
+   314,
+   1216
+  ]
+ },
+ {
+  "label": "Show more",
+  "flags": "tap",
+  "at": [
+   360,
+   1328
+  ]
+ },
+ {
+  "label": "Show more",
+  "at": [
+   361,
+   1329
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap,sel",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "sel",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

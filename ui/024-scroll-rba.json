@@ -1,0 +1,210 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "RBA",
+  "at": [
+   186,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Economists’ cash-rate forecast · Dec 26 · 4.85% · Jun 27 · 4.85% · Dec 27 · 4.60% · Jun 28 · 4.10% · Dec 28 · 4.10% · ",
+  "at": [
+   360,
+   334
+  ]
+ },
+ {
+  "label": "Cash rate · 4.85%",
+  "at": [
+   360,
+   515
+  ]
+ },
+ {
+  "label": "Economists’ cash-rate forecast · Dec 26 · 4.85%",
+  "flags": "tap,sel",
+  "at": [
+   96,
+   607
+  ]
+ },
+ {
+  "label": "Dec 26",
+  "at": [
+   96,
+   604
+  ]
+ },
+ {
+  "label": "Economists’ cash-rate forecast · Jun 27 · 4.85%",
+  "flags": "tap",
+  "at": [
+   240,
+   607
+  ]
+ },
+ {
+  "label": "Jun 27",
+  "at": [
+   240,
+   604
+  ]
+ },
+ {
+  "label": "Economists’ cash-rate forecast · Dec 27 · 4.60%",
+  "flags": "tap",
+  "at": [
+   384,
+   607
+  ]
+ },
+ {
+  "label": "Dec 27",
+  "at": [
+   384,
+   604
+  ]
+ },
+ {
+  "label": "Economists’ cash-rate forecast · Jun 28 · 4.10%",
+  "flags": "tap",
+  "at": [
+   528,
+   607
+  ]
+ },
+ {
+  "label": "Jun 28",
+  "at": [
+   528,
+   604
+  ]
+ },
+ {
+  "label": "Economists’ cash-rate forecast · Dec 28 · 4.10%",
+  "flags": "tap",
+  "at": [
+   96,
+   719
+  ]
+ },
+ {
+  "label": "Dec 28",
+  "at": [
+   96,
+   716
+  ]
+ },
+ {
+  "label": "RBA J1 · Survey 1 Nov 2026 · Published 6 Nov 2026",
+  "at": [
+   360,
+   811
+  ]
+ },
+ {
+  "label": "Bond-market forward rates",
+  "at": [
+   360,
+   948
+  ]
+ },
+ {
+  "label": "4.71%",
+  "at": [
+   118,
+   1048
+  ]
+ },
+ {
+  "label": "Jan 27",
+  "at": [
+   359,
+   1020
+  ]
+ },
+ {
+  "label": "Cash rate · −14.0 bps",
+  "at": [
+   359,
+   1060
+  ]
+ },
+ {
+  "label": "Bond-market forward rates · Oct 26 · 4.60% · Jan 27 · 4.71% · Apr 27 · 4.85% · Jul 27 · 4.91% · Oct 27 · 4.91% · ",
+  "at": [
+   360,
+   1252
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap,sel",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "sel",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
