@@ -86,6 +86,7 @@ export function normalizeFilterSnapshot(filters: FilterSnapshot): FilterSnapshot
       .filter((criterion): criterion is NonNullable<typeof criterion> => criterion !== null)
       .sort((a, b) => factCriterionId(a).localeCompare(factCriterionId(b))),
     includeNonStandard: !!filters?.includeNonStandard,
+    ...(filters?.includeLowSavingsRates === true ? { includeLowSavingsRates: true } : {}),
     ...(filters?.factMatchMode === 'unknown' ? { factMatchMode: 'unknown' as const } : {}),
   };
 }
@@ -113,6 +114,7 @@ export function buildSearchLabel(
   }
   const q = query.trim();
   if (q) parts.push(`"${q}"`);
+  if (section === 'Savings' && filters.includeLowSavingsRates) parts.push('Includes low rates');
   const n = activeFilterCount({ ...filters, factCriteria: filters.factCriteria ?? [], query: '' });
   if (n) parts.push(`${n} filter${n === 1 ? '' : 's'}`);
   return parts.join(' · ');

@@ -45,6 +45,9 @@ const LABELS: Readonly<Record<string, UiCopy>> = {
   TERM_DEPOSIT: 'Term deposit',
   AT_MATURITY: 'Paid at maturity',
   MONTHLY: 'Paid monthly',
+  FORTNIGHTLY: 'Paid fortnightly',
+  FOUR_WEEKLY: 'Paid every 4 weeks',
+  FORTNIGHTLY_OR_MONTHLY: 'Fortnightly or monthly',
   QUARTERLY: 'Paid quarterly',
   SEMI_ANNUALLY: 'Paid semi-annually',
   ANNUALLY: 'Paid annually',
@@ -61,7 +64,8 @@ const ORDER: Record<string, number> = {
   AT_CALL: 0, SAVINGS_ACCT: 1,
   BASE: 0, BONUS: 1, INTRO: 2,
   FLAT: 0, TIERED: 1,
-  AT_MATURITY: 0, MONTHLY: 1, QUARTERLY: 2, SEMI_ANNUALLY: 3, ANNUALLY: 4,
+  AT_MATURITY: 0, FORTNIGHTLY: 1, FOUR_WEEKLY: 2, MONTHLY: 3, FORTNIGHTLY_OR_MONTHLY: 4,
+  QUARTERLY: 5, SEMI_ANNUALLY: 6, ANNUALLY: 7,
 };
 
 function months(seg: string): number | null {
