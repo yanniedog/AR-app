@@ -1,4 +1,5 @@
 import {
+  fetchRbaOfficial,
   integrateRbaCalendarIntoCore,
   parseRbaMediaReleaseFeed,
   parseRbaMediaReleaseFeedDecisions,
@@ -23,6 +24,27 @@ const FEED = `
     <dc:date>2026-08-11T14:30:00+10:00</dc:date>
   </item>
 `;
+
+test('aborts an official RBA request at the bounded deadline', async () => {
+  jest.useFakeTimers();
+  let signal: AbortSignal | undefined;
+  const fetchMock = jest.spyOn(global, 'fetch').mockImplementation(async (_url, init) => {
+    signal = init?.signal ?? undefined;
+    await new Promise<void>((_resolve, reject) => {
+      signal?.addEventListener('abort', () => reject(new Error('aborted')));
+    });
+    throw new Error('unreachable');
+  });
+
+  const request = fetchRbaOfficial('https://www.rba.gov.au/test', 'text/html', 1_000);
+  const rejected = expect(request).rejects.toThrow('aborted');
+  await jest.advanceTimersByTimeAsync(1_000);
+  await rejected;
+  expect(signal?.aborted).toBe(true);
+
+  fetchMock.mockRestore();
+  jest.useRealTimers();
+});
 
 test('preserves RBA fields following an alternative HTML comment ending', () => {
   expect(parseRbaOfficialOverview(`<!-- cache note --!>${HTML}`)).toEqual(parseRbaOfficialOverview(HTML));

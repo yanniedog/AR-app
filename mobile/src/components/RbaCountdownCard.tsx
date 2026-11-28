@@ -21,12 +21,25 @@ export function RbaCountdownCard({ expandable = true }: { expandable?: boolean }
   const calendar = useStore((s) => s.rbaCalendar);
   const ensureRbaCalendar = useStore((s) => s.ensureRbaCalendar);
   const [expanded, setExpanded] = useState(false);
-  const countdown = rbaCountdown(calendar);
-  const unresolved = rbaCalendarCoverage(calendar).unresolvedMeeting;
+  const [now, setNow] = useState(() => Date.now());
+  const countdown = rbaCountdown(calendar, now);
+  const unresolved = rbaCalendarCoverage(calendar, now).unresolvedMeeting;
+  const nextAnnouncement = countdown?.meeting.announce_utc ?? null;
+  useEffect(() => {
+    if (!nextAnnouncement || unresolved) return;
+    const announcementAt = Date.parse(nextAnnouncement);
+    if (!Number.isFinite(announcementAt)) return;
+    const delay = Math.min(2_147_483_647, Math.max(0, announcementAt - Date.now() + 100));
+    const timer = setTimeout(() => setNow(Date.now()), delay);
+    return () => clearTimeout(timer);
+  }, [nextAnnouncement, unresolved]);
   useEffect(() => {
     if (!unresolved) return;
     void ensureRbaCalendar();
-    const timer = setInterval(() => void ensureRbaCalendar(), 60_000);
+    const timer = setInterval(() => {
+      setNow(Date.now());
+      void ensureRbaCalendar();
+    }, 60_000);
     return () => clearInterval(timer);
   }, [ensureRbaCalendar, unresolved]);
   if (!countdown && !unresolved) return null;
