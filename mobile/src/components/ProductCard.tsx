@@ -131,7 +131,7 @@ function ProductCardView({
   /** Pricing assumptions supplied by the ephemeral comparison surface. */
   rateScenario?: RateScenario;
   /** Entered Mortgage loan amount; shows the monthly repayment at the payable rate. */
-  repaymentAmount?: number | null;
+  repaymentAmount?: number | 'pending' | null;
 }) {
   const theme = useTheme();
   const { width, fontScale } = useWindowDimensions();
@@ -187,11 +187,12 @@ function ProductCardView({
     : resolution ? resolution.status === 'exact' && resolution.payableRate != null ? toFraction(resolution.payableRate) : null
       : toFraction(row.rate);
   const enteredOffset = Number(rateScenario?.offsetBalance ?? 0);
-  const applicableOffset = section === 'Mortgage' && repaymentAmount !== null && enteredOffset > 0
+  const applicableOffset = section === 'Mortgage' && typeof repaymentAmount === 'number' && enteredOffset > 0
     && productHasAllFeatures(row.product_key, ['OFFSET'], details?.products, boundRow, section) ? enteredOffset : 0;
-  const monthlyRepayment = section === 'Mortgage'
+  const monthlyRepayment = section === 'Mortgage' && typeof repaymentAmount === 'number'
     ? mortgageMonthlyRepayment(row, repaymentAmount, payableFraction, applicableOffset) : null;
-  const repaymentText = monthlyRepayment === null ? null : uiJoin(
+  const pendingRepayment = repaymentAmount === 'pending' && section === 'Mortgage' && mortgageRepaymentBasis(row) !== null;
+  const repaymentText = pendingRepayment ? uiLabel('Updating') : monthlyRepayment === null ? null : uiJoin(
     uiMoney(monthlyRepayment), '/', 'month', ' · ', mortgageRepaymentBasis(row) === 'INTEREST_ONLY'
       ? 'Interest only' : uiJoin('P&I', ' · ', uiCount(LIST_REPAYMENT_TERM_YEARS), ' ', 'yr'));
   const metadata = [

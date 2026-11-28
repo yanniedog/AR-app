@@ -437,3 +437,11 @@ test.each([
     expect(mainTarget(tree).props.accessibilityLabel).toContain(expected);
   } finally { act(() => tree.unmount()); }
 });
+
+test('provisional mortgage rows retain their repayment line without showing a stale amount', () => {
+  const tree = render({ ...row, repayment_type: 'INTEREST_ONLY' }, { repaymentAmount: 'pending' });
+  try {
+    expect(tree.root.findByProps({ testID: 'compact-repayment' }).props.children).toBe('Updating');
+    expect(tree.root.findByProps({ testID: 'compact-product-row' }).props.style.height).toBeUndefined();
+  } finally { act(() => tree.unmount()); }
+});
