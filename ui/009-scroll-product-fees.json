@@ -1,0 +1,181 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I With Offset Mortgage",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Show Documents",
+  "flags": "tap",
+  "at": [
+   360,
+   357
+  ]
+ },
+ {
+  "label": "Documents",
+  "at": [
+   328,
+   357
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   360,
+   521
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   286,
+   573
+  ]
+ },
+ {
+  "label": "Unverified",
+  "at": [
+   626,
+   573
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   273,
+   625
+  ]
+ },
+ {
+  "label": "Unassessed",
+  "at": [
+   613,
+   625
+  ]
+ },
+ {
+  "label": "Show Recorded criteria",
+  "flags": "tap",
+  "at": [
+   360,
+   790
+  ]
+ },
+ {
+  "label": "Recorded criteria",
+  "at": [
+   328,
+   790
+  ]
+ },
+ {
+  "label": "Show Mortgage · History",
+  "flags": "tap",
+  "at": [
+   360,
+   1031
+  ]
+ },
+ {
+  "label": "Mortgage · History",
+  "at": [
+   328,
+   1031
+  ]
+ },
+ {
+  "label": "Show Eligibility",
+  "flags": "tap",
+  "at": [
+   360,
+   1272
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   328,
+   1272
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
