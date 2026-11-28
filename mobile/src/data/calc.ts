@@ -89,7 +89,8 @@ export function quickEstimateUnavailableReason(row: RateRow, section: SectionKey
     return 'Eligibility or rate conditions must be confirmed before estimating dollars.';
   }
   if (section === 'TD' && advertisedTermMonths(row) == null) {
-    return 'The maturity term is not published, so no dollar estimate is available.';
+    return row.term ? 'The published term cannot be priced in calendar months.'
+      : 'The maturity term is not published, so no dollar estimate is available.';
   }
   return null;
 }
@@ -167,10 +168,16 @@ export function advertisedTermMonths(input: {
   term?: string;
   ribbon_fixed_term?: string | number;
 }): number | null {
+  const term = input.term?.trim() ?? '';
+  const iso = /^P(?:(\d+)Y)?(?:(\d+)M)?$/.exec(term);
+  if (iso) {
+    const months = Number(iso[1] ?? 0) * 12 + Number(iso[2] ?? 0);
+    if (Number.isSafeInteger(months) && months > 0) return months;
+  }
+  // Day and week periods cannot be priced as whole calendar months.
+  if (/^P[\dYMWD]+$/.test(term) && /[WD]/.test(term)) return null;
   const explicit = Number(input.term_months);
   if (Number.isFinite(explicit) && explicit > 0) return explicit;
-  const iso = /^P(?:(\d+)Y)?(?:(\d+)M)?$/.exec(input.term ?? '');
-  if (iso) return Number(iso[1] ?? 0) * 12 + Number(iso[2] ?? 0) || null;
   const fixedYears = Number(input.ribbon_fixed_term);
   return Number.isFinite(fixedYears) && fixedYears > 0 ? fixedYears * 12 : null;
 }

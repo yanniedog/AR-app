@@ -41,6 +41,7 @@ function filters(sheet: ReportSheet, model: ProfileFilters | Filters, scope: UiL
   record(sheet, prefix, 'Bank', uiJoin(...model.providers.flatMap((provider, index) => index ? [uiLabel(' · '), uiProviderName({ provider })] : [uiProviderName({ provider })])) || uiLabel('None'));
   record(sheet, prefix, 'Eligibility', enums(model.eligibilityCriteria));
   record(sheet, prefix, 'Include non-standard', yesNo(model.includeNonStandard));
+  if (model.includeLowSavingsRates) record(sheet, prefix, 'Include low savings rates', yesNo(true));
   model.factCriteria.forEach(criterion => {
     const operators: Readonly<Record<typeof criterion.operator, UiLabel>> = { exists: 'Included', eq: 'Equal', gte: 'Greater or equal', lte: 'Less or equal' };
     record(sheet, prefix, 'Predicate', uiJoin(uiIdentifier(criterion.canonicalKey ?? criterion.sourceType), ' · ', operators[criterion.operator], ' · ', criterion.operator === 'exists' ? 'Not applicable' : typeof criterion.value === 'boolean' ? yesNo(criterion.value) : criterion.unit === 'enum' || criterion.unit === 'text' ? humanizeEnum(String(criterion.value)) : decimal(criterion.value)), criterion.unit ? humanizeEnum(criterion.unit.toUpperCase()) : 'Unknown');

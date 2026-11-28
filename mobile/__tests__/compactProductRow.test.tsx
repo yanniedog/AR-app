@@ -47,7 +47,7 @@ function render(exact: RateRow = row, props: Partial<React.ComponentProps<typeof
   return tree;
 }
 function mainTarget(tree: Tree) {
-  return tree.root.findAllByType('PressFeedback').find(node => !node.props.testID && !String(node.props.accessibilityLabel).startsWith('View '))!;
+  return tree.root.findAllByType('PressFeedback').find(node => (node.props.testID?.startsWith('rate-card-') || !node.props.testID) && !String(node.props.accessibilityLabel).startsWith('View '))!;
 }
 
 beforeEach(() => { mockDimensions = { width: 360, height: 800, scale: 3, fontScale: 1 }; jest.clearAllMocks(); });
