@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import type Ionicons from '../icons/AppIcon';
-import { ProductPageLink, productFactLink, useProductPageDetails } from './ProductPageLink';
+import { ProductPageLink, useProductFactLink } from './ProductPageLink';
 import { DetailLoadingLines } from '../feedback';
 import { AppText, Button, Disclosure, Row } from '../ui';
 import { formatBalanceRange, formatTerm, humanizeEnum } from '../../data/format';
@@ -11,7 +11,7 @@ import { useStore } from '../../data/store';
 import { uiAccessBadge, uiConditionFact, uiListedLvrRange, uiLoanPurpose, uiRateStructure, uiRepayment, type FinancialFactRow } from '../../lib/financialUiCopy';
 import { scopedRateConditions } from '../../data/rateConditions';
 import { scopedFinancialConditionFacts } from '../../data/scopedFinancialConditionFacts';
-import { dedupeDetailItems, dedupeFacts, groupUnlinkedGenericFacts, isAnnualFee, isUpfrontFee, uiDetailItem, uiFeeCap, uiFeeDiscount, uiNormalizedProductFact, uiProductFactValue, type ProductPresentationFact } from '../../lib/productUiFacts';
+import { dedupeDetailItems, dedupeFacts, groupUnlinkedGenericFacts, isAnnualFee, isUpfrontFee, uiDetailItem, uiFeeCap, uiFeeDiscount, uiLegacyDetailFacts, uiNormalizedProductFact, uiProductFactValue, type ProductPresentationFact } from '../../lib/productUiFacts';
 import { curatedFeatureIdentityKey, featureEvidenceScope, normalizedProductFacts } from '../../data/productFacts';
 import { uiCount, uiJoin, uiLabel, type UiCopy, type UiLabel, type UiText } from '../../lib/uiCopy';
 import type { DetailItem, NormalizedProductFact, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
@@ -45,18 +45,13 @@ function PublishedFacts({ facts, fees }: { facts: readonly ProductPresentationFa
 }
 export function DetailGroup({ title, items: published, loading }: { title: 'Fees' | 'Eligibility' | 'Features' | 'Constraints'; icon: keyof typeof Ionicons.glyphMap; items?: DetailItem[]; loading: boolean }) {
   const [open, setOpen] = useState(false);
-  const items = useMemo(() => published ? dedupeDetailItems(published) : published, [published]);
-  const facts = useMemo(() => {
-    const rows = (items ?? []).map((item, index) => uiDetailItem(item, index, title));
-    // Legacy detail rows have no fact-level document links. Keep each fee
-    // occurrence aligned with its original caps and discounts.
-    return title === 'Fees' ? rows : groupUnlinkedGenericFacts(rows, () => false);
-  }, [items, title]);
-  if (!items?.length && !loading) return null;
+  const fees = useMemo(() => title === 'Fees' ? dedupeDetailItems(published) : undefined, [published, title]);
+  const facts = useMemo(() => title === 'Fees'
+    ? (fees ?? []).map((item, index) => uiDetailItem(item, index, title))
+    : uiLegacyDetailFacts(published, title), [fees, published, title]);
+  if (!facts.length && !loading) return null;
   return <Disclosure title={title} open={open} onToggle={() => setOpen(v => !v)}>
-    {loading && !items ? <DetailLoadingLines /> : <PublishedFacts
-      facts={facts}
-      fees={title === 'Fees' ? items : undefined} />}
+    {loading && !published ? <DetailLoadingLines /> : <PublishedFacts facts={facts} fees={fees} />}
   </Disclosure>;
 }
 
@@ -65,7 +60,7 @@ const PRODUCT_FACT_GROUPS: readonly [NormalizedProductFact['kind'], UiLabel][] =
 
 export function ProductFacts({ productDetails: detail }: { productDetails: ProductDetailData | null }) {
   const [open, setOpen] = useState(false), [page, setPage] = useState(0);
-  const source = useProductPageDetails();
+  const factLink = useProductFactLink();
   // Rich legacy fee occurrences have their own Fees surface, including caps,
   // discounts and condition references. Transitional normalized copies must
   // not present the same charge a second time.
@@ -73,9 +68,9 @@ export function ProductFacts({ productDetails: detail }: { productDetails: Produ
     const raw = dedupeFacts(normalizedProductFacts(detail)).filter(fact => !detail?.fees?.length || fact.kind !== 'fee');
     return PRODUCT_FACT_GROUPS.flatMap(([kind]) => groupUnlinkedGenericFacts(
       raw.filter(fact => fact.kind === kind).map(uiNormalizedProductFact),
-      fact => Boolean(productFactLink(source, fact)),
+      fact => Boolean(factLink(fact)),
     ).map(fact => ({ kind, fact })));
-  }, [detail, source]);
+  }, [detail, factLink]);
   if (!ordered.length) return null;
   const at = Math.min(page, Math.max(0, Math.ceil(ordered.length / 24) - 1));
   const selected = ordered.slice(at * 24, (at + 1) * 24);

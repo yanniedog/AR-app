@@ -1,9 +1,10 @@
 import fixture from './fixtures/bankwest-easy-saver-eligibility-20260913.json';
 import siblings from './fixtures/suitability-conditional-siblings-20260913.json';
 import explorerCapture from './fixtures/app-explorer-45897919403.json';
+import retainedEvidence from './fixtures/product-evidence-criteria-retained.json';
 import sample from '../assets/sample/details.json';
 import type { ProductDetail } from '../src/types';
-import { dedupeDetailItems, dedupeFacts, groupUnlinkedGenericFacts, isAnnualFee, uiDetailItem, uiNormalizedProductFact, uiProductFactValue } from '../src/lib/productUiFacts';
+import { dedupeDetailItems, dedupeFacts, groupUnlinkedGenericFacts, isAnnualFee, uiDetailItem, uiLegacyDetailFacts, uiNormalizedProductFact, uiProductFactValue } from '../src/lib/productUiFacts';
 import { uiCount, uiJoin, uiLabel, uiPublishedFeeName, uiProductKeyLabel, uiPublishedText } from '../src/lib/uiCopy';
 
 test('groups the indistinguishable feature rows captured on the Virgin Money product', () => {
@@ -19,6 +20,31 @@ test('groups the indistinguishable feature rows captured on the Virgin Money pro
   expect(grouped).toHaveLength(1);
   expect(grouped[0].label).toBe(uiJoin(label, ' · ', uiCount(rows.length)));
   expect(uiProductFactValue(grouped[0])).toBe(expectedValue);
+});
+
+test('retains the tier group, parent and displayed value of Central West term deposit facts', () => {
+  const product = retainedEvidence.products.find(entry => entry.identity.provider === 'Central West CUL')!;
+  const facts = product.facts.filter(fact => fact.kind === 'tier' && /^depositRates\[[23]\]\.tiers\[[01]\]\.(?:name|rateApplicationMethod)$/.test(fact.source_path))
+    .map(fact => {
+      const { groupId, parentId } = JSON.parse(fact.qualifiers_json);
+      return uiNormalizedProductFact({ id: fact.fact_id, kind: 'tier', canonicalKey: fact.canonical_key,
+        value: JSON.parse(fact.value_json), unit: fact.unit, groupId, parentId });
+    });
+  expect(facts).toHaveLength(8);
+  expect(facts.every(fact => fact.label === 'Other criterion')).toBe(true);
+  expect(new Set(facts.map(uiProductFactValue))).toEqual(new Set(['Unknown', 'WHOLE_BALANCE']));
+  expect(groupUnlinkedGenericFacts(facts, () => false)).toEqual(facts);
+});
+
+test('counts each published generic Police Bank feature, including identical source occurrences', () => {
+  const key = 'Police Bank|ba32620e-c1d1-4e90-ad0d-ec03d4d06a85|TRANS_AND_SAVINGS_ACCOUNTS|U30 SUPER CHARGE Account';
+  const features = (sample.products[key] as ProductDetail).features!;
+  expect(features.filter(item => item.label === 'OTHER')).toHaveLength(16);
+  expect(dedupeDetailItems(features).filter(item => item.label === 'OTHER')).toHaveLength(13);
+  const facts = uiLegacyDetailFacts(features, 'Features');
+  expect(facts.filter(fact => fact.label.startsWith('Other feature'))).toEqual([
+    expect.objectContaining({ label: 'Other feature · 16', value: 'Conditions apply' }),
+  ]);
 });
 
 const detail = fixture.detail as ProductDetail;

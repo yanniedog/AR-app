@@ -71,17 +71,52 @@ export function termsSourceDocuments(terms: ProductTerms): ProductSourceDocument
   }));
 }
 
-export function factDocumentActions(detail: ProductDetail | null | undefined, fact: NormalizedProductFact): ProductDocumentAction[] {
-  if (fact.sourcePathBasis !== 'raw-cdr' || !fact.sourcePath) return [];
-  const matches = (pointer?: string) => pointer === fact.sourcePath || Boolean(pointer
-    && /^\/(?:fees|features|eligibility|constraints|depositRates|lendingRates)\/\d+(?:\/tiers\/\d+)?$/.test(fact.sourcePath!)
-    && pointer.startsWith(fact.sourcePath + '/'));
-  return productDocumentActions(detail).flatMap(action => {
-    if (action.specificity === 'background' || action.relevance === 'superseded') return [];
-    const citation = action.document.citations?.find(value => matches(value.sourcePath));
-    if (!citation && !matches(action.document.sourcePath)) return [];
-    const admitted = citation?.sourceUrl && trustedExternalUrl({ url: citation.sourceUrl, purpose: 'lender_source', label: 'Source' });
-    return [{ ...action, page: citation ? citation.page ?? declaredPage(citation.sourceUrl) : action.page,
-      url: admitted && admitted.ok ? admitted.url : action.url }];
-  });
+const FACT_ROW_PATH = /^(\/(?:fees|features|eligibility|constraints|depositRates|lendingRates)\/\d+)(?:\/tiers\/\d+)?(?=\/|$)/;
+
+function matchingFactPaths(pointer: string): Set<string> {
+  const paths = new Set([pointer]);
+  const row = FACT_ROW_PATH.exec(pointer);
+  if (row) paths.add(row[1]).add(row[0]);
+  return paths;
+}
+
+function indexFactDocumentActions(detail: ProductDetail | null | undefined) {
+  const indexed = new Map<string, ProductDocumentAction[]>();
+  for (const action of productDocumentActions(detail)) {
+    if (action.specificity === 'background' || action.relevance === 'superseded') continue;
+    const matches = new Map<string, ProductDocumentAction>();
+    for (const citation of action.document.citations ?? []) {
+      if (!citation.sourcePath) continue;
+      const admitted = citation.sourceUrl && trustedExternalUrl({ url: citation.sourceUrl, purpose: 'lender_source', label: 'Source' });
+      const citedAction = { ...action, page: citation.page ?? declaredPage(citation.sourceUrl),
+        url: admitted && admitted.ok ? admitted.url : action.url };
+      // The first matching citation in the source wins for each fact path.
+      for (const path of matchingFactPaths(citation.sourcePath)) {
+        if (!matches.has(path)) matches.set(path, citedAction);
+      }
+    }
+    for (const path of matchingFactPaths(action.document.sourcePath)) {
+      if (!matches.has(path)) matches.set(path, action);
+    }
+    for (const [path, match] of matches) {
+      const actions = indexed.get(path);
+      if (actions) actions.push(match);
+      else indexed.set(path, [match]);
+    }
+  }
+  return indexed;
+}
+
+/** Share admitted document actions and path matches across facts in one product. */
+export function prepareFactDocumentActions(detail: ProductDetail | null | undefined) {
+  let indexed: ReturnType<typeof indexFactDocumentActions> | undefined;
+  return (fact: NormalizedProductFact): readonly ProductDocumentAction[] => {
+    if (fact.sourcePathBasis !== 'raw-cdr' || !fact.sourcePath) return [];
+    indexed ??= indexFactDocumentActions(detail);
+    return indexed.get(fact.sourcePath) ?? [];
+  };
+}
+
+export function factDocumentActions(detail: ProductDetail | null | undefined, fact: NormalizedProductFact): readonly ProductDocumentAction[] {
+  return prepareFactDocumentActions(detail)(fact);
 }
