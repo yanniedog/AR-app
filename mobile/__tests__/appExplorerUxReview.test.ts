@@ -78,6 +78,7 @@ function encodePng(width: number, height: number, rgba: Buffer, bpp: 3 | 4, filt
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(Buffer.concat(rows))), chunk('IEND', Buffer.alloc(0))]);
 }
 
+const keyboardHidden = [{ keyboardMeasurement: 'measured', keyboardBounds: null }];
 const checks = (r: ReturnType<typeof review>) => r.findings.map(f => f.check);
 
 describe('app explorer UX review', () => {
@@ -99,7 +100,7 @@ describe('app explorer UX review', () => {
     ];
     const covered = { text: 'Covered row title', clickable: true, bounds: [20, 1375, 400, 1405] };
     const faint = (x: number, y: number) => (x > 20 && x < 400 && y > 1375 && y < 1405 ? [250, 250, 250] : [255, 255, 255]);
-    const r = review({ rates: [...tabs, covered] }, [], { png: { rates: faint } });
+    const r = review({ rates: [...tabs, covered] }, keyboardHidden, { png: { rates: faint } });
     expect(r.findings.filter(f => f.text === 'Covered row title')).toEqual([]);
   });
 
@@ -112,10 +113,10 @@ describe('app explorer UX review', () => {
     ];
     const hiddenRow = { text: 'Macq Account hidden below', bounds: [200, 1100, 600, 1140] };
     const blank = () => [240, 240, 244];
-    const r = review({ search: [keyboard, ...hiddenTabs, hiddenRow] }, [], { png: { search: blank } });
+    const r = review({ search: [keyboard, ...hiddenTabs, hiddenRow] }, [{ keyboardMeasurement: 'measured', keyboardBounds: keyboard.bounds }], { png: { search: blank } });
     expect(r.findings.filter(f => f.check === 'contrast')).toEqual([]);
     // The same text with no keyboard up is still measured.
-    const open = review({ search: [...hiddenTabs, hiddenRow] }, [], { png: { search: blank } });
+    const open = review({ search: [...hiddenTabs, hiddenRow] }, keyboardHidden, { png: { search: blank } });
     expect(open.findings.filter(f => f.check === 'contrast').length).toBeGreaterThan(0);
   });
 
@@ -295,9 +296,8 @@ describe('app explorer UX review', () => {
     const faint = (x: number, y: number) => (x > 20 && x < 300 && y > 300 && y < 340 && (x + y) % 3 === 0 ? [200, 200, 200] : [255, 255, 255]);
     const bold = (x: number, y: number) => (x > 20 && x < 300 && y > 300 && y < 340 && (x + y) % 3 === 0 ? [20, 20, 20] : [255, 255, 255]);
     const node = { text: 'Rate', bounds: [20, 300, 300, 340] };
-    const measured = [{ keyboardMeasurement: 'measured', keyboardBounds: null }];
-    expect(checks(review({ rates: [node] }, measured, { png: { rates: faint } }))).toContain('contrast');
-    expect(checks(review({ rates: [node] }, measured, { png: { rates: bold } }))).not.toContain('contrast');
+    expect(checks(review({ rates: [node] }, keyboardHidden, { png: { rates: faint } }))).toContain('contrast');
+    expect(checks(review({ rates: [node] }, keyboardHidden, { png: { rates: bold } }))).not.toContain('contrast');
     const none = review({ rates: [node] });
     expect(checks(none)).toContain('contrast-not-measured');
     expect(none.summaryLines.join('\n')).toMatch(/Contrast not measured/);
@@ -346,8 +346,8 @@ console.log(JSON.stringify({ a: a && [a.width, a.height, a.data.toString('base64
     const faint = (x: number, y: number) => (x > 20 && x < 300 && y > 300 && y < 340 && (x + y) % 3 === 0 ? [240, 240, 240] : [255, 255, 255]);
     const blank = () => [255, 255, 255];
     const node = { text: 'Rate', bounds: [20, 300, 300, 340] };
-    expect(review({ rates: [node] }, [], { png: { rates: faint } }).findings.filter(f => f.check === 'contrast')).toHaveLength(1);
-    expect(review({ rates: [node] }, [], { png: { rates: blank } }).findings.filter(f => f.check === 'contrast')).toHaveLength(1);
+    expect(review({ rates: [node] }, keyboardHidden, { png: { rates: faint } }).findings.filter(f => f.check === 'contrast')).toHaveLength(1);
+    expect(review({ rates: [node] }, keyboardHidden, { png: { rates: blank } }).findings.filter(f => f.check === 'contrast')).toHaveLength(1);
   });
 
   it('reads cards labelled with a payable-rate origin and keeps the provider boundary', () => {
