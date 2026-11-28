@@ -1,0 +1,485 @@
+[
+ {
+  "label": "Verified · 1.0.400",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   361,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   673,
+   331
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap",
+  "at": [
+   134,
+   459
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   457
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   459
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   457
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap,sel",
+  "at": [
+   587,
+   459
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "sel",
+  "at": [
+   586,
+   457
+  ]
+ },
+ {
+  "label": "Search",
+  "flags": "tap",
+  "at": [
+   386,
+   581
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "flags": "tap",
+  "at": [
+   80,
+   703
+  ]
+ },
+ {
+  "label": "Filter",
+  "at": [
+   80,
+   725
+  ]
+ },
+ {
+  "label": "Sort · Advertised rate",
+  "flags": "tap",
+  "at": [
+   218,
+   703
+  ]
+ },
+ {
+  "label": "Advertised",
+  "at": [
+   218,
+   725
+  ]
+ },
+ {
+  "label": "Compare",
+  "flags": "tap",
+  "at": [
+   378,
+   703
+  ]
+ },
+ {
+  "label": "Compare",
+  "at": [
+   378,
+   725
+  ]
+ },
+ {
+  "label": "Lenders",
+  "flags": "tap",
+  "at": [
+   520,
+   703
+  ]
+ },
+ {
+  "label": "Lenders",
+  "at": [
+   520,
+   725
+  ]
+ },
+ {
+  "label": "Search actions",
+  "flags": "tap",
+  "at": [
+   640,
+   703
+  ]
+ },
+ {
+  "label": "More",
+  "at": [
+   640,
+   725
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1080
+  ]
+ },
+ {
+  "label": "View Southern Cross Credit Union · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   560
+  ]
+ },
+ {
+  "label": "TERM DEPOSIT, Southern Cross Credit Union, Rate 5.70%, 1 yr · $5k–$20m · Monthly · Conditions: Unverified, Tier #19, Bes",
+  "flags": "tap",
+  "at": [
+   384,
+   560
+  ]
+ },
+ {
+  "label": "SCCU · TERM DEPOSIT",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   518
+  ]
+ },
+ {
+  "label": "Save, TERM DEPOSIT, Southern Cross Credit Union, Rate 5.70%, Rate index 19",
+  "id": "rate-save:Southern%20Cross%20Credit%20Union%7CSTANDARD_TERM_DEPOSIT%7CTERM_DEPOSITS%7CTERM%20DEPOSIT:19",
+  "flags": "tap",
+  "at": [
+   640,
+   552
+  ]
+ },
+ {
+  "label": "View Judo Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   704
+  ]
+ },
+ {
+  "label": "Personal Term Deposits, Judo Bank, Rate 5.65%, 4 yrs · Annually · Conditions: Unverified, Tier #2, Best advertised ↑ 5 b",
+  "flags": "tap",
+  "at": [
+   384,
+   704
+  ]
+ },
+ {
+  "label": "Judo · Personal Term Deposits",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   662
+  ]
+ },
+ {
+  "label": "Save, Personal Term Deposits, Judo Bank, Rate 5.65%, 4 yrs",
+  "id": "rate-save:Judo%20Bank%7C09c281bb-27cb-4daf-88f4-067e28d37ea4%7CTERM_DEPOSITS%7CPersonal%20Term%20Deposits:2",
+  "flags": "tap",
+  "at": [
+   640,
+   696
+  ]
+ },
+ {
+  "label": "View Judo Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   776
+  ]
+ },
+ {
+  "label": "Personal Term Deposits, Judo Bank, Rate 5.65%, 10 mo · at maturity · Conditions: Unverified, Tier #23, Best advertised ↑",
+  "flags": "tap",
+  "at": [
+   384,
+   776
+  ]
+ },
+ {
+  "label": "Judo · Personal Term Deposits",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   734
+  ]
+ },
+ {
+  "label": "Save, Personal Term Deposits, Judo Bank, Rate 5.65%, 10 mo",
+  "id": "rate-save:Judo%20Bank%7C09c281bb-27cb-4daf-88f4-067e28d37ea4%7CTERM_DEPOSITS%7CPersonal%20Term%20Deposits:23",
+  "flags": "tap",
+  "at": [
+   640,
+   768
+  ]
+ },
+ {
+  "label": "View Judo Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   865
+  ]
+ },
+ {
+  "label": "Personal Term Deposits, Judo Bank, Rate 5.65%, 5 yrs · Annually · Conditions: Unverified, Tier #24, Best advertised ↑ 5 ",
+  "flags": "tap",
+  "at": [
+   384,
+   865
+  ]
+ },
+ {
+  "label": "Judo · Personal Term Deposits",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   824
+  ]
+ },
+ {
+  "label": "Save, Personal Term Deposits, Judo Bank, Rate 5.65%, 5 yrs",
+  "id": "rate-save:Judo%20Bank%7C09c281bb-27cb-4daf-88f4-067e28d37ea4%7CTERM_DEPOSITS%7CPersonal%20Term%20Deposits:24",
+  "flags": "tap",
+  "at": [
+   640,
+   865
+  ]
+ },
+ {
+  "label": "View Heartland · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1009
+  ]
+ },
+ {
+  "label": "Term Deposit, Heartland, Rate 5.62%, 1 yr · $5k+ · at maturity · Conditions: Unverified, Tier #7, Best advertised ↑ 7 bp",
+  "flags": "tap",
+  "at": [
+   384,
+   1009
+  ]
+ },
+ {
+  "label": "Heart · Term Deposit",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   968
+  ]
+ },
+ {
+  "label": "Save, Term Deposit, Heartland, Rate 5.62%",
+  "id": "rate-save:Heartland%7CTD01.1%7CTERM_DEPOSITS%7CTerm%20Deposit:7",
+  "flags": "tap",
+  "at": [
+   640,
+   1009
+  ]
+ },
+ {
+  "label": "View Australian Military Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1153
+  ]
+ },
+ {
+  "label": "Income Plus, Australian Military Bank, Rate 5.60%, 6 mo · $1k+ · at maturity, Tier #9, Best advertised ↑ 25 bps · 4 days",
+  "flags": "tap",
+  "at": [
+   384,
+   1153
+  ]
+ },
+ {
+  "label": "AMB · Income Plus",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1112
+  ]
+ },
+ {
+  "label": "Save, Income Plus, Australian Military Bank, Rate 5.60%",
+  "id": "rate-save:Australian%20Military%20Bank%7C3b2158a8-34ee-4cb2-870d-1b741ad6e77e%7CTERM_DEPOSITS%7CIncome%20Plus:9",
+  "flags": "tap",
+  "at": [
+   640,
+   1153
+  ]
+ },
+ {
+  "label": "View Australian Military Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1297
+  ]
+ },
+ {
+  "label": "Investment Plus, Australian Military Bank, Rate 5.60%, 1 yr · $1k+ · at maturity, Tier #30, Best advertised ↑ 25 bps · 4",
+  "flags": "tap",
+  "at": [
+   384,
+   1297
+  ]
+ },
+ {
+  "label": "AMB · Investment Plus",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1256
+  ]
+ },
+ {
+  "label": "Save, Investment Plus, Australian Military Bank, Rate 5.60%",
+  "id": "rate-save:Australian%20Military%20Bank%7Cc70ea9ac-cf01-49ff-a100-b59a953ff33a%7CTERM_DEPOSITS%7CInvestment%20Plus:30",
+  "flags": "tap",
+  "at": [
+   640,
+   1297
+  ]
+ },
+ {
+  "label": "View CommFCU · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1385
+  ]
+ },
+ {
+  "label": "12 Month Term Deposit Special, CommFCU, Rate 5.60%, 1 yr · $10k–$2m · at maturity · Conditions: Unverified, Tier #1, Fre",
+  "flags": "tap",
+  "at": [
+   384,
+   1385
+  ]
+ },
+ {
+  "label": "CommFCU · 12 Month Term Deposit Special",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1386
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

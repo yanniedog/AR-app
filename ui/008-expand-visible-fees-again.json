@@ -1,0 +1,200 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Discounted Great Rate Home Loan - Variable Owner Occupied",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Listed LVR",
+  "at": [
+   303,
+   216
+  ]
+ },
+ {
+  "label": "≤80.0%",
+  "at": [
+   643,
+   216
+  ]
+ },
+ {
+  "label": "Annual fee",
+  "at": [
+   291,
+   266
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   266
+  ]
+ },
+ {
+  "label": "$180 · Conditions: Unverified · Unknown · Conditions: Unverified · $350 · Conditions: Unverified · $500 · Conditions: Un",
+  "at": [
+   372,
+   398
+  ]
+ },
+ {
+  "label": "Offset account",
+  "at": [
+   291,
+   770
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   770
+  ]
+ },
+ {
+  "label": "Availability",
+  "at": [
+   228,
+   822
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   568,
+   822
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   268,
+   874
+  ]
+ },
+ {
+  "label": "Published · 6",
+  "at": [
+   608,
+   874
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   360,
+   1026
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "flags": "tap",
+  "at": [
+   360,
+   1144
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "at": [
+   386,
+   1144
+  ]
+ },
+ {
+  "label": "Show Fees",
+  "flags": "tap",
+  "at": [
+   360,
+   1349
+  ]
+ },
+ {
+  "label": "Fees",
+  "at": [
+   328,
+   1369
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

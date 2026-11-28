@@ -1,0 +1,237 @@
+[
+ {
+  "label": "Verified · 1.0.400",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   361,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   673,
+   331
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   894
+  ]
+ },
+ {
+  "label": "Your entered rates",
+  "at": [
+   360,
+   471
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   596
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   594
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   596
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   594
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   596
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   594
+  ]
+ },
+ {
+  "label": "Add my rate",
+  "flags": "tap",
+  "at": [
+   360,
+   708
+  ]
+ },
+ {
+  "label": "Add my rate",
+  "at": [
+   361,
+   709
+  ]
+ },
+ {
+  "label": "Entered rates",
+  "at": [
+   114,
+   824
+  ]
+ },
+ {
+  "label": "This device",
+  "at": [
+   617,
+   824
+  ]
+ },
+ {
+  "label": "Saved rates",
+  "at": [
+   360,
+   904
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   360,
+   984
+  ]
+ },
+ {
+  "label": "View Greater Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1092
+  ]
+ },
+ {
+  "label": "Discounted Great Rate Home Loan - Variable Owner Occupied, Greater Bank, Comparison rate 6.35%, Advertised rate 6.34% · ",
+  "flags": "tap",
+  "at": [
+   328,
+   1092
+  ]
+ },
+ {
+  "label": "Greater · Discounted Great Rate Home Loan - Variable Owner Occupied",
+  "id": "compact-product-name",
+  "at": [
+   328,
+   1051
+  ]
+ },
+ {
+  "label": "Remove, Discounted Great Rate Home Loan - Variable Owner Occupied, Greater Bank, Comparison rate 6.35%",
+  "id": "rate-save:Greater%20Bank%7C3285%7CRESIDENTIAL_MORTGAGES%7CDiscounted%20Great%20Rate%20Home%20Loan%20-%20Variable%20Owner%20Occupied:1",
+  "flags": "tap,sel",
+  "at": [
+   528,
+   1092
+  ]
+ },
+ {
+  "label": "Enable alerts · Greater Bank · Discounted Great Rate Home Loan - Variable Owner Occupied",
+  "flags": "tap",
+  "at": [
+   640,
+   1092
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap,sel",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "sel",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

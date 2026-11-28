@@ -1,0 +1,175 @@
+[
+ {
+  "label": "Verified · 1.0.400",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Back",
+  "flags": "tap",
+  "at": [
+   70,
+   331
+  ]
+ },
+ {
+  "label": "Compare",
+  "at": [
+   238,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   672,
+   331
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   998
+  ]
+ },
+ {
+  "label": "Differences",
+  "at": [
+   360,
+   451
+  ]
+ },
+ {
+  "label": "Broken Hill Bank · Choice Home Loan · 1 / 2",
+  "at": [
+   360,
+   1050
+  ]
+ },
+ {
+  "label": "Broken Hill Bank",
+  "at": [
+   68,
+   568
+  ]
+ },
+ {
+  "label": "Choice Home Loan",
+  "at": [
+   324,
+   556
+  ]
+ },
+ {
+  "label": "Lowest rate",
+  "at": [
+   616,
+   559
+  ]
+ },
+ {
+  "label": "Broken Hill Bank",
+  "at": [
+   324,
+   604
+  ]
+ },
+ {
+  "label": "Comparison rate",
+  "at": [
+   360,
+   672
+  ]
+ },
+ {
+  "label": "5.99%",
+  "at": [
+   360,
+   736
+  ]
+ },
+ {
+  "label": "Payable rate",
+  "at": [
+   360,
+   824
+  ]
+ },
+ {
+  "label": "5.94%",
+  "at": [
+   360,
+   864
+  ]
+ },
+ {
+  "label": "Listed LVR",
+  "at": [
+   360,
+   937
+  ]
+ },
+ {
+  "label": "≤80.0%",
+  "at": [
+   360,
+   977
+  ]
+ },
+ {
+  "label": "Fees",
+  "at": [
+   360,
+   1050
+  ]
+ },
+ {
+  "label": "Transaction fee: $35 · Discharge of Mortgage Fee · Upfront fee: $649.02 · Upfront fee: $19.95 · Loan Establishment Fee ·",
+  "at": [
+   360,
+   1230
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   360,
+   1443
+  ]
+ },
+ {
+  "label": "Minimum age: 18 years · Other criterion: Unknown · Residency status: Australian citizen or Permanent resident",
+  "at": [
+   360,
+   1523
+  ]
+ }
+]
