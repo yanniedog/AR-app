@@ -32,7 +32,7 @@ async function main() {
   const repo = process.env.GITHUB_REPOSITORY;
   if (repo !== 'yanniedog/AR-app' || !/^\d+$/.test(id)) throw Error('Missing App Explorer run identity');
   const runApi = await fetchJson('https://api.github.com/repos/' + repo + '/actions/runs/' + id);
-  if (runApi.name !== 'app-explorer' || String(runApi.id) !== id || runApi.status !== 'completed') {
+  if (runApi.path !== '.github/workflows/app-explorer.yml' || String(runApi.id) !== id || runApi.status !== 'completed') {
     throw Error('Expected a completed App Explorer run');
   }
   if (runApi.event === 'pull_request') {
