@@ -241,6 +241,7 @@ async function settle(timeoutMs, since = Date.now(), before = null, { scrolling 
   let stableSince = null;
   let firstSeen = start;
   let responseMs = null;
+  let responseLowerBoundMs = 0;
   let firstContentMs = null;
   let loadStart = null;
   let maxLoadingMs = 0;
@@ -251,6 +252,7 @@ async function settle(timeoutMs, since = Date.now(), before = null, { scrolling 
     if (loadStart != null) maxLoadingMs = Math.max(maxLoadingMs, Date.now() - loadStart);
     return {
       responseMs,
+      responseLowerBoundMs: responseMs == null ? null : responseLowerBoundMs,
       firstContentMs,
       maxLoadingMs,
       shifts,
@@ -274,7 +276,12 @@ async function settle(timeoutMs, since = Date.now(), before = null, { scrolling 
     const fp = fingerprint(last.nodes);
     const loading = looksLoading(last.nodes);
     const changed = before == null || fp !== before;
-    if (changed && responseMs == null) responseMs = Date.now() - start;
+    // A hierarchy reflects an unknown instant inside its acquisition interval. Only
+    // an unchanged hierarchy can prove the screen had not yet reacted.
+    if (responseMs == null && last.nodes.length) {
+      if (changed) responseMs = Date.now() - start;
+      else responseLowerBoundMs = Math.max(0, dumpStarted - start);
+    }
     if (changed && firstContentMs == null && contentful(last.nodes)) firstContentMs = Date.now() - start;
     else if (!scrolling && firstContentMs != null && prevNodes.length && fp !== prev && shiftedBetween(prevNodes, last.nodes) > 0) shifts += 1;
     if (loading) loadStart ??= Date.now();
@@ -502,6 +509,7 @@ class Explorer {
       ...keyboard,
       settleTimedOut: settled.timedOut,
       responseMs: settled.responseMs ?? undefined,
+      responseLowerBoundMs: settled.responseLowerBoundMs ?? undefined,
       firstContentMs: settled.firstContentMs ?? undefined,
       maxLoadingMs: settled.maxLoadingMs || undefined,
       blank: settled.blank || undefined,

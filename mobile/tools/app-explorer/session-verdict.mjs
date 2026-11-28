@@ -73,7 +73,7 @@ export function computeVerdict(report, baseline) {
     const empty = emptyMs(s);
     if (empty != null && empty >= t.emptyFailMs) add('fail', 'no-content', s, `Nothing to read for ${ms(empty)} on "${s.name}"`);
     else if (empty != null && empty >= t.emptyFrictionMs) add('friction', 'empty-wait', s, `Nothing to read for ${ms(empty)} on "${s.name}"`);
-    if (!launch && s.responseMs >= t.unresponsiveMs) add('friction', 'unresponsive', s, `No reaction for ${ms(s.responseMs)} after "${s.name}"`);
+    if (!launch && s.responseLowerBoundMs >= t.unresponsiveMs) add('friction', 'unresponsive', s, `No reaction for at least ${ms(s.responseLowerBoundMs)} after "${s.name}"`);
     if (s.retapped) add('friction', 'repeated-tap', s, `"${s.name}" needed a second tap`);
     if (s.shifts >= t.layoutJumps) add('friction', 'layout-jump', s, `Layout moved ${s.shifts} times after content showed on "${s.name}"`);
     if (s.errorState) {
@@ -91,13 +91,13 @@ export function computeVerdict(report, baseline) {
       const now = contentMs(s);
       const was = contentMs(base);
       if (now >= was * t.regressionFactor && now - was >= t.regressionMinMs) add('regression', 'slower', s, `"${s.name}" content ${ms(was)} to ${ms(now)}`);
-      if (s.responseMs != null && base.responseMs != null && s.responseMs >= base.responseMs * t.regressionFactor && s.responseMs - base.responseMs >= t.responseRegressionMinMs) {
-        add('regression', 'slower-response', s, `"${s.name}" reaction ${ms(base.responseMs)} to ${ms(s.responseMs)}`);
+      if (s.responseLowerBoundMs != null && base.responseMs != null && s.responseLowerBoundMs >= base.responseMs * t.regressionFactor && s.responseLowerBoundMs - base.responseMs >= t.responseRegressionMinMs) {
+        add('regression', 'slower-response', s, `"${s.name}" reaction from at most ${ms(base.responseMs)} to at least ${ms(s.responseLowerBoundMs)}`);
       }
     }
   }
 
-  const informational = steps.map(s => ({ step: s.n, name: s.name, responseMs: s.responseMs ?? null, firstContentMs: s.firstContentMs ?? null, settleMs: s.settleMs, jankRatio: jankRatio(s) }));
+  const informational = steps.map(s => ({ step: s.n, name: s.name, responseMs: s.responseMs ?? null, responseLowerBoundMs: s.responseLowerBoundMs ?? null, firstContentMs: s.firstContentMs ?? null, settleMs: s.settleMs, jankRatio: jankRatio(s) }));
   const outcome = findings.some(f => f.severity === 'fail') ? 'fail' : findings.length ? 'attention' : 'pass';
   return { outcome, findings, informational, baselineVersion: baseline?.app?.versionName ?? null };
 }
