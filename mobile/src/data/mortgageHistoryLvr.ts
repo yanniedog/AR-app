@@ -14,9 +14,10 @@ export function userLvrPercent(value: string | number | null | undefined): numbe
 }
 
 /** The market benchmark for a mortgage is every published rate whose LVR band
- * reaches the user's exact LVR or goes above it. The point is the user's LVR
- * (profile band, then 80% when none is known) and does not depend on the
- * product's own band. */
+ * reaches the user's exact LVR or goes above it. `userLvr` is the caller's
+ * resolved LVR percentage (the product screen uses the scenario LVR, then the
+ * saved profile, then this default of 80%); it does not depend on the product's
+ * own band. */
 export function mortgageHistoryLvr(userLvr?: number | null): string | null {
   const point = Math.round((userLvr && userLvr > 0 ? userLvr : DEFAULT_BENCHMARK_LVR) * 100) / 100;
   return point > 0 && point <= 100 ? `lvr_atleast_${point}` : null;
