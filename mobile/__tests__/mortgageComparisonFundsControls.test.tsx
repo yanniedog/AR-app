@@ -15,6 +15,12 @@ jest.mock('../src/components/IconAction', () => ({ IconAction: 'IconAction' }));
 jest.mock('../src/components/PressFeedback', () => ({ PressFeedback: 'PressFeedback' }));
 jest.mock('../src/components/icons/AppIcon', () => ({ __esModule: true, default: 'Icon' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Chip: 'Chip', Row: 'Row', androidRipple: () => undefined }));
+// The slider's own behaviour is covered in lvrSlider.test; here it stands in as a text field.
+jest.mock('../src/components/LvrSlider', () => {
+  const { TextInput } = require('react-native');
+  return { LvrSlider: ({ value, onChange, onClear }: any) => <TextInput accessibilityLabel="LVR" keyboardType="decimal-pad"
+    value={value === null ? '' : String(value)} onChangeText={(text: string) => (text.trim() ? onChange(text) : onClear())} /> };
+});
 jest.mock('../src/lib/haptics', () => ({ hapticSelection: jest.fn() }));
 
 type TestNode = { props: Record<string, any>; findAllByType(type: any): TestNode[]; findByProps(props: object): TestNode; findAllByProps(props: object): TestNode[] };

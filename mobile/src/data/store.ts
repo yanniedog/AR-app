@@ -117,7 +117,7 @@ export const useStore = create<AppState>()(
           diagnosticsEnabled: false,
           ...migratedMortgageRatePreference(persistedPrefs),
           interests: normalizeInterests(persistedPrefs?.interests ?? DEFAULT_INTERESTS),
-          profileFilters: normalizeProfileFilters(persistedPrefs?.profileFilters),
+          profileFilters: { ...normalizeProfileFilters(persistedPrefs?.profileFilters), lvrTiers: [] },
           ratesPageSize: normalizeRatesPageSize(persistedPrefs?.ratesPageSize),
           calc: normalizeCalcInputs(persistedPrefs?.calc),
         };

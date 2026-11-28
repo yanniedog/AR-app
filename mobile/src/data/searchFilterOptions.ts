@@ -35,7 +35,6 @@ export function searchFilterGroupsFor(section: SectionKey): SearchFilterGroup[] 
     { title: 'Purpose', field: 'loan_purpose', key: 'loanPurposes' },
     { title: 'Rate type', field: 'rate_type', key: 'rateTypes' },
     { title: 'Repayment', field: 'ribbon_repayment_type', key: 'repaymentTypes' },
-    { title: 'LVR tier', field: 'lvr_tier', key: 'lvrTiers' },
   ];
   if (section === 'TD') return [{ title: 'Interest paid', field: 'interest_payment', key: 'interestPayments' }];
   return [{ title: 'Account type', field: 'ribbon_deposit_kind', key: 'depositKinds' }];
