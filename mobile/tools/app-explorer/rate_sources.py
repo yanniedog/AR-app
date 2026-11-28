@@ -75,7 +75,7 @@ def bank_receipt(job, brands):
     url = base.geturl().rstrip('/') + '/cds-au/v1/banking/products/' + quote(row['product_id'], safe='')
     receipt['url'] = url
     try:
-        product = json.loads(fetch(url, 'x-v: 6', 'x-min-v: 3', 'Accept: application/json'))['data']
+        product = json.loads(fetch(url, 'x-v: 7', 'x-min-v: 3', 'Accept: application/json'))['data']
         if product['productId'] != row['product_id'] or product.get('productCategory') != row['category']:
             return {**receipt, 'state': 'product_identity_unresolved'}
         field = 'lendingRates' if section == 'Mortgage' else 'depositRates'
@@ -91,9 +91,13 @@ def bank_receipt(job, brands):
             # cannot identify a tier across editions. A match proves value presence only.
             candidates = [(i, x) for i, x in enumerate(entries) if
                           x.get('lendingRateType', x.get('depositRateType')) == item.get('rate_type') and
+                          all(not item.get(key) or item[key] == x.get(source_key)
+                              for key, source_key in [('loan_purpose', 'loanPurpose'), ('repayment_type', 'repaymentType')]) and
                           (not item.get('term') or x.get('additionalValue') == item['term'])]
             published = number(item['rate'])
-            if published is None or not candidates:
+            if candidates and any(number(x.get('rate')) is not None and number(x['rate']) > 1 for _, x in candidates):
+                state = 'source_unit_unverified'
+            elif published is None or not candidates:
                 state = 'unmatched_scope'
             elif any(number(x.get('rate')) == published and (not item.get('comparison_rate') or
                      number(x.get('comparisonRate')) == number(item['comparison_rate'])) for _, x in candidates):

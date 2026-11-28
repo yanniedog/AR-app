@@ -59,6 +59,7 @@ if [ "$ux_status" -ne 0 ]; then
 fi
 case "${MODE:-crawl}" in
   session|full|audit)
+    PYTHONDONTWRITEBYTECODE=1 python3 mobile/tools/app-explorer/test_rate_evidence.py
     python3 mobile/tools/app-explorer/rate_evidence.py explorer-out
     node mobile/tools/app-explorer/rate-summary.mjs explorer-out >> explorer-out/report.md
     ;;

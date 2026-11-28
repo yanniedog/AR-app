@@ -17,7 +17,13 @@ export function rateSummary(dir) {
     `List-to-detail quotes: ${(r.quotes ?? []).map(q => q.section + ' ' + q.state).join(', ') || 'none measured'}`,
     `Historical changes: ${counts(r.movementStates)}`,
     `Direct bank CDR product checks: ${counts(r.bankProductStates)}`,
-    `CDR values within rate type and published term: ${counts(r.bankRowStates)}. Retail website pricing was not measured.`, '');
+    `CDR values within rate type and published term: ${counts(r.bankRowStates)}`,
+    `Retail website tables (Judo Bank personal TD and Australian Military Bank Income Plus / Investment Plus): ${counts(r.retailStates)}`, '');
+  for (const page of r.retail ?? []) {
+    if (page.error) lines.push(`- Retail page unavailable: ${page.url} (${page.error})`);
+    const diff = page.rows?.find(row => ['payment_frequency_differs', 'retail_rate_differs'].includes(row.state));
+    if (diff) lines.push(`- ${diff.product.split('|').at(-1)}, tier ${diff.tier}, ${diff.termMonths} months: core ${diff.corePercent}% ${diff.coreFrequency}, retail ${JSON.stringify(diff.retailPercentByFrequency)} (${page.url})`);
+  }
   for (const c of r.checkpoints ?? []) {
     if (c.errors.length) lines.push(`- ${c.step}: ${c.errors.join(', ')}`);
   }

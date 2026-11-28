@@ -8,6 +8,7 @@ from datetime import date, timedelta, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
+from retail_rates import retail_checks
 from rate_sources import DELIVERY, REGISTER, bank_receipt, edition, fetch, normal, number
 
 CHECKPOINTS = {
@@ -57,7 +58,12 @@ def checkpoint(capture, step, section, tab, by_label):
         lookup = section, normal(label[:metric.start()]), int(tier[1]) if tier else None
         candidates = by_label.get(lookup, [])
         if len(candidates) != 1:
-            rows.append({'label': label, 'state': 'ambiguous_identity' if candidates else 'unmatched_identity'})
+            other = [s for s in SECTIONS if s != section and (s, *lookup[1:]) in by_label]
+            state = 'ambiguous_identity' if candidates else 'unmatched_identity'
+            if not candidates and other:
+                state = 'wrong_category'
+                errors.append('Product belongs to another category: ' + ', '.join(other))
+            rows.append({'label': label, 'state': state})
             continue
         row = candidates[0]
         claim = CHANGE.search(label)
@@ -221,7 +227,13 @@ def run(directory, result):
     result.update(source=source, shownDate=day, checkpoints=[], sectionCoverage={})
     steps = {s['name']: s for s in report['steps'] if s.get('session')}
     observed = set()
-    for name, (section, tab) in CHECKPOINTS.items():
+    checkpoints = dict(CHECKPOINTS)
+    # Other known Rates destinations supply extra visible products and movement
+    # claims. A skipped optional destination cannot replace a required capture.
+    for name in ('open app', 'scroll rates 1', 'scroll rates 2', 'scroll rates back', 'switch to home loans'):
+        if name in steps:
+            checkpoints[name] = ('Mortgage', 'Home loans')
+    for name, (section, tab) in checkpoints.items():
         step = steps.get(name, {})
         path = directory / 'ui' / (step.get('slug', '') + '.nodes.json')
         if not path.is_file():
@@ -241,9 +253,15 @@ def run(directory, result):
         seen = {products[section, k][0]['provider'] for k in captured}
         result['sectionCoverage'][section] = dict(publishedProducts=len(keys), capturedProducts=len(captured),
             publishedBanks=len(banks), capturedBanks=len(seen), banksWithoutUICapture=sorted(banks - seen))
+    result['retailCheckedAt'] = datetime.now(timezone.utc).isoformat()
+    result['retail'] = retail_checks(products)
     result['movements'] = movement_receipts(result['checkpoints'], index, {k:v.get('deviceDay') for k,v in steps.items()})
     result['bankCheckedAt'] = datetime.now(timezone.utc).isoformat()
-    result['banks'] = bank_checks(products, observed, day)
+    try:
+        result['banks'] = bank_checks(products, observed, day)
+    except Exception as error:
+        result['banks'] = []
+        result['bankError'] = str(error)
     rows = [r for c in result['checkpoints'] for r in c['rows']]
     bank_counts = Counter()
     for b in result['banks']:
@@ -251,11 +269,16 @@ def run(directory, result):
     states = Counter(m['state'] for m in result['movements'])
     result.update(rowStates=dict(Counter(r['state'] for r in rows)), movementStates=dict(states),
                   bankRowStates=dict(bank_counts), bankProductStates=dict(Counter(b['state'] for b in result['banks'])))
-    if any(c['errors'] for c in result['checkpoints']) or states['movement_differs'] or bank_counts['value_absent'] or any(
+    retail = Counter()
+    for page in result['retail']:
+        retail.update(page.get('counts', {}))
+    result['retailStates'] = dict(retail)
+    if retail['retail_rate_differs'] or retail['payment_frequency_differs'] or any(c['errors'] for c in result['checkpoints']) or states['movement_differs'] or bank_counts['value_absent'] or any(
             q['state'] == 'detail_differs' for q in result['quotes']):
         result['outcome'] = 'findings'
-    elif (any(q['state'] != 'matched' for q in result['quotes']) or any(r['state'] != 'matched' for r in rows) or any(b['state'] != 'read' for b in result['banks']) or
-          bank_counts['unmatched_scope'] or states['history_unavailable'] or states['best_tier_conditions_changed']):
+    elif (not result['banks'] or retail['unverified'] or any(p.get('error') or p.get('missingProducts') for p in result['retail']) or
+          any(q['state'] != 'matched' for q in result['quotes']) or any(r['state'] != 'matched' for r in rows) or any(b['state'] != 'read' for b in result['banks']) or
+          bank_counts['unmatched_scope'] or bank_counts['source_unit_unverified'] or states['history_unavailable'] or states['best_tier_conditions_changed']):
         result['outcome'] = 'incomplete'
     else:
         result['outcome'] = 'sample_matched'
