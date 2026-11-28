@@ -22,7 +22,7 @@ import {
   parseAbsCpiCsv,
   parseCashForecastCsv,
   parseCashRateTargetCsv,
-  splitRbaLines,
+  RbaCsvLineCache,
   parseRbaSeriesCsv,
   preferNewerSeries,
 } from './economicOutlookParse';
@@ -292,7 +292,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
     let parseMs = 0;
     let fetchElapsedMs = 0;
     const observeFetch = <T>(request: Promise<T>): Promise<T> => request.finally(() => {
-      fetchElapsedMs = monotonicNow() - fetchStartedAt - parseMs;
+      fetchElapsedMs = monotonicNow() - fetchStartedAt;
     });
     let slowest: { label: string; ms: number } | null = null;
     const timedParse = <T>(url: string, work: () => T): T => {
@@ -386,7 +386,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
         .map((entry) => [entry.source, entry.error!] as const),
     );
 
-    const linesBySource = new Map<RequiredSourceKey, string[]>();
+    const tableCache = new RbaCsvLineCache();
     const indicatorEntries: Array<{
       definition: (typeof INDICATOR_DEFINITIONS)[number];
       indicator: EconomicIndicator | null;
@@ -410,14 +410,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
         };
       }
       try {
-        let parsed = timedParse(URLS[definition.source], () => parseOfficialData(URLS[definition.source], () => {
-          let lines = linesBySource.get(definition.source);
-          if (!lines) {
-            lines = splitRbaLines(text);
-            linesBySource.set(definition.source, lines);
-          }
-          return parseRbaSeriesCsv(text, definition.seriesId, lines);
-        }));
+        let parsed = timedParse(URLS[definition.source], () => parseOfficialData(URLS[definition.source], () => parseRbaSeriesCsv(text, definition.seriesId, tableCache)));
         let sourceUrl: string = URLS[definition.source];
         let frequency = definition.frequency;
         let shortLabel = definition.shortLabel;

@@ -145,8 +145,22 @@ function quotedObservation(line: string, column: number): [string, string] | nul
   return quoted ? null : [date, value];
 }
 
-export function splitRbaLines(text: string): string[] {
+function splitRbaLines(text: string): string[] {
   return text.replace(/^\uFEFF/, '').split(/\r\n|\r|\n/);
+}
+
+/** One refresh owns its source strings and split lines until it completes. */
+export class RbaCsvLineCache {
+  private readonly entries = new Map<string, string[]>();
+
+  linesFor(text: string): readonly string[] {
+    let lines = this.entries.get(text);
+    if (!lines) {
+      lines = splitRbaLines(text);
+      this.entries.set(text, lines);
+    }
+    return lines;
+  }
 }
 
 /**
@@ -155,7 +169,8 @@ export function splitRbaLines(text: string): string[] {
  * of columns) are not split into every cell. Quoted lines use the character parser,
  * and a quote that spans lines falls back to parsing the whole table.
  */
-export function parseRbaSeriesCsv(text: string, seriesId: string, lines = splitRbaLines(text)): ParsedSeries {
+export function parseRbaSeriesCsv(text: string, seriesId: string, cache?: RbaCsvLineCache): ParsedSeries {
+  const lines = cache ? cache.linesFor(text) : splitRbaLines(text);
 
   let ids: string[] | undefined;
   let publicationRow: string[] | undefined;
