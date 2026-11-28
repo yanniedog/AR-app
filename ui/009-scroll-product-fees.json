@@ -1,0 +1,169 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I With Offset Mortgage",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Show Recorded criteria",
+  "flags": "tap",
+  "at": [
+   360,
+   201
+  ]
+ },
+ {
+  "label": "Show Mortgage · History",
+  "flags": "tap",
+  "at": [
+   360,
+   381
+  ]
+ },
+ {
+  "label": "Mortgage · History",
+  "at": [
+   328,
+   381
+  ]
+ },
+ {
+  "label": "Show Eligibility",
+  "flags": "tap",
+  "at": [
+   360,
+   622
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   328,
+   622
+  ]
+ },
+ {
+  "label": "Show Constraints",
+  "flags": "tap",
+  "at": [
+   360,
+   863
+  ]
+ },
+ {
+  "label": "Constraints",
+  "at": [
+   328,
+   863
+  ]
+ },
+ {
+  "label": "Show Terms",
+  "flags": "tap",
+  "at": [
+   360,
+   1104
+  ]
+ },
+ {
+  "label": "Terms",
+  "at": [
+   328,
+   1104
+  ]
+ },
+ {
+  "label": "Show Source criteria",
+  "flags": "tap",
+  "at": [
+   360,
+   1337
+  ]
+ },
+ {
+  "label": "Source criteria",
+  "at": [
+   328,
+   1345
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

@@ -1,0 +1,186 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I With Offset Mortgage",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Annual fee",
+  "at": [
+   291,
+   210
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   210
+  ]
+ },
+ {
+  "label": "$487 · Conditions: Unverified · $132 · Conditions: Unverified · $375 · Conditions: Unverified · $132 · Conditions: Unver",
+  "at": [
+   372,
+   315
+  ]
+ },
+ {
+  "label": "Offset account",
+  "at": [
+   98,
+   727
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   438,
+   707
+  ]
+ },
+ {
+  "label": "Availability",
+  "at": [
+   228,
+   799
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   568,
+   799
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   268,
+   851
+  ]
+ },
+ {
+  "label": "Published · 9",
+  "at": [
+   608,
+   851
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   360,
+   1003
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "flags": "tap",
+  "at": [
+   360,
+   1121
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "at": [
+   386,
+   1121
+  ]
+ },
+ {
+  "label": "Hide Fees",
+  "flags": "tap",
+  "at": [
+   360,
+   1338
+  ]
+ },
+ {
+  "label": "Fees",
+  "at": [
+   328,
+   1347
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

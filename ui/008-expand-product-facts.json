@@ -1,0 +1,237 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I With Offset Mortgage",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Previous date",
+  "flags": "tap",
+  "at": [
+   80,
+   214
+  ]
+ },
+ {
+  "label": "Market median · 7.39%",
+  "at": [
+   360,
+   210
+  ]
+ },
+ {
+  "label": "Market mean · 7.79%",
+  "at": [
+   360,
+   242
+  ]
+ },
+ {
+  "label": "Next date",
+  "flags": "tap,off",
+  "at": [
+   640,
+   214
+  ]
+ },
+ {
+  "label": "RBA cash rate · 4.85%",
+  "at": [
+   360,
+   282
+  ]
+ },
+ {
+  "label": "Product rate",
+  "at": [
+   165,
+   338
+  ]
+ },
+ {
+  "label": "Market rate range",
+  "at": [
+   430,
+   338
+  ]
+ },
+ {
+  "label": "Market median",
+  "at": [
+   181,
+   402
+  ]
+ },
+ {
+  "label": "Market mean",
+  "at": [
+   436,
+   402
+  ]
+ },
+ {
+  "label": "RBA cash rate",
+  "at": [
+   175,
+   466
+  ]
+ },
+ {
+  "label": "Hide Product facts",
+  "flags": "tap",
+  "at": [
+   360,
+   695
+  ]
+ },
+ {
+  "label": "Product facts",
+  "at": [
+   328,
+   695
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Early / extra repayments",
+  "at": [
+   190,
+   851
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   871
+  ]
+ },
+ {
+  "label": "Offset account",
+  "at": [
+   190,
+   951
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   971
+  ]
+ },
+ {
+  "label": "Redraw facility",
+  "at": [
+   190,
+   1051
+  ]
+ },
+ {
+  "label": "Included",
+  "at": [
+   530,
+   1051
+  ]
+ },
+ {
+  "label": "Show Documents",
+  "flags": "tap",
+  "at": [
+   360,
+   1280
+  ]
+ },
+ {
+  "label": "Documents",
+  "at": [
+   328,
+   1280
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

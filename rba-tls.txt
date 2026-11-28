@@ -1,0 +1,9 @@
+emulator android=14 api=34 date=2026-11-28T16:24:47Z
+runner date=2026-11-28T16:24:47Z
+ 0 s:serialNumber=50 008 559 486, jurisdictionC=AU, businessCategory=Government Entity, C=AU, ST=New South Wales, O=Reserve Bank of Australia, CN=rba.gov.au
+   i:C=GB, O=Sectigo Limited, CN=Sectigo Public Server Authentication CA EV R36
+ 1 s:C=GB, O=Sectigo Limited, CN=Sectigo Public Server Authentication CA EV R36
+   i:C=GB, O=Sectigo Limited, CN=Sectigo Public Server Authentication Root R46
+ 2 s:C=GB, O=Sectigo Limited, CN=Sectigo Public Server Authentication Root R46
+   i:C=GB, O=Sectigo Limited, CN=Sectigo Public Server Authentication Root R46
+Verify return code: 0 (ok)
