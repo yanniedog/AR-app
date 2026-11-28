@@ -1,0 +1,371 @@
+[
+ {
+  "label": "",
+  "flags": "tap",
+  "at": [
+   360,
+   800
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "at": [
+   300,
+   224
+  ]
+ },
+ {
+  "label": "Close Temporary filters",
+  "flags": "tap",
+  "at": [
+   640,
+   224
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   859
+  ]
+ },
+ {
+  "label": "Availability",
+  "at": [
+   360,
+   341
+  ]
+ },
+ {
+  "label": "Listed rate",
+  "flags": "tap,sel",
+  "at": [
+   190,
+   425
+  ]
+ },
+ {
+  "label": "Listed rate",
+  "at": [
+   190,
+   423
+  ]
+ },
+ {
+  "label": "No listed rate",
+  "flags": "tap",
+  "at": [
+   530,
+   425
+  ]
+ },
+ {
+  "label": "No listed rate",
+  "at": [
+   530,
+   423
+  ]
+ },
+ {
+  "label": "Account type",
+  "at": [
+   360,
+   541
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   629
+  ]
+ },
+ {
+  "label": "Ongoing",
+  "flags": "tap",
+  "at": [
+   108,
+   629
+  ]
+ },
+ {
+  "label": "Ongoing",
+  "at": [
+   108,
+   629
+  ]
+ },
+ {
+  "label": "Bonus rate",
+  "flags": "tap",
+  "at": [
+   286,
+   629
+  ]
+ },
+ {
+  "label": "Bonus rate",
+  "at": [
+   286,
+   629
+  ]
+ },
+ {
+  "label": "Introductory",
+  "flags": "tap",
+  "at": [
+   487,
+   629
+  ]
+ },
+ {
+  "label": "Introductory",
+  "at": [
+   487,
+   629
+  ]
+ },
+ {
+  "label": "Account features",
+  "at": [
+   360,
+   745
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   833
+  ]
+ },
+ {
+  "label": "Bill payment",
+  "flags": "tap",
+  "at": [
+   133,
+   833
+  ]
+ },
+ {
+  "label": "Bill payment",
+  "at": [
+   133,
+   833
+  ]
+ },
+ {
+  "label": "Card access",
+  "flags": "tap",
+  "at": [
+   346,
+   833
+  ]
+ },
+ {
+  "label": "Card access",
+  "at": [
+   346,
+   833
+  ]
+ },
+ {
+  "label": "Digital banking",
+  "flags": "tap",
+  "at": [
+   573,
+   833
+  ]
+ },
+ {
+  "label": "Digital banking",
+  "at": [
+   574,
+   833
+  ]
+ },
+ {
+  "label": "Early / extra repayments",
+  "flags": "tap",
+  "at": [
+   695,
+   833
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   360,
+   949
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1037
+  ]
+ },
+ {
+  "label": "Business applicants",
+  "flags": "tap",
+  "at": [
+   180,
+   1037
+  ]
+ },
+ {
+  "label": "Business applicants",
+  "at": [
+   180,
+   1037
+  ]
+ },
+ {
+  "label": "Employment status",
+  "flags": "tap",
+  "at": [
+   483,
+   1037
+  ]
+ },
+ {
+  "label": "Employment status",
+  "at": [
+   483,
+   1037
+  ]
+ },
+ {
+  "label": "Individual applicants",
+  "flags": "tap",
+  "at": [
+   664,
+   1037
+  ]
+ },
+ {
+  "label": "Individual applicants",
+  "at": [
+   676,
+   1037
+  ]
+ },
+ {
+  "label": "Show Published details",
+  "flags": "tap",
+  "at": [
+   360,
+   1230
+  ]
+ },
+ {
+  "label": "Published details",
+  "at": [
+   328,
+   1230
+  ]
+ },
+ {
+  "label": "Lenders",
+  "at": [
+   360,
+   1394
+  ]
+ },
+ {
+  "label": "Search lenders",
+  "flags": "tap",
+  "at": [
+   386,
+   1437
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1500
+  ]
+ },
+ {
+  "label": "AFG Home Loans Alpha",
+  "flags": "tap",
+  "at": [
+   204,
+   1500
+  ]
+ },
+ {
+  "label": "AFG Home Loans Alpha",
+  "at": [
+   204,
+   1514
+  ]
+ },
+ {
+  "label": "Alex.Bank",
+  "flags": "tap",
+  "at": [
+   472,
+   1500
+  ]
+ },
+ {
+  "label": "Alex.Bank",
+  "at": [
+   472,
+   1514
+  ]
+ },
+ {
+  "label": "AMP - My AMP",
+  "flags": "tap",
+  "at": [
+   629,
+   1500
+  ]
+ },
+ {
+  "label": "AMP - My AMP",
+  "at": [
+   641,
+   1514
+  ]
+ },
+ {
+  "label": "Reset",
+  "flags": "tap",
+  "at": [
+   154,
+   1502
+  ]
+ },
+ {
+  "label": "Reset",
+  "at": [
+   154,
+   1503
+  ]
+ },
+ {
+  "label": "Show 375 rates",
+  "flags": "tap",
+  "at": [
+   494,
+   1502
+  ]
+ },
+ {
+  "label": "Show 375 rates",
+  "at": [
+   494,
+   1503
+  ]
+ }
+]
