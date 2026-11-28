@@ -45,7 +45,7 @@ import {
 } from '../../data/calc';
 import { formatRate, visibleAccountRows } from '../../data/format';
 import type { CurrentProductReference, MortgageSwitchInputs } from '../../data/userRateScenario';
-import { bestRateForProduct, summarizeProductBestRate } from '../../data/productHistory';
+import { exactRateMove } from '../../data/exactRateMove';
 import {
   lvrTierForValue,
   parseLvrTier,
@@ -115,7 +115,6 @@ export function RateCheckWorkspace() {
   const coreIntegrity = useStore((s) => s.coreIntegrity);
   const details = useStore((s) => s.details);
   const detailsLoading = useStore((s) => s.detailsLoading);
-  const productHistory = useStore((s) => s.productHistory);
   const ensureDetails = useStore((s) => s.ensureDetails);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
@@ -954,14 +953,8 @@ export function RateCheckWorkspace() {
           details?.products?.[c.row.product_key] ?? null,
           c.row.provider,
         );
-        const rateChange = summarizeProductBestRate(
-          productHistory,
-          c.row.product_key,
-          {
-            date: core?.run_date,
-            rate: bestRateForProduct(core, c.row.product_key),
-          },
-        );
+        const rateChange = exactRateMove(core, section, c.row,
+          section === 'Savings' && depositRankMetric === 'base' ? null : c.projectionRate);
         const rateDescriptor = section === 'Mortgage'
           ? uiJoin(formatRate(c.projectionRate),' ','Advertised',c.rate !== c.projectionRate ? uiJoin(' · ',formatRate(c.rate),' ','Comparison'):null)
           : uiJoin(formatRate(c.projectionRate),' ',depositRankMetric === 'base' ? 'Ongoing':'Headline');

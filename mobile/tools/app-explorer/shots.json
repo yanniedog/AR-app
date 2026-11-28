@@ -107,10 +107,10 @@
   },
   {
     "name": "product-history",
-    "open": "/product/Bank%20of%20Sydney%7Cterm_deposit%7CTERM_DEPOSITS%7CTerm%20Deposit",
+    "open": "/product/Australian%20Military%20Bank%7C3b2158a8-34ee-4cb2-870d-1b741ad6e77e%7CTERM_DEPOSITS%7CIncome%20Plus?ri=10",
     "scroll": 1,
     "visibleAction": "1 year",
-    "why": "Bank of Sydney term deposit history: verify the timeframe strip remains reachable and clear of adjacent content"
+    "why": "Income Plus selected-term history and timeframe strip"
   },
   {
     "name": "bank-history",

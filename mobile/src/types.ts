@@ -93,6 +93,7 @@ export interface RbaEntry {
 }
 
 export interface CorePayload {
+  exact_rate_moves?: Partial<Record<SectionKey, Record<string, Record<number, import('./data/exactRateMove').ExactRateMove>>>>;
   bank_rate_history_catalogue?: import('./data/historicalBankRateCatalogueWire').HistoricalBankRateCatalogue;
   bank_rate_history?: import('./data/bankRateHistoryWire').PackedBankRateHistory;
   schema_version: number;

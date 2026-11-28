@@ -1,4 +1,5 @@
 [
+  {"journey": "Rate change evidence", "name": "verify Income Plus rate history", "open": "/product/Australian%20Military%20Bank%7C3b2158a8-34ee-4cb2-870d-1b741ad6e77e%7CTERM_DEPOSITS%7CIncome%20Plus?ri=10", "then": ["Income Plus", "Calculate"]},
   {"journey": "Product categories", "name": "start category switch", "think": 800, "open": "/browse", "then": {"label": "Temporary filters", "clickable": true}},
   {"journey": "Product categories", "name": "open term deposits", "think": 800, "tap": {"label": "Term deposits", "clickable": true}, "then": {"label": "Term deposits", "selected": true}},
   {"journey": "Product categories", "name": "verify term deposit rates", "think": 800, "scroll": "down", "then": [{"label": "Term deposits", "selected": true}, {"clickable": true, "containsAny": [", Rate ", ", Public payable rate ", ", Calculated payable rate ", ", Last verified pricing "]}]},
