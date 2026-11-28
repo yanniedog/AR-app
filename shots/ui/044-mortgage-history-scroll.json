@@ -1,0 +1,249 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Clear Path Variable Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   268,
+   226
+  ]
+ },
+ {
+  "label": "Published · 6",
+  "at": [
+   608,
+   226
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   360,
+   378
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "flags": "tap",
+  "at": [
+   360,
+   496
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "at": [
+   386,
+   496
+  ]
+ },
+ {
+  "label": "Show Fees",
+  "flags": "tap",
+  "at": [
+   360,
+   722
+  ]
+ },
+ {
+  "label": "Fees",
+  "at": [
+   328,
+   722
+  ]
+ },
+ {
+  "label": "Published product history",
+  "at": [
+   360,
+   886
+  ]
+ },
+ {
+  "label": "Leading advertised · All tiers · Conditional rate / Restricted",
+  "at": [
+   360,
+   1026
+  ]
+ },
+ {
+  "label": "Selected rate 6.79% · Leading advertised 6.64% · All tiers",
+  "at": [
+   360,
+   1122
+  ]
+ },
+ {
+  "label": "Clear Path Variable Home Loan · Home loans",
+  "at": [
+   360,
+   1198
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1282
+  ]
+ },
+ {
+  "label": "30 days",
+  "flags": "tap",
+  "at": [
+   105,
+   1282
+  ]
+ },
+ {
+  "label": "30 days",
+  "at": [
+   105,
+   1282
+  ]
+ },
+ {
+  "label": "90 days",
+  "flags": "tap",
+  "at": [
+   254,
+   1282
+  ]
+ },
+ {
+  "label": "90 days",
+  "at": [
+   254,
+   1282
+  ]
+ },
+ {
+  "label": "1 year",
+  "flags": "tap,sel",
+  "at": [
+   392,
+   1282
+  ]
+ },
+ {
+  "label": "1 year",
+  "at": [
+   392,
+   1282
+  ]
+ },
+ {
+  "label": "All",
+  "flags": "tap",
+  "at": [
+   505,
+   1282
+  ]
+ },
+ {
+  "label": "All",
+  "at": [
+   505,
+   1282
+  ]
+ },
+ {
+  "label": "Benchmarks · LVR ≥80.0%",
+  "flags": "tap,sel",
+  "at": [
+   217,
+   1367
+  ]
+ },
+ {
+  "label": "Benchmarks · LVR ≥80.0%",
+  "at": [
+   217,
+   1382
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

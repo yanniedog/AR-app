@@ -1,0 +1,174 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Virgin Money Lite Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Hide Constraints",
+  "flags": "tap",
+  "at": [
+   360,
+   317
+  ]
+ },
+ {
+  "label": "Constraints",
+  "at": [
+   328,
+   317
+  ]
+ },
+ {
+  "label": "Minimum LVR",
+  "at": [
+   190,
+   417
+  ]
+ },
+ {
+  "label": "0% · Conditions: Unverified",
+  "at": [
+   530,
+   437
+  ]
+ },
+ {
+  "label": "Maximum LVR",
+  "at": [
+   190,
+   517
+  ]
+ },
+ {
+  "label": "100% · Conditions: Unverified",
+  "at": [
+   530,
+   537
+  ]
+ },
+ {
+  "label": "Show Terms",
+  "flags": "tap",
+  "at": [
+   360,
+   786
+  ]
+ },
+ {
+  "label": "Terms",
+  "at": [
+   328,
+   786
+  ]
+ },
+ {
+  "label": "Show Source criteria",
+  "flags": "tap",
+  "at": [
+   360,
+   1027
+  ]
+ },
+ {
+  "label": "Source criteria",
+  "at": [
+   328,
+   1027
+  ]
+ },
+ {
+  "label": "Show Source evidence",
+  "flags": "tap",
+  "at": [
+   360,
+   1268
+  ]
+ },
+ {
+  "label": "Source evidence",
+  "at": [
+   328,
+   1268
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

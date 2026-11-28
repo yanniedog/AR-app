@@ -1,0 +1,324 @@
+[
+ {
+  "label": "Verified · 1.0.396",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Back",
+  "flags": "tap",
+  "at": [
+   70,
+   331
+  ]
+ },
+ {
+  "label": "App health audit",
+  "at": [
+   308,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   672,
+   331
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   894
+  ]
+ },
+ {
+  "label": "Verified upload",
+  "at": [
+   360,
+   379
+  ]
+ },
+ {
+  "label": "Verified upload",
+  "at": [
+   186,
+   378
+  ]
+ },
+ {
+  "label": "Uploaded",
+  "at": [
+   360,
+   407
+  ]
+ },
+ {
+  "label": "https://paste.c-net.org/ca3b3117-d588-aebc-a025-4ff1ff548db6",
+  "at": [
+   360,
+   475
+  ]
+ },
+ {
+  "label": "Copy link",
+  "flags": "tap",
+  "at": [
+   360,
+   581
+  ]
+ },
+ {
+  "label": "Copy link",
+  "at": [
+   360,
+   581
+  ]
+ },
+ {
+  "label": "Audit history",
+  "at": [
+   360,
+   780
+  ]
+ },
+ {
+  "label": "Retained runs",
+  "at": [
+   360,
+   864
+  ]
+ },
+ {
+  "label": "1 / 120",
+  "at": [
+   360,
+   912
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1016
+  ]
+ },
+ {
+  "label": "Live checks",
+  "flags": "tap,sel",
+  "at": [
+   140,
+   1016
+  ]
+ },
+ {
+  "label": "Live checks",
+  "at": [
+   140,
+   1017
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1136
+  ]
+ },
+ {
+  "label": "Performance",
+  "flags": "tap,sel",
+  "at": [
+   149,
+   1136
+  ]
+ },
+ {
+  "label": "Performance",
+  "at": [
+   149,
+   1137
+  ]
+ },
+ {
+  "label": "UX & fluidity",
+  "flags": "tap",
+  "at": [
+   394,
+   1136
+  ]
+ },
+ {
+  "label": "UX & fluidity",
+  "at": [
+   394,
+   1137
+  ]
+ },
+ {
+  "label": "Coverage",
+  "flags": "tap",
+  "at": [
+   605,
+   1136
+  ]
+ },
+ {
+  "label": "Coverage",
+  "at": [
+   615,
+   1137
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1256
+  ]
+ },
+ {
+  "label": "Failures",
+  "flags": "tap",
+  "at": [
+   113,
+   1256
+  ]
+ },
+ {
+  "label": "Failures",
+  "at": [
+   113,
+   1257
+  ]
+ },
+ {
+  "label": "Check completion",
+  "flags": "tap",
+  "at": [
+   363,
+   1256
+  ]
+ },
+ {
+  "label": "Check completion",
+  "at": [
+   363,
+   1257
+  ]
+ },
+ {
+  "label": "Duration",
+  "flags": "tap",
+  "at": [
+   610,
+   1256
+  ]
+ },
+ {
+  "label": "Duration",
+  "at": [
+   616,
+   1257
+  ]
+ },
+ {
+  "label": "Slowest check",
+  "flags": "tap,sel",
+  "at": [
+   702,
+   1256
+  ]
+ },
+ {
+  "label": "Slowest check",
+  "at": [
+   360,
+   1360
+  ]
+ },
+ {
+  "label": "6,177 ms",
+  "at": [
+   360,
+   1390
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

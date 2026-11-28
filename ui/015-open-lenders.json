@@ -1,0 +1,379 @@
+[
+ {
+  "label": "",
+  "flags": "tap",
+  "at": [
+   360,
+   800
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "at": [
+   300,
+   224
+  ]
+ },
+ {
+  "label": "Close Temporary filters",
+  "flags": "tap",
+  "at": [
+   640,
+   224
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   859
+  ]
+ },
+ {
+  "label": "LVR · Tier",
+  "at": [
+   360,
+   187
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   245
+  ]
+ },
+ {
+  "label": "LVR ≤0.700%",
+  "flags": "tap",
+  "at": [
+   137,
+   245
+  ]
+ },
+ {
+  "label": "LVR ≤0.700%",
+  "at": [
+   137,
+   230
+  ]
+ },
+ {
+  "label": "LVR ≤0.850%",
+  "flags": "tap",
+  "at": [
+   358,
+   245
+  ]
+ },
+ {
+  "label": "LVR ≤0.850%",
+  "at": [
+   358,
+   230
+  ]
+ },
+ {
+  "label": "LVR ≤10.0%",
+  "flags": "tap",
+  "at": [
+   571,
+   245
+  ]
+ },
+ {
+  "label": "LVR ≤10.0%",
+  "at": [
+   571,
+   230
+  ]
+ },
+ {
+  "label": "LVR ≤17.5%",
+  "flags": "tap",
+  "at": [
+   684,
+   245
+  ]
+ },
+ {
+  "label": "LVR ≤17.5%",
+  "at": [
+   696,
+   230
+  ]
+ },
+ {
+  "label": "Show All 115 Options",
+  "flags": "tap",
+  "at": [
+   185,
+   297
+  ]
+ },
+ {
+  "label": "Show All 115 Options",
+  "at": [
+   185,
+   284
+  ]
+ },
+ {
+  "label": "Account features",
+  "at": [
+   360,
+   372
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   460
+  ]
+ },
+ {
+  "label": "Bill payment",
+  "flags": "tap",
+  "at": [
+   133,
+   460
+  ]
+ },
+ {
+  "label": "Bill payment",
+  "at": [
+   133,
+   460
+  ]
+ },
+ {
+  "label": "Card access",
+  "flags": "tap",
+  "at": [
+   346,
+   460
+  ]
+ },
+ {
+  "label": "Card access",
+  "at": [
+   346,
+   460
+  ]
+ },
+ {
+  "label": "Digital banking",
+  "flags": "tap",
+  "at": [
+   573,
+   460
+  ]
+ },
+ {
+  "label": "Digital banking",
+  "at": [
+   574,
+   460
+  ]
+ },
+ {
+  "label": "Early / extra repayments",
+  "flags": "tap",
+  "at": [
+   695,
+   460
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   360,
+   576
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   664
+  ]
+ },
+ {
+  "label": "Business applicants",
+  "flags": "tap",
+  "at": [
+   180,
+   664
+  ]
+ },
+ {
+  "label": "Business applicants",
+  "at": [
+   180,
+   664
+  ]
+ },
+ {
+  "label": "Employment status",
+  "flags": "tap",
+  "at": [
+   483,
+   664
+  ]
+ },
+ {
+  "label": "Employment status",
+  "at": [
+   483,
+   664
+  ]
+ },
+ {
+  "label": "Individual applicants",
+  "flags": "tap",
+  "at": [
+   664,
+   664
+  ]
+ },
+ {
+  "label": "Individual applicants",
+  "at": [
+   676,
+   664
+  ]
+ },
+ {
+  "label": "Show Published details",
+  "flags": "tap",
+  "at": [
+   360,
+   857
+  ]
+ },
+ {
+  "label": "Published details",
+  "at": [
+   328,
+   857
+  ]
+ },
+ {
+  "label": "Lenders",
+  "at": [
+   360,
+   1021
+  ]
+ },
+ {
+  "label": "Search lenders",
+  "flags": "tap",
+  "at": [
+   386,
+   1119
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1245
+  ]
+ },
+ {
+  "label": "360 MMS",
+  "flags": "tap",
+  "at": [
+   116,
+   1245
+  ]
+ },
+ {
+  "label": "360 MMS",
+  "at": [
+   116,
+   1245
+  ]
+ },
+ {
+  "label": "AAA Financial Corporation",
+  "flags": "tap",
+  "at": [
+   399,
+   1245
+  ]
+ },
+ {
+  "label": "AAA Financial Corporation",
+  "at": [
+   399,
+   1245
+  ]
+ },
+ {
+  "label": "Abacus Home Loans",
+  "flags": "tap",
+  "at": [
+   643,
+   1245
+  ]
+ },
+ {
+  "label": "Abacus Home Loans",
+  "at": [
+   655,
+   1245
+  ]
+ },
+ {
+  "label": "Show All 140 Lenders",
+  "flags": "tap",
+  "at": [
+   187,
+   1349
+  ]
+ },
+ {
+  "label": "Show All 140 Lenders",
+  "at": [
+   187,
+   1350
+  ]
+ },
+ {
+  "label": "Reset",
+  "flags": "tap",
+  "at": [
+   154,
+   1502
+  ]
+ },
+ {
+  "label": "Reset",
+  "at": [
+   154,
+   1503
+  ]
+ },
+ {
+  "label": "Show 4,394 rates",
+  "flags": "tap",
+  "at": [
+   494,
+   1502
+  ]
+ },
+ {
+  "label": "Show 4,394 rates",
+  "at": [
+   494,
+   1503
+  ]
+ }
+]

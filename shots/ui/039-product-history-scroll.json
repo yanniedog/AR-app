@@ -1,0 +1,242 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Term Deposit",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "flags": "tap",
+  "at": [
+   360,
+   227
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "at": [
+   386,
+   213
+  ]
+ },
+ {
+  "label": "Show Fees",
+  "flags": "tap",
+  "at": [
+   360,
+   434
+  ]
+ },
+ {
+  "label": "Fees",
+  "at": [
+   328,
+   434
+  ]
+ },
+ {
+  "label": "Published product history",
+  "at": [
+   360,
+   598
+  ]
+ },
+ {
+  "label": "Leading advertised · All tiers · Conditional rate / Restricted",
+  "at": [
+   360,
+   738
+  ]
+ },
+ {
+  "label": "Selected rate 3.80% · Leading advertised 5.35% · All tiers",
+  "at": [
+   360,
+   834
+  ]
+ },
+ {
+  "label": "Term Deposit · Term deposits",
+  "at": [
+   360,
+   910
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   994
+  ]
+ },
+ {
+  "label": "30 days",
+  "flags": "tap",
+  "at": [
+   105,
+   994
+  ]
+ },
+ {
+  "label": "30 days",
+  "at": [
+   105,
+   994
+  ]
+ },
+ {
+  "label": "90 days",
+  "flags": "tap",
+  "at": [
+   254,
+   994
+  ]
+ },
+ {
+  "label": "90 days",
+  "at": [
+   254,
+   994
+  ]
+ },
+ {
+  "label": "1 year",
+  "flags": "tap,sel",
+  "at": [
+   392,
+   994
+  ]
+ },
+ {
+  "label": "1 year",
+  "at": [
+   392,
+   994
+  ]
+ },
+ {
+  "label": "All",
+  "flags": "tap",
+  "at": [
+   505,
+   994
+  ]
+ },
+ {
+  "label": "All",
+  "at": [
+   505,
+   994
+  ]
+ },
+ {
+  "label": "Benchmarks",
+  "flags": "tap,sel",
+  "at": [
+   133,
+   1102
+  ]
+ },
+ {
+  "label": "Benchmarks",
+  "at": [
+   133,
+   1102
+  ]
+ },
+ {
+  "label": "Term deposits · 1 year · 43 Observed · 28 Nov 2026 · Term Deposit 5.35% · Leading advertised · All tiers · Min 0% · Medi",
+  "at": [
+   360,
+   1279
+  ]
+ },
+ {
+  "label": "History",
+  "at": [
+   396,
+   1293
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
