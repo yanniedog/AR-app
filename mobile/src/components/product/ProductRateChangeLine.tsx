@@ -34,8 +34,9 @@ export function useProductRateChangeSummary(
   row: RateRow, section: SectionKey, displayed: number | string | null | undefined,
 ): ProductBestRateSummary | null {
   const core = useStore(state => state.core);
-  return useMemo(() => exactRateMove(core, section, sourceRowForPublicRow(row), displayed),
-    [core, row, section, displayed]);
+  const integrity = useStore(state => state.coreIntegrity);
+  return useMemo(() => exactRateMove(core, section, sourceRowForPublicRow(row), displayed, integrity),
+    [core, row, section, displayed, integrity]);
 }
 
 export function ProductRateChangeSummaryLine({

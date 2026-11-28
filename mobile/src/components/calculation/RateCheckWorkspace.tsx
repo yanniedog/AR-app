@@ -954,7 +954,7 @@ export function RateCheckWorkspace() {
           c.row.provider,
         );
         const rateChange = exactRateMove(core, section, sourceRowForPublicRow(c.row),
-          section === 'Savings' && depositRankMetric === 'base' ? null : c.projectionRate);
+          section === 'Savings' && depositRankMetric === 'base' ? null : c.projectionRate, coreIntegrity);
         const rateDescriptor = section === 'Mortgage'
           ? uiJoin(formatRate(c.projectionRate),' ','Advertised',c.rate !== c.projectionRate ? uiJoin(' · ',formatRate(c.rate),' ','Comparison'):null)
           : uiJoin(formatRate(c.projectionRate),' ',depositRankMetric === 'base' ? 'Ongoing':'Headline');
