@@ -50,7 +50,7 @@ function reconcilePull(number) {
   const enabled = pr.state === 'open' && pr.auto_merge != null;
   console.log(`#${number}: ${decision.action} (${decision.reason}); auto-merge ${enabled ? 'on' : 'off'}; state ${pr.mergeable_state}`);
   // A standing native auto-merge request can fire before this reconciler observes a new head.
-  if (enabled && decision.action !== 'skip') {
+  if (enabled && pr.user?.login === OWNER && pr.head?.repo?.full_name === REPO) {
     gh(['pr', 'merge', String(number), '--repo', REPO, '--disable-auto'], { json: false });
     console.log(`#${number}: native auto-merge disabled; reevaluating on the next run`);
     return;
@@ -79,12 +79,15 @@ function reconcilePull(number) {
     .filter(run => run.head_sha === pr.head.sha && run.head_branch === pr.head.ref &&
       run.head_repository?.full_name === REPO);
   const lifecycleRuns = headRuns('pull_request').filter(run => run.pull_requests.some(link => link.number === number));
+  // Historical or unassociated checks fall back to the latest PR change. The
+  // fallback can wait longer when the PR is active but cannot use an old commit date.
   // Token-generated branches can have only a manually dispatched gate; the first
   // dispatch after PR creation starts the clock. Later refreshes do not reset it.
+  const dispatchStarts = lifecycleRuns.length ? [] : headRuns('workflow_dispatch')
+    .map(run => Date.parse(run.created_at)).filter(start => start >= Date.parse(pr.created_at));
   const headObservedAt = lifecycleRuns.length
     ? Math.max(...lifecycleRuns.map(run => Date.parse(run.created_at)))
-    : Math.min(...headRuns('workflow_dispatch').map(run => Date.parse(run.created_at))
-      .filter(start => start >= Date.parse(pr.created_at)));
+    : dispatchStarts.length ? Math.min(...dispatchStarts) : Date.parse(pr.updated_at);
   const timeline = paginate(`repos/${REPO}/issues/${number}/timeline?per_page=100`);
   const ready = timeline.filter(event => ['ready_for_review', 'reopened'].includes(event.event));
   const anchor = Math.max(Date.parse(pr.created_at), ...ready.map(event => Date.parse(event.created_at)),
@@ -116,7 +119,7 @@ function reconcilePull(number) {
 }
 
 function reconcilePulls(only) {
-  const numbers = only ? [only] : paginate(`repos/${REPO}/pulls?state=open&base=main&per_page=100`).map(pr => pr.number);
+  const numbers = only ? [only] : paginate(`repos/${REPO}/pulls?state=open&per_page=100`).map(pr => pr.number);
   let failures = 0;
   for (const number of numbers) {
     try { reconcilePull(number); } catch (error) { failures += 1; console.error(`#${number}: ${error.message}`); }
