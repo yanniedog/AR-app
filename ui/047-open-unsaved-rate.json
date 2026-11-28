@@ -1,0 +1,211 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I With Offset Mortgage",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "MoveBank",
+  "at": [
+   72,
+   361
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I With Offset Mortgage",
+  "at": [
+   414,
+   293
+  ]
+ },
+ {
+  "label": "MoveBank",
+  "flags": "tap",
+  "at": [
+   205,
+   389
+  ]
+ },
+ {
+  "label": "MoveBank",
+  "at": [
+   205,
+   361
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   414,
+   457
+  ]
+ },
+ {
+  "label": "Provider website",
+  "flags": "tap",
+  "at": [
+   215,
+   607
+  ]
+ },
+ {
+  "label": "Provider website",
+  "at": [
+   241,
+   607
+  ]
+ },
+ {
+  "label": "Comparison rate",
+  "at": [
+   360,
+   748
+  ]
+ },
+ {
+  "label": "6.39%",
+  "at": [
+   360,
+   816
+  ]
+ },
+ {
+  "label": "6.69% Advertised rate",
+  "at": [
+   360,
+   884
+  ]
+ },
+ {
+  "label": "Bank updated 25 Nov 2026 · Checked 29 Nov 2026",
+  "at": [
+   360,
+   944
+  ]
+ },
+ {
+  "label": "Save",
+  "flags": "tap",
+  "at": [
+   190,
+   1094
+  ]
+ },
+ {
+  "label": "Save",
+  "at": [
+   217,
+   1095
+  ]
+ },
+ {
+  "label": "Calculate",
+  "flags": "tap",
+  "at": [
+   530,
+   1094
+  ]
+ },
+ {
+  "label": "Calculate",
+  "at": [
+   531,
+   1094
+  ]
+ },
+ {
+  "label": "Hide Rate details",
+  "flags": "tap",
+  "at": [
+   360,
+   1320
+  ]
+ },
+ {
+  "label": "Rate details",
+  "at": [
+   328,
+   1320
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

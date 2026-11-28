@@ -1,0 +1,257 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I With Offset Mortgage",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Home loans · 1 year · 1 Observed · 29 Nov 2026 · Owner Occupier P&I With Offset Mortgage 6.69% · Selected rate · Min 5.9",
+  "at": [
+   360,
+   242
+  ]
+ },
+ {
+  "label": "History",
+  "at": [
+   396,
+   220
+  ]
+ },
+ {
+  "label": "29 Nov 2026",
+  "at": [
+   360,
+   318
+  ]
+ },
+ {
+  "label": "Previous date",
+  "flags": "tap",
+  "at": [
+   80,
+   418
+  ]
+ },
+ {
+  "label": "6.69% · Selected rate",
+  "at": [
+   360,
+   358
+  ]
+ },
+ {
+  "label": "Market rate range · 5.94% – 11.7%",
+  "at": [
+   360,
+   398
+  ]
+ },
+ {
+  "label": "Market median · 7.39%",
+  "at": [
+   360,
+   438
+  ]
+ },
+ {
+  "label": "Market mean · 7.79%",
+  "at": [
+   360,
+   478
+  ]
+ },
+ {
+  "label": "Next date",
+  "flags": "tap,off",
+  "at": [
+   640,
+   418
+  ]
+ },
+ {
+  "label": "RBA cash rate · 4.85%",
+  "at": [
+   360,
+   518
+  ]
+ },
+ {
+  "label": "Product rate",
+  "at": [
+   165,
+   574
+  ]
+ },
+ {
+  "label": "Market rate range",
+  "at": [
+   430,
+   574
+  ]
+ },
+ {
+  "label": "Market median",
+  "at": [
+   181,
+   638
+  ]
+ },
+ {
+  "label": "Market mean",
+  "at": [
+   436,
+   638
+  ]
+ },
+ {
+  "label": "RBA cash rate",
+  "at": [
+   175,
+   702
+  ]
+ },
+ {
+  "label": "Hide Product facts",
+  "flags": "tap",
+  "at": [
+   360,
+   931
+  ]
+ },
+ {
+  "label": "Product facts",
+  "at": [
+   328,
+   931
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   360,
+   1031
+  ]
+ },
+ {
+  "label": "Early / extra repayments",
+  "at": [
+   190,
+   1087
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   1107
+  ]
+ },
+ {
+  "label": "Offset account",
+  "at": [
+   190,
+   1187
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   1207
+  ]
+ },
+ {
+  "label": "Redraw facility",
+  "at": [
+   190,
+   1287
+  ]
+ },
+ {
+  "label": "Included",
+  "at": [
+   530,
+   1287
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

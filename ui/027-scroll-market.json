@@ -1,0 +1,316 @@
+[
+ {
+  "label": "Market",
+  "at": [
+   360,
+   149
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   672,
+   149
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   803
+  ]
+ },
+ {
+  "label": "BNK Bank (Goldfields Money_BCHL) · Decrease · Home loans · Average −21.0 bps · 2/4 products · 28 Nov 2026 · Median 7.69%",
+  "flags": "tap",
+  "at": [
+   360,
+   132
+  ]
+ },
+ {
+  "label": "Median 7.69% → 7.69%",
+  "at": [
+   314,
+   122
+  ]
+ },
+ {
+  "label": "Easy Street · Decrease · Home loans · Average −20.0 bps · 3/13 products · 27 Nov 2026 · Median 6.69% → 6.69%",
+  "flags": "tap",
+  "at": [
+   360,
+   237
+  ]
+ },
+ {
+  "label": "Easy Street",
+  "at": [
+   314,
+   163
+  ]
+ },
+ {
+  "label": "Easy Street",
+  "at": [
+   66,
+   202
+  ]
+ },
+ {
+  "label": "Decrease · Home loans · 3/13 products · 27 Nov 2026",
+  "at": [
+   314,
+   205
+  ]
+ },
+ {
+  "label": "−20.0 bps",
+  "at": [
+   626,
+   184
+  ]
+ },
+ {
+  "label": "Average",
+  "at": [
+   638,
+   206
+  ]
+ },
+ {
+  "label": "Median 6.69% → 6.69%",
+  "at": [
+   314,
+   227
+  ]
+ },
+ {
+  "label": "Credit Union SA · Increase · Home loans · Average +11.7 bps · 9/19 products · 25 Nov 2026 · Median 7.29% → 7.39%",
+  "flags": "tap",
+  "at": [
+   360,
+   365
+  ]
+ },
+ {
+  "label": "Credit Union SA",
+  "at": [
+   314,
+   301
+  ]
+ },
+ {
+  "label": "Credit Union SA",
+  "at": [
+   66,
+   365
+  ]
+ },
+ {
+  "label": "Increase · Home loans · 9/19 products · 25 Nov 2026",
+  "at": [
+   314,
+   365
+  ]
+ },
+ {
+  "label": "+11.7 bps",
+  "at": [
+   626,
+   343
+  ]
+ },
+ {
+  "label": "Average",
+  "at": [
+   638,
+   387
+  ]
+ },
+ {
+  "label": "Median 7.29% → 7.39%",
+  "at": [
+   314,
+   429
+  ]
+ },
+ {
+  "label": "ME Bank - ME Go · Increase · Home loans · Average +5.0 bps · 2/2 products · 21 Nov 2026 · Median 7.32% → 7.29%",
+  "flags": "tap",
+  "at": [
+   360,
+   574
+  ]
+ },
+ {
+  "label": "ME Bank - ME Go",
+  "at": [
+   322,
+   510
+  ]
+ },
+ {
+  "label": "ME Bank - ME Go",
+  "at": [
+   66,
+   574
+  ]
+ },
+ {
+  "label": "Increase · Home loans · 2/2 products · 21 Nov 2026",
+  "at": [
+   322,
+   574
+  ]
+ },
+ {
+  "label": "+5.0 bps",
+  "at": [
+   634,
+   552
+  ]
+ },
+ {
+  "label": "Average",
+  "at": [
+   638,
+   596
+  ]
+ },
+ {
+  "label": "Median 7.32% → 7.29%",
+  "at": [
+   322,
+   638
+  ]
+ },
+ {
+  "label": "Macquarie Bank Limited · Increase · Home loans · Average +20.0 bps · 2/2 products · 20 Nov 2026 · Median 6.84% → 6.84%",
+  "flags": "tap",
+  "at": [
+   360,
+   783
+  ]
+ },
+ {
+  "label": "Macquarie Bank Limited",
+  "at": [
+   314,
+   719
+  ]
+ },
+ {
+  "label": "Macquarie Bank Limited",
+  "at": [
+   66,
+   783
+  ]
+ },
+ {
+  "label": "Increase · Home loans · 2/2 products · 20 Nov 2026",
+  "at": [
+   314,
+   783
+  ]
+ },
+ {
+  "label": "+20.0 bps",
+  "at": [
+   626,
+   761
+  ]
+ },
+ {
+  "label": "Average",
+  "at": [
+   638,
+   805
+  ]
+ },
+ {
+  "label": "Median 6.84% → 6.84%",
+  "at": [
+   314,
+   847
+  ]
+ },
+ {
+  "label": "Show more",
+  "flags": "tap",
+  "at": [
+   360,
+   959
+  ]
+ },
+ {
+  "label": "Show more",
+  "at": [
+   361,
+   960
+  ]
+ },
+ {
+  "label": "Show 30-day movers",
+  "flags": "tap",
+  "at": [
+   360,
+   1152
+  ]
+ },
+ {
+  "label": "30-day movers",
+  "at": [
+   328,
+   1152
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap,sel",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "sel",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

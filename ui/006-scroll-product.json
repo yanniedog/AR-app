@@ -1,0 +1,207 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I With Offset Mortgage",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Loan purpose",
+  "at": [
+   248,
+   202
+  ]
+ },
+ {
+  "label": "Owner occupied",
+  "at": [
+   588,
+   202
+  ]
+ },
+ {
+  "label": "Listed LVR",
+  "at": [
+   303,
+   239
+  ]
+ },
+ {
+  "label": "≤95.0%",
+  "at": [
+   643,
+   239
+  ]
+ },
+ {
+  "label": "Annual fee",
+  "at": [
+   291,
+   291
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   291
+  ]
+ },
+ {
+  "label": "$487 · Conditions: Unverified · $132 · Conditions: Unverified · $375 · Conditions: Unverified · $132 · Conditions: Unver",
+  "at": [
+   372,
+   403
+  ]
+ },
+ {
+  "label": "Offset account",
+  "at": [
+   98,
+   815
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   438,
+   795
+  ]
+ },
+ {
+  "label": "Availability",
+  "at": [
+   228,
+   887
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   568,
+   887
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   268,
+   939
+  ]
+ },
+ {
+  "label": "Published · 9",
+  "at": [
+   608,
+   939
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   360,
+   1091
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "flags": "tap",
+  "at": [
+   360,
+   1209
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "at": [
+   386,
+   1209
+  ]
+ },
+ {
+  "label": "Show Fees",
+  "flags": "tap",
+  "at": [
+   360,
+   1382
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
