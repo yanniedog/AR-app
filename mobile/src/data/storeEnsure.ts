@@ -47,6 +47,10 @@ import {
   integrateRbaCalendarIntoCore,
   refreshRbaCalendarFromOfficial,
 } from './rbaOfficialLive';
+import {
+  claimRbaDecisionNotificationReceipts,
+  rbaDecisionNotificationIdentity,
+} from './rbaDecisionNotificationReceipt';
 import { replaceAssetData } from './assetState';
 import { rebindCoreIntegrity } from './sectionIntegrity';
 import { samePayloadIdentity } from './payloadRevision';
@@ -860,6 +864,10 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           calendar = downloaded;
         }
         const reconciled = await refreshRbaCalendarFromOfficial(calendar);
+        const existingDecisionIds = new Set(calendar.decisions.map(rbaDecisionNotificationIdentity));
+        const newlyReconciledDecisionIds = reconciled.decisions
+          .map(rbaDecisionNotificationIdentity)
+          .filter((id) => !existingDecisionIds.has(id));
         const live = get();
         if (
           live.manifest?.files.rba_calendar?.sha256 !== asset.sha256 ||
@@ -898,7 +906,11 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             live.prefs.depositRankMetric,
             live.prefs.mortgageRateMetric,
           );
-          await notify(messages.filter((message) => message.title.startsWith('RBA')));
+          const rbaMessages = messages.filter((message) => message.title.startsWith('RBA'));
+          if (rbaMessages.length && newlyReconciledDecisionIds.length) {
+            const claimed = await claimRbaDecisionNotificationReceipts(newlyReconciledDecisionIds);
+            if (claimed.length) await notify(rbaMessages);
+          }
         }
       } catch (err) {
         recoverMissingPublication(err, manifest, () => get().ensureRbaCalendar());

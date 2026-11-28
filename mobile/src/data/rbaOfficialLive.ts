@@ -6,6 +6,21 @@ import { rbaCalendarCoverage, sydneyYmd } from './rbaCalendar';
 
 export const RBA_OVERVIEW_URL = 'https://www.rba.gov.au/cash-rate-target-overview.html';
 export const RBA_MEDIA_RELEASE_FEED_URL = 'https://www.rba.gov.au/rss/rss-cb-media-releases.xml';
+export const RBA_OFFICIAL_FETCH_TIMEOUT_MS = 10_000;
+
+export async function fetchRbaOfficial(
+  url: string,
+  accept: string,
+  timeoutMs = RBA_OFFICIAL_FETCH_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { headers: { Accept: accept }, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const MONTHS: Record<string, string> = {
   january: '01', february: '02', march: '03', april: '04', may: '05', june: '06',
@@ -141,9 +156,10 @@ export async function refreshRbaCalendarFromOfficial(
   if (!rbaCalendarCoverage(calendar, now).unresolvedMeeting) return calendar;
   const original = calendar;
   try {
-    const feedResponse = await fetch(RBA_MEDIA_RELEASE_FEED_URL, {
-      headers: { Accept: 'application/rss+xml, application/xml, text/xml' },
-    });
+    const feedResponse = await fetchRbaOfficial(
+      RBA_MEDIA_RELEASE_FEED_URL,
+      'application/rss+xml, application/xml, text/xml',
+    );
     if (feedResponse.ok) {
       const feed = parseRbaMediaReleaseFeedDecisions(await feedResponse.text());
       const reconciled = reconcileRbaFeedDecisions(calendar, feed, now);
@@ -156,9 +172,7 @@ export async function refreshRbaCalendarFromOfficial(
     // The independently published overview below remains authoritative fallback.
   }
   try {
-    const response = await fetch(RBA_OVERVIEW_URL, {
-      headers: { Accept: 'text/html' },
-    });
+    const response = await fetchRbaOfficial(RBA_OVERVIEW_URL, 'text/html');
     if (!response.ok) throw new Error(`official RBA overview returned HTTP ${response.status}`);
     const overview = parseRbaOfficialOverview(await response.text());
     if (!overview) throw new Error('official RBA overview could not be verified');
