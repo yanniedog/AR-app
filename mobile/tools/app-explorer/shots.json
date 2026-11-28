@@ -120,9 +120,10 @@
     "why": "Bank of Sydney lender history: verify the timeframe strip fits the chart viewport and retains 48 dp controls"
   },
   {
-    "name": "catalogue",
-    "open": "/catalogue",
-    "scroll": 0,
-    "why": "catalogue"
+    "name": "mortgage-history",
+    "open": "/product/Bank%20of%20Queensland%20Limited%7C59906e88-5c03-ee11-8f6e-00224814d330%7CRESIDENTIAL_MORTGAGES%7CClear%20Path%20Variable%20Home%20Loan",
+    "scroll": 1,
+    "visibleAction": "1 year",
+    "why": "Home loan history: benchmark ribbon at the user's LVR and above (default 80%), 1 year default, and the Provider website link in the details"
   }
 ]
