@@ -92,7 +92,8 @@ export function ProfileEditor({
               label={GROUP_LABELS[g.key]}
               options={items}
               value={value[g.key].filter(item => options.includes(item))}
-              multiple={!isSingleChoiceFilter(g.key)}
+              // Values saved before this became single-choice show as ticks until the extras are removed.
+              multiple={!isSingleChoiceFilter(g.key) || value[g.key].length > 1}
               onChange={option => toggle(g.key, option)}
               onClear={() => onChange({ ...value, [g.key]: value[g.key].filter(item => !options.includes(item)) })}
               last={index === sectionGroups.length - 1}
