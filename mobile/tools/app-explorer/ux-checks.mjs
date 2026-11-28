@@ -115,7 +115,7 @@ function tapTargets({ screen, app, nodes, density, size }) {
   for (const n of app) {
     if (!n.clickable || !n.enabled) continue;
     // A control cut off by the screen edge or the tab bar reports only its visible sliver.
-    if (n.bounds[3] >= barTop - 2 && n.bounds[1] > size[1] * 0.5 && !TAB_LABELS.test((n.text || n.desc || '').trim())) continue;
+    if (n.bounds[3] > barTop && n.bounds[1] > size[1] * 0.5 && !TAB_LABELS.test((n.text || n.desc || '').trim())) continue;
     if (n.bounds[1] <= 2 || n.bounds[3] >= size[1] - 2) continue;
     if (clippedByScroller(n, scrollers, app)) continue;
     const w = (n.bounds[2] - n.bounds[0]) / dp;
