@@ -24,13 +24,15 @@ const NON_PAGE_URL = /\.(?:pdf|json|xml|ya?ml)\/?$/i;
 export function productWebUrl(links: ProductDetail['links'] | undefined, preferred: string | null): string | null {
   if (preferred) return preferred;
   const candidates = WEB_KINDS.flatMap(kind => links?.[kind] ? [links[kind] as string] : []);
-  for (const url of candidates) {
+  const landing = (path: string) => /^\/(?:index\.(?:html?|php)\/?|home\/?|(?:en|en-au)\/?)?$/i.test(path);
+  for (const allowLanding of [false, true]) for (const url of candidates) {
     const result = trustedExternalUrl({ url, purpose: 'lender_source', label: 'Product' });
     if (!result.ok) continue;
     let hostname: string, pathname: string;
     try { ({ hostname, pathname } = new StandardUrl(result.url)); pathname = decodeURIComponent(pathname); } catch { continue; }
     if (NON_PAGE_URL.test(pathname) || /^(?:apis?|cdr|cds|open-?banking)[.-]/i.test(hostname)
       || /(?:^|\/)(?:apis?|cds-au|open-?banking)(?:\/|$)/i.test(pathname)) continue;
+    if (!allowLanding && landing(pathname)) continue;
     return result.url;
   }
   return null;

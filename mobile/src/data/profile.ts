@@ -203,9 +203,10 @@ export function scenarioProfileFilterRows(
   if (section !== 'Mortgage' || lvr === null) {
     return profileFilterRows(rows, p, section, detailsProducts);
   }
-  const floor = `lvr_atleast_${lvr}`;
-  return profileFilterRows(rows, { ...p, lvrTiers: [] }, section, detailsProducts)
-    .filter(row => matchesLvrTier(row.lvr_tier, [floor]));
+  return profileFilterRows(rows, { ...p, lvrTiers: [] }, section, detailsProducts).filter(row => {
+    const range = parseLvrRange(row.lvr_tier);
+    return range !== null && lvrRangeContains(range, lvr);
+  });
 }
 
 /** Selections that affect a given section (badge counts, "profile applied" hints). */

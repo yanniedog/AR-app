@@ -12,3 +12,9 @@ describe('productWebUrl', () => {
     expect(productWebUrl(undefined, null)).toBeNull();
   });
 });
+
+test('a product page beats a landing-page overview; the landing page is the last resort', () => {
+  expect(productWebUrl({ overview: 'https://www.example-bank.com.au/', fees: 'https://www.example-bank.com.au/home-loans/fees' } as never, null))
+    .toBe('https://www.example-bank.com.au/home-loans/fees');
+  expect(productWebUrl({ overview: 'https://www.example-bank.com.au/' } as never, null)).toBe('https://www.example-bank.com.au/');
+});

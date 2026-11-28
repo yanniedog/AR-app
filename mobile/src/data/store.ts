@@ -132,7 +132,7 @@ export const useStore = create<AppState>()(
           ...current,
           ...p,
           ...(Array.isArray(p?.subscriptions)
-            ? { subscriptions: refreshProductSubscriptionLabels(normalizeProductSubscriptionIds(p.subscriptions)) }
+            ? { subscriptions: refreshProductSubscriptionLabels(normalizeProductSubscriptionIds(p.subscriptions)).map(sub => ('filters' in sub && sub.filters?.lvrTiers?.length ? { ...sub, filters: { ...sub.filters, lvrTiers: [] } } : sub)) }
             : {}),
           prefs,
           savedRates,

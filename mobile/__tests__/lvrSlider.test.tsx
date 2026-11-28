@@ -24,9 +24,9 @@ test('unset slider shows the fallback LVR and no Clear; explicit value steps and
     const slider = tree.root.findByProps({ accessibilityRole: 'adjustable' });
     expect(slider.props.accessibilityValue.now).toBe(85);
     act(() => slider.props.onAccessibilityAction({ nativeEvent: { actionName: 'increment' } }));
-    expect(onChange).toHaveBeenCalledWith(86);
+    expect(onChange).toHaveBeenCalledWith(85.5);
     act(() => slider.props.onAccessibilityAction({ nativeEvent: { actionName: 'decrement' } }));
-    expect(onChange).toHaveBeenLastCalledWith(84);
+    expect(onChange).toHaveBeenLastCalledWith(84.5);
     act(() => tree.root.findByType('Button').props.onPress());
     expect(onClear).toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }

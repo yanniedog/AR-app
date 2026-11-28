@@ -23,7 +23,8 @@ export function LvrSlider({ value, fallback, onChange, onClear }: {
 }) {
   const theme = useTheme();
   const explicit = value !== null;
-  const shown = snapLvr(value ?? fallback);
+  // An explicit value is shown exactly as applied; only dragging snaps to the step.
+  const shown = Math.min(LVR_SLIDER_MAX, Math.max(LVR_SLIDER_MIN, value ?? snapLvr(fallback)));
   const [width, setWidth] = useState(0);
   const [drag, setDrag] = useState<number | null>(null);
   const dragRef = useRef<number | null>(null), widthRef = useRef(0), startRef = useRef(0), shownRef = useRef(shown), changeRef = useRef(onChange);
@@ -31,14 +32,16 @@ export function LvrSlider({ value, fallback, onChange, onClear }: {
   const current = drag ?? shown;
   useEffect(() => { dragRef.current = null; setDrag(null); }, [value]);
   const span = Math.max(1, width - THUMB);
-  const toLvr = (x: number) => snapLvr(LVR_SLIDER_MIN + (x / span) * (LVR_SLIDER_MAX - LVR_SLIDER_MIN));
   const responder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderTerminationRequest: () => false,
+    onMoveShouldSetPanResponder: (_event, gesture) => Math.abs(gesture.dx) > Math.abs(gesture.dy),
+    onPanResponderTerminationRequest: () => true,
+    onPanResponderTerminate: () => { dragRef.current = null; setDrag(null); },
     onPanResponderGrant: event => {
-      const next = toLvr(Math.max(0, Math.min(widthRef.current - THUMB, event.nativeEvent.locationX - THUMB / 2)));
-      startRef.current = ((next - LVR_SLIDER_MIN) / (LVR_SLIDER_MAX - LVR_SLIDER_MIN)) * Math.max(1, widthRef.current - THUMB);
+      const trackSpan = Math.max(1, widthRef.current - THUMB);
+      const x = Math.max(0, Math.min(trackSpan, event.nativeEvent.locationX - THUMB / 2));
+      const next = snapLvr(LVR_SLIDER_MIN + (x / trackSpan) * (LVR_SLIDER_MAX - LVR_SLIDER_MIN));
+      startRef.current = ((next - LVR_SLIDER_MIN) / (LVR_SLIDER_MAX - LVR_SLIDER_MIN)) * trackSpan;
       dragRef.current = next; setDrag(next);
     },
     onPanResponderMove: (_event, gesture) => {
@@ -52,15 +55,16 @@ export function LvrSlider({ value, fallback, onChange, onClear }: {
   const onLayout = (event: LayoutChangeEvent) => { widthRef.current = event.nativeEvent.layout.width; setWidth(event.nativeEvent.layout.width); };
   const left = ((current - LVR_SLIDER_MIN) / (LVR_SLIDER_MAX - LVR_SLIDER_MIN)) * span;
   const adjust = (delta: number) => onChange(snapLvr(current + delta));
+  const digits = Math.abs(current * 10 - Math.round(current * 10)) < 1e-9 ? 1 : 2;
   return <View style={{ gap: 4 }} testID="lvr-slider">
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 48 }}>
-      <AppText variant="small" weight="600">{uiJoin(uiLabel('LVR'), ' ', uiRate(current / 100, 1))}</AppText>
+      <AppText variant="small" weight="600">{uiJoin(uiLabel('LVR'), ' ', uiRate(current / 100, digits))}</AppText>
       {explicit ? <Button title="Clear" variant="ghost" accessibilityLabel="Clear" onPress={onClear} /> : null}
     </View>
     <View onLayout={onLayout} {...responder.panHandlers} accessible accessibilityRole="adjustable"
       accessibilityLabel={uiLabel('LVR')} accessibilityValue={{ min: LVR_SLIDER_MIN, max: LVR_SLIDER_MAX, now: current }}
       accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-      onAccessibilityAction={event => adjust(event.nativeEvent.actionName === 'increment' ? 1 : -1)}
+      onAccessibilityAction={event => adjust(event.nativeEvent.actionName === 'increment' ? LVR_SLIDER_STEP : -LVR_SLIDER_STEP)}
       style={{ height: 48, justifyContent: 'center' }}>
       <View style={{ height: TRACK_HEIGHT, borderRadius: TRACK_HEIGHT / 2, backgroundColor: theme.colors.border, marginHorizontal: THUMB / 2 }} />
       <View style={{ position: 'absolute', left: THUMB / 2, height: TRACK_HEIGHT, borderRadius: TRACK_HEIGHT / 2, width: left,
