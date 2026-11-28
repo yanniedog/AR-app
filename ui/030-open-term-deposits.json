@@ -1,0 +1,395 @@
+[
+ {
+  "label": "Verified · 1.0.398",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   361,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   673,
+   331
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap",
+  "at": [
+   134,
+   459
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   457
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   459
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   457
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap,sel",
+  "at": [
+   587,
+   459
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "sel",
+  "at": [
+   586,
+   457
+  ]
+ },
+ {
+  "label": "Search",
+  "flags": "tap",
+  "at": [
+   386,
+   581
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "flags": "tap",
+  "at": [
+   80,
+   703
+  ]
+ },
+ {
+  "label": "Filter",
+  "at": [
+   80,
+   725
+  ]
+ },
+ {
+  "label": "Sort · Advertised rate",
+  "flags": "tap",
+  "at": [
+   218,
+   703
+  ]
+ },
+ {
+  "label": "Advertised",
+  "at": [
+   218,
+   725
+  ]
+ },
+ {
+  "label": "Compare",
+  "flags": "tap",
+  "at": [
+   378,
+   703
+  ]
+ },
+ {
+  "label": "Compare",
+  "at": [
+   378,
+   725
+  ]
+ },
+ {
+  "label": "Lenders",
+  "flags": "tap",
+  "at": [
+   520,
+   703
+  ]
+ },
+ {
+  "label": "Lenders",
+  "at": [
+   520,
+   725
+  ]
+ },
+ {
+  "label": "Search actions",
+  "flags": "tap",
+  "at": [
+   640,
+   703
+  ]
+ },
+ {
+  "label": "More",
+  "at": [
+   640,
+   725
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1080
+  ]
+ },
+ {
+  "label": "View Unity Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   839
+  ]
+ },
+ {
+  "label": "Term Deposit, Unity Bank, Rate 5.80%, 1 yr · $1k–$10m · at maturity · Conditions: Unverified, Tier #22, Best advertised ",
+  "flags": "tap",
+  "at": [
+   384,
+   839
+  ]
+ },
+ {
+  "label": "Unity Bank · Term Deposit",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   798
+  ]
+ },
+ {
+  "label": "Save, Term Deposit, Unity Bank, Rate 5.80%",
+  "id": "rate-save:Unity%20Bank%7CI30_ALL_TERMS%7CTERM_DEPOSITS%7CTerm%20Deposit:22",
+  "flags": "tap",
+  "at": [
+   640,
+   839
+  ]
+ },
+ {
+  "label": "View Suncorp Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   983
+  ]
+ },
+ {
+  "label": "Term Deposit, Suncorp Bank, Rate 5.75%, 1 yr · $5k–$100k · at maturity · Conditions: Unverified, Tier #35, Best advertis",
+  "flags": "tap",
+  "at": [
+   384,
+   983
+  ]
+ },
+ {
+  "label": "Sun · Term Deposit",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   942
+  ]
+ },
+ {
+  "label": "Save, Term Deposit, Suncorp Bank, Rate 5.75%, Balance $5k–$99,999",
+  "id": "rate-save:Suncorp%20Bank%7CTD%7CTERM_DEPOSITS%7CTerm%20Deposit:35",
+  "flags": "tap",
+  "at": [
+   640,
+   983
+  ]
+ },
+ {
+  "label": "View Suncorp Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1127
+  ]
+ },
+ {
+  "label": "Term Deposit, Suncorp Bank, Rate 5.75%, 1 yr · $100k–$1m · at maturity · Conditions: Unverified, Tier #36, Best advertis",
+  "flags": "tap",
+  "at": [
+   384,
+   1127
+  ]
+ },
+ {
+  "label": "Sun · Term Deposit",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1086
+  ]
+ },
+ {
+  "label": "Save, Term Deposit, Suncorp Bank, Rate 5.75%, Balance $100k–$999,999",
+  "id": "rate-save:Suncorp%20Bank%7CTD%7CTERM_DEPOSITS%7CTerm%20Deposit:36",
+  "flags": "tap",
+  "at": [
+   640,
+   1127
+  ]
+ },
+ {
+  "label": "View Suncorp Bank · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1271
+  ]
+ },
+ {
+  "label": "Term Deposit, Suncorp Bank, Rate 5.75%, 1 yr · $1m–$2m · at maturity · Conditions: Unverified, Tier #37, Best advertised",
+  "flags": "tap",
+  "at": [
+   384,
+   1271
+  ]
+ },
+ {
+  "label": "Sun · Term Deposit",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1230
+  ]
+ },
+ {
+  "label": "Save, Term Deposit, Suncorp Bank, Rate 5.75%, Balance $1,000k–$2,000k",
+  "id": "rate-save:Suncorp%20Bank%7CTD%7CTERM_DEPOSITS%7CTerm%20Deposit:37",
+  "flags": "tap",
+  "at": [
+   640,
+   1271
+  ]
+ },
+ {
+  "label": "View AMP Bank GO · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1372
+  ]
+ },
+ {
+  "label": "AMP Bank GO 12 Month Term Deposit, AMP Bank GO, Rate 5.70%, 1 yr · at maturity, Tier #1, Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   384,
+   1372
+  ]
+ },
+ {
+  "label": "AMP Go · AMP Bank GO 12 Month Term Deposit",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1373
+  ]
+ },
+ {
+  "label": "Save, AMP Bank GO 12 Month Term Deposit, AMP Bank GO, Rate 5.70%",
+  "id": "rate-save:AMP%20Bank%20GO%7C282bc819-b61b-4233-b53b-290808bcb9f3%7CTERM_DEPOSITS%7CAMP%20Bank%20GO%2012%20Month%20Term%20Deposit:1",
+  "flags": "tap",
+  "at": [
+   640,
+   1380
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

@@ -1,0 +1,247 @@
+[
+ {
+  "label": "Verified · 1.0.398",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Back",
+  "flags": "tap",
+  "at": [
+   70,
+   331
+  ]
+ },
+ {
+  "label": "Debug log",
+  "at": [
+   247,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   672,
+   331
+  ]
+ },
+ {
+  "label": "Pending · Observed: 28 Nov 2026 · Pending: 28 Nov 2026",
+  "at": [
+   387,
+   479
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   979
+  ]
+ },
+ {
+  "label": "Private diagnostics",
+  "at": [
+   360,
+   629
+  ]
+ },
+ {
+  "label": "Device / network / rate / product / receipt / error",
+  "at": [
+   360,
+   677
+  ]
+ },
+ {
+  "label": "Privacy",
+  "at": [
+   360,
+   765
+  ]
+ },
+ {
+  "label": "Redaction unguaranteed",
+  "at": [
+   360,
+   813
+  ]
+ },
+ {
+  "label": "Upload",
+  "at": [
+   360,
+   901
+  ]
+ },
+ {
+  "label": "Public hosting",
+  "at": [
+   360,
+   949
+  ]
+ },
+ {
+  "label": "Clear",
+  "flags": "tap",
+  "at": [
+   131,
+   1055
+  ]
+ },
+ {
+  "label": "Clear",
+  "at": [
+   157,
+   1056
+  ]
+ },
+ {
+  "label": "Copy",
+  "flags": "tap",
+  "at": [
+   346,
+   1055
+  ]
+ },
+ {
+  "label": "Copy",
+  "at": [
+   372,
+   1055
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   567,
+   1055
+  ]
+ },
+ {
+  "label": "Share",
+  "at": [
+   593,
+   1055
+  ]
+ },
+ {
+  "label": "Share full evidence",
+  "flags": "tap",
+  "at": [
+   230,
+   1168
+  ]
+ },
+ {
+  "label": "Share full evidence",
+  "at": [
+   256,
+   1169
+  ]
+ },
+ {
+  "label": "Upload and copy link",
+  "flags": "tap",
+  "at": [
+   242,
+   1280
+  ]
+ },
+ {
+  "label": "Upload and copy link",
+  "at": [
+   268,
+   1281
+  ]
+ },
+ {
+  "label": "Verified upload",
+  "at": [
+   360,
+   1388
+  ]
+ },
+ {
+  "label": "Verified upload",
+  "at": [
+   184,
+   1389
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

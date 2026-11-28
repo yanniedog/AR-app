@@ -1,0 +1,261 @@
+[
+ {
+  "label": "Verified · 1.0.398",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Back",
+  "flags": "tap",
+  "at": [
+   70,
+   331
+  ]
+ },
+ {
+  "label": "Settings",
+  "at": [
+   228,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   672,
+   331
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   894
+  ]
+ },
+ {
+  "label": "App update",
+  "at": [
+   364,
+   463
+  ]
+ },
+ {
+  "label": "Status",
+  "at": [
+   360,
+   563
+  ]
+ },
+ {
+  "label": "Ready",
+  "at": [
+   360,
+   611
+  ]
+ },
+ {
+  "label": "Version",
+  "at": [
+   360,
+   675
+  ]
+ },
+ {
+  "label": "1.0.398 (454)",
+  "at": [
+   360,
+   723
+  ]
+ },
+ {
+  "label": "Source",
+  "at": [
+   360,
+   787
+  ]
+ },
+ {
+  "label": "GitHub",
+  "at": [
+   360,
+   835
+  ]
+ },
+ {
+  "label": "APK",
+  "at": [
+   360,
+   899
+  ]
+ },
+ {
+  "label": "Verified",
+  "at": [
+   360,
+   947
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   360,
+   1011
+  ]
+ },
+ {
+  "label": "Android installation permission",
+  "at": [
+   360,
+   1059
+  ]
+ },
+ {
+  "label": "Hide What's new",
+  "flags": "tap",
+  "at": [
+   360,
+   1143
+  ]
+ },
+ {
+  "label": "What's new",
+  "at": [
+   330,
+   1143
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1251
+  ]
+ },
+ {
+  "label": "1.0.398",
+  "at": [
+   360,
+   1219
+  ]
+ },
+ {
+  "label": "Changelog 1.0.398",
+  "flags": "tap",
+  "at": [
+   360,
+   1263
+  ]
+ },
+ {
+  "label": "Full changelog",
+  "at": [
+   360,
+   1267
+  ]
+ },
+ {
+  "label": "Check for update",
+  "flags": "tap",
+  "at": [
+   190,
+   1362
+  ]
+ },
+ {
+  "label": "Check for update",
+  "at": [
+   216,
+   1376
+  ]
+ },
+ {
+  "label": "Install update",
+  "flags": "tap",
+  "at": [
+   530,
+   1363
+  ]
+ },
+ {
+  "label": "Install update",
+  "at": [
+   556,
+   1376
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

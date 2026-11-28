@@ -1,0 +1,194 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I With Offset Mortgage",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Offset account",
+  "at": [
+   190,
+   219
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   239
+  ]
+ },
+ {
+  "label": "Redraw facility",
+  "at": [
+   190,
+   319
+  ]
+ },
+ {
+  "label": "Included",
+  "at": [
+   530,
+   319
+  ]
+ },
+ {
+  "label": "Show Documents",
+  "flags": "tap",
+  "at": [
+   360,
+   548
+  ]
+ },
+ {
+  "label": "Documents",
+  "at": [
+   328,
+   548
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   360,
+   712
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   286,
+   764
+  ]
+ },
+ {
+  "label": "Unverified",
+  "at": [
+   626,
+   764
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   273,
+   816
+  ]
+ },
+ {
+  "label": "Unassessed",
+  "at": [
+   613,
+   816
+  ]
+ },
+ {
+  "label": "Show Recorded criteria",
+  "flags": "tap",
+  "at": [
+   360,
+   981
+  ]
+ },
+ {
+  "label": "Recorded criteria",
+  "at": [
+   328,
+   981
+  ]
+ },
+ {
+  "label": "Show Mortgage · History",
+  "flags": "tap",
+  "at": [
+   360,
+   1222
+  ]
+ },
+ {
+  "label": "Mortgage · History",
+  "at": [
+   328,
+   1222
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

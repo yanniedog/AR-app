@@ -1,0 +1,218 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Clear Path Variable Home Loan",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Clear Path Variable Home Loan",
+  "at": [
+   414,
+   269
+  ]
+ },
+ {
+  "label": "Bank of Queensland Limited",
+  "at": [
+   72,
+   337
+  ]
+ },
+ {
+  "label": "Bank of Queensland Limited",
+  "flags": "tap",
+  "at": [
+   314,
+   341
+  ]
+ },
+ {
+  "label": "Bank of Queensland Limited",
+  "at": [
+   314,
+   313
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   414,
+   409
+  ]
+ },
+ {
+  "label": "Provider website",
+  "flags": "tap",
+  "at": [
+   215,
+   559
+  ]
+ },
+ {
+  "label": "Provider website",
+  "at": [
+   241,
+   559
+  ]
+ },
+ {
+  "label": "Comparison rate",
+  "at": [
+   360,
+   700
+  ]
+ },
+ {
+  "label": "6.91%",
+  "at": [
+   360,
+   768
+  ]
+ },
+ {
+  "label": "6.79% Advertised rate",
+  "at": [
+   360,
+   836
+  ]
+ },
+ {
+  "label": "Best advertised ↑ 25 bps · 7 Nov 2026 · 6.39% → 6.64%",
+  "at": [
+   360,
+   920
+  ]
+ },
+ {
+  "label": "Bank updated 4 Nov 2026 · Checked 28 Nov 2026",
+  "at": [
+   360,
+   1000
+  ]
+ },
+ {
+  "label": "Save",
+  "flags": "tap",
+  "at": [
+   190,
+   1150
+  ]
+ },
+ {
+  "label": "Save",
+  "at": [
+   217,
+   1151
+  ]
+ },
+ {
+  "label": "Calculate",
+  "flags": "tap",
+  "at": [
+   530,
+   1150
+  ]
+ },
+ {
+  "label": "Calculate",
+  "at": [
+   531,
+   1150
+  ]
+ },
+ {
+  "label": "Hide Rate details",
+  "flags": "tap",
+  "at": [
+   360,
+   1352
+  ]
+ },
+ {
+  "label": "Rate details",
+  "at": [
+   328,
+   1372
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

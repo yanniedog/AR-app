@@ -1,0 +1,403 @@
+[
+ {
+  "label": "Verified · 1.0.398",
+  "at": [
+   384,
+   117
+  ]
+ },
+ {
+  "label": "Install verified update",
+  "flags": "tap",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Install",
+  "at": [
+   304,
+   201
+  ]
+ },
+ {
+  "label": "Dismiss update banner",
+  "flags": "tap",
+  "at": [
+   644,
+   201
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   361,
+   331
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   673,
+   331
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap",
+  "at": [
+   134,
+   459
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   457
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap,sel",
+  "at": [
+   360,
+   459
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "sel",
+  "at": [
+   360,
+   457
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   459
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   457
+  ]
+ },
+ {
+  "label": "Macquarie",
+  "flags": "tap",
+  "at": [
+   330,
+   581
+  ]
+ },
+ {
+  "label": "Clear search",
+  "flags": "tap",
+  "at": [
+   614,
+   581
+  ]
+ },
+ {
+  "label": "Temporary filters",
+  "flags": "tap",
+  "at": [
+   80,
+   703
+  ]
+ },
+ {
+  "label": "Filter",
+  "at": [
+   80,
+   725
+  ]
+ },
+ {
+  "label": "Sort · Ongoing rate",
+  "flags": "tap",
+  "at": [
+   211,
+   703
+  ]
+ },
+ {
+  "label": "Ongoing",
+  "at": [
+   211,
+   725
+  ]
+ },
+ {
+  "label": "Compare",
+  "flags": "tap",
+  "at": [
+   363,
+   703
+  ]
+ },
+ {
+  "label": "Compare",
+  "at": [
+   363,
+   725
+  ]
+ },
+ {
+  "label": "Lenders",
+  "flags": "tap",
+  "at": [
+   512,
+   703
+  ]
+ },
+ {
+  "label": "Lenders",
+  "at": [
+   512,
+   725
+  ]
+ },
+ {
+  "label": "Search actions",
+  "flags": "tap",
+  "at": [
+   640,
+   703
+  ]
+ },
+ {
+  "label": "More",
+  "at": [
+   640,
+   725
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1080
+  ]
+ },
+ {
+  "label": "View Macquarie Bank Limited · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   839
+  ]
+ },
+ {
+  "label": "Macquarie Savings Account, Macquarie Bank Limited, Rate 5.50%, Ongoing · $0–$25k, Tier #1, Best advertised ↑ 25 bps · 20",
+  "flags": "tap",
+  "at": [
+   384,
+   839
+  ]
+ },
+ {
+  "label": "Macq · Macquarie Savings Account",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   798
+  ]
+ },
+ {
+  "label": "Save, Macquarie Savings Account, Macquarie Bank Limited, Rate 5.50%, Balance $0–$25k",
+  "id": "rate-save:Macquarie%20Bank%20Limited%7CSV001MBLSAV001%7CTRANS_AND_SAVINGS_ACCOUNTS%7CMacquarie%20Savings%20Account:1",
+  "flags": "tap",
+  "at": [
+   640,
+   839
+  ]
+ },
+ {
+  "label": "View Macquarie Bank Limited · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   983
+  ]
+ },
+ {
+  "label": "Macquarie Savings Account, Macquarie Bank Limited, Rate 5.50%, Ongoing · $25k–$50k, Tier #2, Best advertised ↑ 25 bps · ",
+  "flags": "tap",
+  "at": [
+   384,
+   983
+  ]
+ },
+ {
+  "label": "Macq · Macquarie Savings Account",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   942
+  ]
+ },
+ {
+  "label": "Save, Macquarie Savings Account, Macquarie Bank Limited, Rate 5.50%, Balance $25,000.01–$50k",
+  "id": "rate-save:Macquarie%20Bank%20Limited%7CSV001MBLSAV001%7CTRANS_AND_SAVINGS_ACCOUNTS%7CMacquarie%20Savings%20Account:2",
+  "flags": "tap",
+  "at": [
+   640,
+   983
+  ]
+ },
+ {
+  "label": "View Macquarie Bank Limited · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1127
+  ]
+ },
+ {
+  "label": "Macquarie Savings Account, Macquarie Bank Limited, Rate 5.50%, Ongoing · $50k–$250k, Tier #3, Best advertised ↑ 25 bps ·",
+  "flags": "tap",
+  "at": [
+   384,
+   1127
+  ]
+ },
+ {
+  "label": "Macq · Macquarie Savings Account",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1086
+  ]
+ },
+ {
+  "label": "Save, Macquarie Savings Account, Macquarie Bank Limited, Rate 5.50%, Balance $50,000.01–$250k",
+  "id": "rate-save:Macquarie%20Bank%20Limited%7CSV001MBLSAV001%7CTRANS_AND_SAVINGS_ACCOUNTS%7CMacquarie%20Savings%20Account:3",
+  "flags": "tap",
+  "at": [
+   640,
+   1127
+  ]
+ },
+ {
+  "label": "View Macquarie Bank Limited · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1271
+  ]
+ },
+ {
+  "label": "Macquarie Savings Account, Macquarie Bank Limited, Rate 5.30%, Ongoing · $250k–$2m, Tier #4, Best advertised ↑ 25 bps · ",
+  "flags": "tap",
+  "at": [
+   384,
+   1271
+  ]
+ },
+ {
+  "label": "Macq · Macquarie Savings Account",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1230
+  ]
+ },
+ {
+  "label": "Save, Macquarie Savings Account, Macquarie Bank Limited, Rate 5.30%",
+  "id": "rate-save:Macquarie%20Bank%20Limited%7CSV001MBLSAV001%7CTRANS_AND_SAVINGS_ACCOUNTS%7CMacquarie%20Savings%20Account:4",
+  "flags": "tap",
+  "at": [
+   640,
+   1271
+  ]
+ },
+ {
+  "label": "View Macquarie Bank Limited · History · Freshness · Unknown",
+  "flags": "tap",
+  "at": [
+   104,
+   1372
+  ]
+ },
+ {
+  "label": "Macquarie Cash Management Accelerator Account, Macquarie Bank Limited, Rate 5.15%, Ongoing · $0–$2m · Conditions: Unveri",
+  "flags": "tap",
+  "at": [
+   384,
+   1372
+  ]
+ },
+ {
+  "label": "Macq · Macquarie Cash Management Accelerator Account",
+  "id": "compact-product-name",
+  "at": [
+   384,
+   1373
+  ]
+ },
+ {
+  "label": "Save, Macquarie Cash Management Accelerator Account, Macquarie Bank Limited, Rate 5.15%, Rate index 1",
+  "id": "rate-save:Macquarie%20Bank%20Limited%7CCM001MBLXLR001%7CTRANS_AND_SAVINGS_ACCOUNTS%7CMacquarie%20Cash%20Management%20Accelerator%20Account:1",
+  "flags": "tap",
+  "at": [
+   640,
+   1380
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

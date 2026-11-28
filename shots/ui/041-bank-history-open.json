@@ -1,0 +1,427 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Bank of Sydney",
+  "at": [
+   294,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Bank of Sydney",
+  "at": [
+   60,
+   245
+  ]
+ },
+ {
+  "label": "Rate history · Advertised",
+  "at": [
+   258,
+   245
+  ]
+ },
+ {
+  "label": "Home loans",
+  "flags": "tap,sel",
+  "at": [
+   134,
+   333
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   133,
+   331
+  ]
+ },
+ {
+  "label": "Savings",
+  "flags": "tap",
+  "at": [
+   360,
+   333
+  ]
+ },
+ {
+  "label": "Savings",
+  "at": [
+   360,
+   331
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "flags": "tap",
+  "at": [
+   587,
+   333
+  ]
+ },
+ {
+  "label": "Term deposits",
+  "at": [
+   586,
+   331
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   429
+  ]
+ },
+ {
+  "label": "30 days",
+  "flags": "tap,sel",
+  "at": [
+   105,
+   429
+  ]
+ },
+ {
+  "label": "30 days",
+  "at": [
+   105,
+   429
+  ]
+ },
+ {
+  "label": "90 days",
+  "flags": "tap",
+  "at": [
+   254,
+   429
+  ]
+ },
+ {
+  "label": "90 days",
+  "at": [
+   254,
+   429
+  ]
+ },
+ {
+  "label": "1 year",
+  "flags": "tap",
+  "at": [
+   392,
+   429
+  ]
+ },
+ {
+  "label": "1 year",
+  "at": [
+   392,
+   429
+  ]
+ },
+ {
+  "label": "All",
+  "flags": "tap",
+  "at": [
+   505,
+   429
+  ]
+ },
+ {
+  "label": "All",
+  "at": [
+   505,
+   429
+  ]
+ },
+ {
+  "label": "Home loans · 30 days · 1 Observed · 28 Nov 2026 · Min 6.49% · Median 7.29% · Mean 7.24% · Max 8.59% · BOS Basic Home Loa",
+  "at": [
+   360,
+   634
+  ]
+ },
+ {
+  "label": "History",
+  "at": [
+   396,
+   640
+  ]
+ },
+ {
+  "label": "Cash rate · 4.85%",
+  "at": [
+   360,
+   811
+  ]
+ },
+ {
+  "label": "Cash rate · 4.85%",
+  "at": [
+   189,
+   811
+  ]
+ },
+ {
+  "label": "Previous date",
+  "flags": "tap",
+  "at": [
+   80,
+   891
+  ]
+ },
+ {
+  "label": "28 Nov 2026",
+  "at": [
+   360,
+   871
+  ]
+ },
+ {
+  "label": "6.49%",
+  "at": [
+   360,
+   911
+  ]
+ },
+ {
+  "label": "Next date",
+  "flags": "tap,off",
+  "at": [
+   640,
+   891
+  ]
+ },
+ {
+  "label": "28 Nov 2026",
+  "at": [
+   360,
+   979
+  ]
+ },
+ {
+  "label": "Min",
+  "at": [
+   108,
+   1019
+  ]
+ },
+ {
+  "label": "Max",
+  "at": [
+   276,
+   1019
+  ]
+ },
+ {
+  "label": "Mean",
+  "at": [
+   444,
+   1019
+  ]
+ },
+ {
+  "label": "Median",
+  "at": [
+   612,
+   1019
+  ]
+ },
+ {
+  "label": "6.49%",
+  "at": [
+   108,
+   1059
+  ]
+ },
+ {
+  "label": "8.59%",
+  "at": [
+   276,
+   1059
+  ]
+ },
+ {
+  "label": "7.24%",
+  "at": [
+   444,
+   1059
+  ]
+ },
+ {
+  "label": "7.29%",
+  "at": [
+   612,
+   1059
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   274,
+   1149
+  ]
+ },
+ {
+  "label": "Purpose · All",
+  "flags": "tap",
+  "at": [
+   134,
+   1143
+  ]
+ },
+ {
+  "label": "Purpose · All",
+  "at": [
+   134,
+   1143
+  ]
+ },
+ {
+  "label": "Repayment · All",
+  "flags": "tap",
+  "at": [
+   369,
+   1143
+  ]
+ },
+ {
+  "label": "Repayment · All",
+  "at": [
+   369,
+   1143
+  ]
+ },
+ {
+  "label": "Rate type · All",
+  "flags": "tap",
+  "at": [
+   508,
+   1143
+  ]
+ },
+ {
+  "label": "Rate type · All",
+  "at": [
+   520,
+   1143
+  ]
+ },
+ {
+  "label": "Carousel",
+  "flags": "tap",
+  "at": [
+   610,
+   1149
+  ]
+ },
+ {
+  "label": "Carousel",
+  "at": [
+   610,
+   1149
+  ]
+ },
+ {
+  "label": "Home loans",
+  "at": [
+   364,
+   1247
+  ]
+ },
+ {
+  "label": "BOS Basic Home Loan Owner Occupied, Bank of Sydney, Comparison rate 6.53%, Advertised rate 6.49% · Variable · Principal ",
+  "flags": "tap",
+  "at": [
+   308,
+   1342
+  ]
+ },
+ {
+  "label": "BOS Basic Home Loan Owner Occupied",
+  "id": "compact-product-name",
+  "at": [
+   308,
+   1314
+  ]
+ },
+ {
+  "label": "Save, BOS Basic Home Loan Owner Occupied, Bank of Sydney, Comparison rate 6.53%",
+  "id": "rate-save:Bank%20of%20Sydney%7Cbosbasic_oo%7CRESIDENTIAL_MORTGAGES%7CBOS%20Basic%20Home%20Loan%20Owner%20Occupied:2",
+  "flags": "tap",
+  "at": [
+   640,
+   1350
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "sel",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
