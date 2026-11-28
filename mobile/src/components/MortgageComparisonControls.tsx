@@ -2,7 +2,7 @@ import { canonicalPurpose, canonicalRepayment } from '../data/mortgageFacets';
 import { isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../data/mortgageFacetScope';
 import { publicCataloguePricingKey, type PublicCatalogueView } from '../data/publicRateIntegration';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { ScrollView, useWindowDimensions, View } from 'react-native';
 import { useMortgageComparison, mortgageComparisonValues, type MortgageComparisonInputs } from '../data/mortgageComparison';
 import { openMortgageComparisonProfile, saveMortgageComparisonFacets, saveMortgageComparisonInputs,
   clearSavedMortgageComparison, useMortgageComparisonProfile } from '../data/mortgageComparisonProfile';
@@ -277,6 +277,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     setDraft({ ...useMortgageComparison.getState(), lvr: '' });
     updateRatesSection('Mortgage', { page: 1 }, true);
   };
+  const { width, fontScale } = useWindowDimensions();
   const mode = resolvedMode(draft);
   const fundsType = resolvedFundsType(draft);
   const values = mortgageComparisonValues(withResolvedMode(draft));
@@ -305,8 +306,10 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     uiLabel(field === 'loanAmount' ? 'Loan amount' : field === 'propertyValue' ? 'Property value'
       : field === 'fundsAvailable' ? fundsType === 'offset' ? 'Offset balance' : 'Deposit' : 'LVR');
   const currencyFields = fields.filter(field => field !== 'lvr');
+  // Two amounts share a row only when each keeps a readable width; narrow or enlarged text takes one per row.
+  const rowSize = fontScale > 1.15 || width < 360 ? 1 : 2;
   const currencyRows = currencyFields.reduce<NumericInputField[][]>((rows, field, index) => {
-    if (index % 2 === 0) rows.push([field]); else rows[rows.length - 1].push(field);
+    if (index % rowSize === 0) rows.push([field]); else rows[rows.length - 1].push(field);
     return rows;
   }, []);
   // Rates applies the default LVR until one is entered; the profile still requires it.

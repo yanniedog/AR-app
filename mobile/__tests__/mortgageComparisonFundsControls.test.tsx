@@ -253,7 +253,8 @@ test('large text keeps the fields in fixed rows and both labelled selectable tab
     expect(inputs.every(node => node.props.style.minHeight >= 48 && node.props.allowFontScaling !== false)).toBe(true);
     // Fields sit in fixed two-column rows: wrapped flex-grow rows under-reported their height on Android.
     const fieldRows = tree.root.findAllByType(View).filter(node => node.props.style?.flexDirection === 'row' && node.props.style?.alignItems === 'flex-end');
-    expect(fieldRows).toHaveLength(2);
+    // At 320 dp with 3x text each amount takes its own row.
+    expect(fieldRows).toHaveLength(3);
     expect(fieldRows.some(node => node.props.style?.flexWrap === 'wrap')).toBe(false);
     expect(tab(tree, 'Funds available').props.accessibilityState.selected).toBe(true);
     expect(tab(tree, 'LVR').props.accessibilityState.selected).toBe(false);
@@ -358,7 +359,7 @@ test('offset inputs and type selector stay accessible in fixed rows at large tex
   try {
     expect(tree.root.findAllByType(TextInput).map(node => node.props.accessibilityLabel))
       .toEqual(['Loan amount, thousands of dollars', 'Offset balance, thousands of dollars', 'Property value, thousands of dollars']);
-    expect(tree.root.findAllByType(View).filter(node => node.props.style?.flexDirection === 'row' && node.props.style?.alignItems === 'flex-end')).toHaveLength(2);
+    expect(tree.root.findAllByType(View).filter(node => node.props.style?.flexDirection === 'row' && node.props.style?.alignItems === 'flex-end')).toHaveLength(3);
     for (const label of ['Deposit', 'Offset account']) {
       const control = tab(tree, label), style = StyleSheet.flatten(control.props.style({ pressed: false }));
       expect(style.minHeight).toBeGreaterThanOrEqual(48);
@@ -411,5 +412,16 @@ test('a saved funds scenario without a type stays a deposit through edits and a 
     choose(tree, 'Funds available');
     expect(tab(tree, 'Deposit').props.accessibilityState.selected).toBe(true);
     expect(input(tree, 'Deposit')?.props.value).toBe('160');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('at normal text size two amounts share a fixed row', () => {
+  mockDimensions = { width: 400, height: 800, scale: 3, fontScale: 1 };
+  setMortgageComparisonInputs({ loanAmount: '', lvr: '', lvrMode: 'funds', fundsType: 'offset' });
+  const tree = mount();
+  try {
+    const fieldRows = tree.root.findAllByType(View).filter(node => node.props.style?.flexDirection === 'row' && node.props.style?.alignItems === 'flex-end');
+    expect(fieldRows).toHaveLength(2);
+    expect(fieldRows.some(node => node.props.style?.flexWrap === 'wrap')).toBe(false);
   } finally { act(() => tree.unmount()); }
 });
