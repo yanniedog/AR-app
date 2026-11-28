@@ -23,3 +23,7 @@ test('NAB 6.94% offers from the 28 November catalogue use their published repaym
 test.each(['UNCONSTRAINED', 'OTHER'])('a %s source basis cannot inherit the ribbon P&I default', repayment_type => {
   expect(mortgageMonthlyRepayment({ repayment_type, ribbon_repayment_type: 'principal_and_interest' }, 650000, 0.0694)).toBeNull();
 });
+
+test('published 8.94% interest only gives $4,842.50, displayed as $4,843', () => {
+  expect(mortgageMonthlyRepayment({ repayment_type: 'INTEREST_ONLY' }, 650000, 0.0894)).toBe(4843);
+});

@@ -1,3 +1,5 @@
+import { publicDecimal } from './publicRateDecimal';
+import { MAX_CALCULATOR_MORTGAGE_AMOUNT } from './calc';
 import { canonicalRepayment } from './mortgageFacets';
 import type { RateRow } from '../types';
 import { requiredMonthlyRepayment } from './staySwitchProjection';
@@ -20,11 +22,18 @@ export function mortgageMonthlyRepayment(
   annualRate: number | null | undefined,
   applicableOffset = 0,
 ): number | null {
-  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) return null;
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || amount > MAX_CALCULATOR_MORTGAGE_AMOUNT) return null;
   if (typeof annualRate !== 'number' || !Number.isFinite(annualRate) || annualRate < 0 || annualRate >= 1) return null;
   const basis = mortgageRepaymentBasis(row);
   if (!basis || !Number.isFinite(applicableOffset) || applicableOffset < 0) return null;
-  const payment = basis === 'INTEREST_ONLY' ? Math.max(0, amount - applicableOffset) * annualRate / 12
-    : requiredMonthlyRepayment(amount, annualRate, LIST_REPAYMENT_TERM_YEARS * 12);
+  if (basis === 'INTEREST_ONLY') {
+    if (applicableOffset >= amount) return 0;
+    const balance = publicDecimal(amount.toFixed(2)).sub(publicDecimal(applicableOffset.toFixed(2)));
+    // Preserve the published rate's decimal precision through whole-dollar rounding.
+    const rateText = String(annualRate);
+    const rate = publicDecimal(rateText.includes('e') ? annualRate.toFixed(24) : rateText);
+    return Number(balance.mul(rate).div(publicDecimal('12')).fixed(0));
+  }
+  const payment = requiredMonthlyRepayment(amount, annualRate, LIST_REPAYMENT_TERM_YEARS * 12);
   return Number.isFinite(payment) ? Math.round(payment) : null;
 }
