@@ -1322,20 +1322,18 @@ export class ScenarioReentryGate {
   /**
    * True when the runner should remount the step's expected route before
    * invoking it. Call once per step in plan order. Route-entry steps clear the
-   * gate themselves; scenario changes clear it without a restore.
+   * gate themselves. A scenario boundary alone does not prove that a route
+   * was mounted, so the gate remains armed until a direct route-entry step.
    *
    * Never requests a silent skip — dependents remount and execute.
    */
   takeRestore(step: DeepAuditStep, entersRouteDirectly: boolean): boolean {
     if (this.awaitingScenarioId == null) return false;
-    if (step.scenarioId !== this.awaitingScenarioId) {
-      this.awaitingScenarioId = null;
-      return false;
-    }
     if (entersRouteDirectly) {
       this.awaitingScenarioId = null;
       return false;
     }
+    if (step.scenarioId !== this.awaitingScenarioId) return false;
     return true;
   }
 
