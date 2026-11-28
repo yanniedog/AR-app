@@ -52,6 +52,7 @@ import { selectedTargetConstraint, targetConstraintContradicted } from '../../sr
 import { uiTargetConstraint } from '../../src/lib/financialUiCopy';
 import { formatRate, isNonStandard, toFraction } from '../../src/data/format';
 import { normalizedProductFacts } from '../../src/data/productFacts';
+import { mergeLegacyDetailItems } from '../../src/lib/productUiFacts';
 import { verifiedDetailsSha } from '../../src/data/detailsIdentity';
 import { isPublicProductEligible } from '../../src/data/publicProductEligibility';
 import { isMandatoryEligibilityReady, mandatoryProductAllowed } from '../../src/data/eligibilityGate';
@@ -196,10 +197,24 @@ export default function ProductDetail() {
   const detail = detailsPayload?.products[productKey] ?? null;
   const productCriteria = useProductCriteria(manifest, detailsPayload?.products, true, [productKey]);
   const descriptiveDetail = productCriteria.lookup?.[productKey] ?? detail;
-  const normalizedFactKinds = useMemo(
-    () => new Set(normalizedProductFacts(detail).map((fact) => fact.kind)),
-    [detail],
-  );
+  const normalizedFacts = useMemo(() => normalizedProductFacts(detail), [detail]);
+  const legacyDetailItems = useMemo(() => ({
+    features: mergeLegacyDetailItems(
+      detail?.features,
+      normalizedFacts.filter((fact) => fact.kind === 'feature'),
+      'Features',
+    ),
+    eligibility: mergeLegacyDetailItems(
+      detail?.eligibility,
+      normalizedFacts.filter((fact) => fact.kind === 'eligibility'),
+      'Eligibility',
+    ),
+    constraints: mergeLegacyDetailItems(
+      detail?.constraints,
+      normalizedFacts.filter((fact) => fact.kind === 'constraint'),
+      'Constraints',
+    ),
+  }), [detail, normalizedFacts]);
   const detailsProducts = useStore((s) => s.details?.products ?? null);
   const detailsLoading = useStore((s) => s.detailsLoading);
   const detailsRequestIdentity = `${core?.run_date ?? ''}|${coreSha ?? ''}|${detailsSha ?? ''}|${productKey}`;
@@ -997,9 +1012,9 @@ export default function ProductDetail() {
         <MemoSelectedRateConditions row={row} section={section} />
         {section === 'TD' ? <MemoFixedDepositCalculation row={row} /> : null}
         <MemoEligibilityAssessment productKey={productKey} row={row} section={section} /><MemoSavingsPeriodCalculation productKey={row.product_key} row={row} section={section} /><MemoActivityPeriodCalculation productKey={row.product_key} row={row} section={section} /><MemoMortgagePeriodCalculation productKey={row.product_key} row={row} section={section} />
-        <DetailGroup title="Features" icon="checkmark-circle-outline" items={normalizedFactKinds.has('feature') ? undefined : detail?.features} loading={detailsLoading && !normalizedFactKinds.has('feature')} />
-        <DetailGroup title="Eligibility" icon="person-outline" items={normalizedFactKinds.has('eligibility') ? undefined : detail?.eligibility} loading={detailsLoading && !normalizedFactKinds.has('eligibility')} />
-        <DetailGroup title="Constraints" icon="lock-closed-outline" items={normalizedFactKinds.has('constraint') ? undefined : detail?.constraints} loading={detailsLoading && !normalizedFactKinds.has('constraint')} />
+        <DetailGroup title="Features" icon="checkmark-circle-outline" items={legacyDetailItems.features} loading={detailsLoading && normalizedFacts.length === 0} />
+        <DetailGroup title="Eligibility" icon="person-outline" items={legacyDetailItems.eligibility} loading={detailsLoading && normalizedFacts.length === 0} />
+        <DetailGroup title="Constraints" icon="lock-closed-outline" items={legacyDetailItems.constraints} loading={detailsLoading && normalizedFacts.length === 0} />
         <ProductTermsDisclosure productKey={productKey} />
         <ProductEvidenceDisclosure productKey={productKey} />
 

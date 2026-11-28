@@ -33,6 +33,32 @@ export function dedupeFacts<T extends object>(facts: readonly T[]): T[] {
     return true;
   });
 }
+
+function presentationIdentity(fact: ProductPresentationFact): string {
+  return JSON.stringify([
+    fact.label,
+    fact.value,
+    fact.conditions,
+    fact.conditionsUnverified,
+    fact.scope,
+  ]);
+}
+
+/** Keep every distinct legacy entry while removing exact normalized render duplicates. */
+export function mergeLegacyDetailItems(
+  published: readonly DetailItem[] | undefined,
+  normalized: readonly NormalizedProductFact[],
+  group: 'Eligibility' | 'Features' | 'Constraints',
+): DetailItem[] {
+  const normalizedIdentities = new Set(
+    dedupeFacts(normalized).map((fact) => presentationIdentity(uiNormalizedProductFact(fact))),
+  );
+  return dedupeDetailItems(published).filter(
+    (item, index) => !normalizedIdentities.has(
+      presentationIdentity(uiDetailItem(item, index, group)),
+    ),
+  );
+}
 /** Annual and upfront charges are recognised by published category or name, never by guesswork. */
 export function isAnnualFee(fee: DetailItem): boolean {
   const label = (fee.label ?? '').toUpperCase();
