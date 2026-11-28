@@ -1,0 +1,229 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Owner Occupier P&I No Offset Mortgage",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Product rate",
+  "at": [
+   165,
+   199
+  ]
+ },
+ {
+  "label": "Market rate range",
+  "at": [
+   430,
+   199
+  ]
+ },
+ {
+  "label": "Market median",
+  "at": [
+   181,
+   244
+  ]
+ },
+ {
+  "label": "Market mean",
+  "at": [
+   436,
+   244
+  ]
+ },
+ {
+  "label": "RBA cash rate",
+  "at": [
+   175,
+   308
+  ]
+ },
+ {
+  "label": "Hide Product facts",
+  "flags": "tap",
+  "at": [
+   360,
+   537
+  ]
+ },
+ {
+  "label": "Product facts",
+  "at": [
+   328,
+   537
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   360,
+   637
+  ]
+ },
+ {
+  "label": "Early / extra repayments",
+  "at": [
+   190,
+   693
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   713
+  ]
+ },
+ {
+  "label": "Redraw facility",
+  "at": [
+   190,
+   793
+  ]
+ },
+ {
+  "label": "Included",
+  "at": [
+   530,
+   793
+  ]
+ },
+ {
+  "label": "Show Documents",
+  "flags": "tap",
+  "at": [
+   360,
+   1022
+  ]
+ },
+ {
+  "label": "Documents",
+  "at": [
+   328,
+   1022
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   360,
+   1186
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   286,
+   1238
+  ]
+ },
+ {
+  "label": "Unverified",
+  "at": [
+   626,
+   1238
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   273,
+   1290
+  ]
+ },
+ {
+  "label": "Unassessed",
+  "at": [
+   613,
+   1290
+  ]
+ },
+ {
+  "label": "Show Recorded criteria",
+  "flags": "tap",
+  "at": [
+   360,
+   1392
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
