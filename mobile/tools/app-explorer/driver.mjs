@@ -482,6 +482,7 @@ class Explorer {
     const slug = `${index}-${String(name).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 50).toLowerCase()}`;
     const anrBefore = systemDialogs.filter(d => d.ours).length;
     const before = this.current.nodes.length ? fingerprint(this.current.nodes) : null;
+    const captureDay = this.sessionFlag ? sh('date +%F', { allowFail: true })?.trim() : undefined;
     const settled = await settle(settleTimeout, since, before, { scrolling: Boolean(this.scrollStep), until });
     const appAnr = systemDialogs.filter(d => d.ours).length > anrBefore;
     this.current = settled;
@@ -508,6 +509,7 @@ class Explorer {
       waitedMs: settled.waitedMs,
       shifts: settled.shifts || undefined,
       errorState: this.sessionFlag && settled.errorState ? settled.errorState : undefined,
+      deviceDay: captureDay && captureDay === sh('date +%F', { allowFail: true })?.trim() ? captureDay : undefined,
       dumpMs: settled.dumpMs,
       session: this.sessionFlag || undefined,
       alive: Boolean(pid),
@@ -570,7 +572,8 @@ class Explorer {
 
   async find(sel, timeoutMs = 8000) {
     const start = Date.now();
-    let nodes = this.current.nodes;
+    const initialNodes = this.current.nodes;
+    let nodes = initialNodes;
     while (true) {
       const hit = findNode(nodes, sel);
       if (hit) return hit;
@@ -929,10 +932,23 @@ class Explorer {
     const required = [step.then ?? []].flat();
     const forbidden = [step.gone ?? []].flat();
     const deadline = Date.now() + (step.thenTimeoutMs ?? 8000);
-    let nodes = this.current.nodes;
+    const initialNodes = this.current.nodes;
+    let nodes = initialNodes;
     while (true) {
       const { available, matched, missing, present } = uiConditions(nodes, required, forbidden);
-      if (matched) return;
+      if (matched) {
+        // Retain the exact hierarchy that satisfied a delayed assertion.
+        if (nodes !== initialNodes) {
+          if (rec.deviceDay !== sh('date +%F', { allowFail: true })?.trim()) delete rec.deviceDay;
+          delete rec.keyboardBounds;
+          Object.assign(rec, this.captureScreen(rec.slug));
+          const screen = summarize(nodes);
+          fs.writeFileSync(path.join(this.out, 'ui', `${rec.slug}.json`), JSON.stringify(screen, null, 1));
+          fs.writeFileSync(path.join(this.out, 'ui', `${rec.slug}.nodes.json`), JSON.stringify(rawNodes(nodes, this.size)));
+          rec.visible = screen.slice(0, 40).map(item => item.label).filter(Boolean);
+        }
+        return;
+      }
       const remaining = deadline - Date.now();
       if (remaining <= 0) {
         rec.error = available

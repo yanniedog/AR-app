@@ -1,0 +1,88 @@
+{
+  "run": "46149503413",
+  "capture": "031-verify-term-deposit-rates",
+  "core": "5b24f9c481f09bfe59071d96edcc2065f6686c967e99a27aca7bd9b544e1018e",
+  "retail": "https://australianmilitarybank.com.au/bank-and-save/term-deposits/",
+  "tableExcerpt": "<table><tr><th style=\"vertical-align:top;\"><h4>Term</h4></th><th style=\"vertical-align:top;\"><h4>Investment Plus</h4><p>(Interest paid at end of term or annually for terms over 12 months)</p><p>&nbsp;</p><p><a class=\"button button-theme\" href=\"/bank-and-save/term-deposits/investment-plus-term-deposits/\" rel=\"noopener noreferrer\">Learn More</a></p></th><th style=\"vertical-align:top;\"><h4>Income Plus</h4><p>(Interest paid monthly)</p><p>&nbsp;</p><p><a class=\"button button-theme\" href=\"/bank-and-save/term-deposits/income-plus-term-deposits/\" rel=\"noopener noreferrer\">Learn More</a></p></th></tr><tr><td><strong>6 Months</strong></td><td>5.70% p.a.</td><td>5.60% p.a.</td></tr></table>",
+  "sourceRow": {
+    "provider": "Australian Military Bank",
+    "product_id": "3b2158a8-34ee-4cb2-870d-1b741ad6e77e",
+    "product_key": "Australian Military Bank|3b2158a8-34ee-4cb2-870d-1b741ad6e77e|TERM_DEPOSITS|Income Plus",
+    "product_name": "Income Plus",
+    "category": "TERM_DEPOSITS",
+    "rate": "0.056",
+    "rate_type": "FIXED",
+    "term": "P6M",
+    "term_months": "6",
+    "ribbon_normalized": true,
+    "ribbon_rate_structure": "base",
+    "ribbon_deposit_kind": "base",
+    "balance_min": "1000",
+    "interest_payment": "at_maturity",
+    "feature_set": "basic",
+    "account_class": "standard",
+    "rate_index": 9,
+    "last_updated": "2026-11-23T13:00:00.420935Z",
+    "taxonomy_path": "TERM_DEPOSIT.6M.AT_MATURITY.TIERED"
+  },
+  "size": [
+    720,
+    1600
+  ],
+  "nodes": [
+    {
+      "text": "",
+      "desc": "Term deposits",
+      "id": "",
+      "cls": "View",
+      "clickable": true,
+      "scrollable": false,
+      "checked": false,
+      "selected": true,
+      "enabled": true,
+      "pkg": "com.eyex.australianrates",
+      "bounds": [
+        485,
+        229,
+        688,
+        325
+      ]
+    },
+    {
+      "text": "",
+      "desc": "Personal Term Deposits, Judo Bank, Rate 5.65%, 4 yrs \u00b7 Annually \u00b7 Conditions: Unverified, Tier #2, Best advertised \u2191 5 bps \u00b7 30 Oct 2026, Freshness \u00b7 Unknown",
+      "id": "",
+      "cls": "Button",
+      "clickable": true,
+      "scrollable": false,
+      "checked": false,
+      "selected": false,
+      "enabled": true,
+      "pkg": "com.eyex.australianrates",
+      "bounds": [
+        184,
+        585,
+        584,
+        495
+      ]
+    },
+    {
+      "text": "",
+      "desc": "Income Plus, Australian Military Bank, Rate 5.60%, 6 mo \u00b7 $1k+ \u00b7 at maturity, Tier #9, Best advertised \u2191 25 bps \u00b7 4 days ago, Freshness \u00b7 Unknown",
+      "id": "",
+      "cls": "Button",
+      "clickable": true,
+      "scrollable": false,
+      "checked": false,
+      "selected": false,
+      "enabled": true,
+      "pkg": "com.eyex.australianrates",
+      "bounds": [
+        184,
+        944,
+        584,
+        1071
+      ]
+    }
+  ]
+}
