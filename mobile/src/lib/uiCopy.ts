@@ -55,7 +55,7 @@ export const UI_LABELS = [
   'Rates per page', 'Products per page', 'Page', 'First', 'Previous', 'Next', 'Last',
   'Source evidence', 'Original response', 'Ambiguous', 'Index only',
   'Exact product', 'Product variant', 'Product family', 'Shared provider terms', 'Background',
-  'Supplementary', 'Superseded', 'Document type', 'Open document', 'Provider website', 'Documents',
+  'Supplementary', 'Superseded', 'Document type', 'Open document', 'Provider website', 'Source page', 'Documents',
   'Specificity unknown',
   'Equal to', 'At least', 'At most', 'Filter value', 'Invalid value',
   'Search criteria', 'Show more',
