@@ -567,7 +567,7 @@ export default function RatesWorkspace() {
       const priced = resolvedPublicRankingRows([entry.row], catalogue,
         row => scenarioFor(entry.section, row)).rows;
       return entry.section === 'Mortgage'
-        ? mortgageComparisonRows(priced, mortgageInputs, { core, details, manifest, coreIntegrity }).rows.length > 0
+        ? mortgageComparisonRows(priced, mortgageInputs, { core, details, manifest, coreIntegrity }, { upperBounds: false }).rows.length > 0
         : priced.length > 0;
     });
     if (applicable.length !== selected.length || applicable.some((token, index) => token !== selected[index])) setSelected(applicable);

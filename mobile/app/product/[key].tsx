@@ -332,6 +332,12 @@ export default function ProductDetail() {
     }
     return best;
   }, [found]);
+  // A home loan's product history is its lowest rate across every tier. When the
+  // selected tier prices differently that line is not this loan's rate, so the
+  // chart shows the selected rate itself rather than another tier's history.
+  const selectedRate = row ? toFraction(row.rate) : null;
+  const plotSelectedOnly = found?.section === 'Mortgage' && selectedRate != null && selectedRate > 0
+    && currentBest != null && selectedRate !== currentBest;
   const auditProductError = core && isMandatoryEligibilityReady() && !row
     ? !mandatoryProductAllowed(productKey)
       ? 'The selected product does not meet the current mandatory profile requirements'
@@ -494,12 +500,14 @@ export default function ProductDetail() {
       : productSeriesRecordWithCurrent(productHistory, productKey, core?.run_date, currentBest)
   ), [historySurfaceReady, productHistory, productKey, core?.run_date, currentBest]);
   const productSeries = useMemo(() => ({
-    values: productSeriesRecordForChart(productHistory, productKey,
-      historyModel?.allDates ?? historyModel?.dates ?? [], core?.run_date, currentBest),
+    values: plotSelectedOnly
+      ? productSeriesRecordForChart(null, productKey, historyModel?.allDates ?? historyModel?.dates ?? [], core?.run_date, selectedRate)
+      : productSeriesRecordForChart(productHistory, productKey,
+        historyModel?.allDates ?? historyModel?.dates ?? [], core?.run_date, currentBest),
     label: row ? uiProductName(row) : uiLabel('Product'),
-    valueScope: uiJoin('Leading advertised', ' · ', 'All tiers'),
+    valueScope: plotSelectedOnly ? uiLabel('Selected rate') : uiJoin('Leading advertised', ' · ', 'All tiers'),
     color: theme.ledger.info,
-  }), [productHistory, productKey, historyModel, core?.run_date, currentBest, row, theme.ledger.info]);
+  }), [plotSelectedOnly, selectedRate, productHistory, productKey, historyModel, core?.run_date, currentBest, row, theme.ledger.info]);
 
   // Single-day fallback is a misleading solid RBA block; wait for multi-day context
   // when Standard-only mode is relying on bank insights that have not arrived yet.
@@ -726,7 +734,7 @@ export default function ProductDetail() {
   const presentation = ratePresentation(row, section, mortgageRateMetric);
 
   const observedProductPoints = countFiniteSeriesPoints(seededProductValues);
-  const selectedHistoryContext = currentBest !== null && toFraction(row.rate) !== currentBest
+  const selectedHistoryContext = !plotSelectedOnly && currentBest !== null && toFraction(row.rate) !== currentBest
     ? uiJoin('Selected rate', ' ', formatRate(row.rate), ' · ', 'Leading advertised', ' ', formatRate(currentBest), ' · ', 'All tiers')
     : null;
 
@@ -961,7 +969,7 @@ export default function ProductDetail() {
                       onPress={() => void ensureProductHistory({ force: true })}
                     />
                   </Row>
-                ) : observedProductPoints < 2 ? (
+                ) : observedProductPoints < 2 && !plotSelectedOnly ? (
                   <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
                     {uiJoin('Leading advertised', ' ', formatRate(currentBest), ' · ', 'All tiers')}
                   </AppText>

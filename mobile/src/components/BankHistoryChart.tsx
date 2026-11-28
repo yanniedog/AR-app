@@ -431,7 +431,12 @@ function BankHistoryChartView({
   ), 0);
   // A market ribbon supplies context, never a missing product observation.
   const observedPointCount = highlightValues ? highlightValues.filter(isFiniteNumber).length : finitePointCount;
-  const missingPointCount = plotDates.length - observedPointCount;
+  // Days before a product was first published are not missing observations.
+  // The first observation is read from the whole series, not just this window.
+  const firstObservedDate = highlightSeries ? Object.keys(highlightSeries.values)
+    .filter(date => isFiniteNumber(highlightSeries.values[date])).sort()[0] : undefined;
+  const firstObserved = firstObservedDate === undefined ? 0 : plotDates.findIndex(date => date >= firstObservedDate);
+  const missingPointCount = firstObserved < 0 ? 0 : plotDates.length - firstObserved - observedPointCount;
   const padL = 44;
   const padR = 8;
   const padT = rbaMarks.length ? 28 : 14;

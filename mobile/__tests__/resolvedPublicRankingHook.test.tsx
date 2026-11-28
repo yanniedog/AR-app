@@ -625,12 +625,12 @@ describe('leading scope', () => {
       const fresh = renders[renders.length - 1];
       expect(fresh.ready).toBe(false);
       expect(fresh.leadingScope).not.toBe(stale);
-      expect(fresh.leadingScope!.rows.every(item => item.lvr_tier === 'lvr_0-60%')).toBe(true);
+      // At 50% the 0-60% tiers now apply, and 60-80% products stay available at that tier as an upper bound.
+      expect(fresh.leadingScope!.rows.some(item => item.lvr_tier === 'lvr_0-60%')).toBe(true);
       act(() => releaseAll());
       await settle(() => renders[renders.length - 1].ready);
       const final = renders[renders.length - 1];
-      expect(final.mortgageScope.rows).toHaveLength(source.length / 2);
-      expect(final.mortgageScope.rows.every(item => item.lvr_tier === 'lvr_0-60%')).toBe(true);
+      expect(final.mortgageScope.rows).toHaveLength(source.length);
     } finally { act(() => { releaseAll(); tree.unmount(); }); }
   });
 

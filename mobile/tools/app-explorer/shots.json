@@ -124,6 +124,6 @@
     "open": "/product/Bank%20of%20Queensland%20Limited%7C59906e88-5c03-ee11-8f6e-00224814d330%7CRESIDENTIAL_MORTGAGES%7CClear%20Path%20Variable%20Home%20Loan",
     "scroll": 1,
     "visibleAction": "1 year",
-    "why": "Home loan history: benchmark ribbon at the user's LVR and above (default 80%), 1 year default, and the Provider website link in the details"
+    "why": "Home loan history: benchmark ribbon at the user's LVR and above (default 80%), 1 year default, product line at the selected rate (labelled Selected rate when another tier leads), missing observations counted from first observation, and the Provider website link"
   }
 ]
