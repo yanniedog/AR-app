@@ -1,5 +1,6 @@
 import type { ProductDetail, RateRow } from '../types';
-import { toFraction, isoDurationMonths } from './rateNumbers';
+import { toFraction } from './rateNumbers';
+import { advertisedTermMonths } from './calc';
 import { isBroadlyAvailable, isConditionalDepositRate, isNonStandard } from './rateClassification';
 import { getSuitabilityAllowed } from './suitabilityGate';
 import { mandatoryEligibleRows } from './eligibilityGate';
@@ -155,13 +156,7 @@ export function formatTerm(row: RateRow): UiText {
     const days = Number(dayTerm[1]);
     return uiJoin(uiNumber(days), ' ', days === 1 ? 'day' : 'days');
   }
-  // For calendar terms, term_months is authoritative; otherwise parse the ISO `term` (e.g. "P36M" = 3 yrs).
-  // NB: ribbon_fixed_term only mirrors the *number* in `term` (P3Y→3, P36M→36), so its
-  // unit is ambiguous on its own — only fall back to it (as years) when nothing else.
-  let months = toNumber(row.term_months);
-  if (months === null || months <= 0) {
-    months = isoDurationMonths(typeof row.term === 'string' ? row.term : undefined);
-  }
+  const months = advertisedTermMonths(row);
   if (months !== null && months > 0) {
     if (months % 12 === 0) {
       const years = months / 12;
@@ -169,8 +164,6 @@ export function formatTerm(row: RateRow): UiText {
     }
     return uiJoin(uiNumber(months, Math.min(6, (String(months).split('.')[1] ?? '').length)), ' ', 'mo');
   }
-  const fixed = toNumber(row.ribbon_fixed_term);
-  if (fixed !== null && fixed > 0) return uiJoin(uiNumber(fixed, Math.min(6, (String(fixed).split('.')[1] ?? '').length)), ' ', fixed > 1 ? 'yrs' : 'yr', ' ', 'fixed');
   return uiLabel('');
 }
 

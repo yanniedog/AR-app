@@ -133,10 +133,10 @@ export { MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION, isMeaningfulDepositRate };
  *  Published zero/negative headlines are tokens (`toFraction` maps them to null);
  *  genuinely missing/unparseable headlines are kept (e.g. incomplete bonus rows).
  */
-function passesDepositTokenFloor(row: RateRow, section: SectionKey): boolean {
+function passesDepositTokenFloor(row: RateRow, section: SectionKey, includeLowSavingsRates = false): boolean {
   if (section === 'Mortgage') return true;
   const v = effectiveFraction(row);
-  if (v !== null) return isMeaningfulDepositRate(v, section);
+  if (v !== null) return section === 'Savings' && includeLowSavingsRates ? v > 0 : isMeaningfulDepositRate(v, section);
   const raw = row.rate;
   if (raw === null || raw === undefined || raw === '') return true;
   const n = typeof raw === 'number' ? raw : Number(raw);
@@ -573,7 +573,7 @@ export function prepareRowFilter(
 ): (row: RateRow) => boolean {
   return (row) => {
     if (!row) return false;
-    if (section && !(section === 'Savings' && filters.includeLowSavingsRates) && !passesDepositTokenFloor(row, section)) return false;
+    if (section && !passesDepositTokenFloor(row, section, filters.includeLowSavingsRates)) return false;
     if (!matchesSearch(row)) return false;
     if (!inList(row.provider, filters.providers)) return false;
     if (!inList(row.rate_type, filters.rateTypes)) return false;

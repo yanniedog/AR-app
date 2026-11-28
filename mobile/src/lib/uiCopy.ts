@@ -271,7 +271,7 @@ export const UI_LABELS = [
   'Automatic', 'YYYY-MM-DD', 'Amount', 'Whole months', 'Whole numbers', 'Past date',
   'Conditional rate', 'Rate scenarios', 'Offset scenarios', 'Outside tracked LVR bands',
   'Deposit to LVR', 'Initial repayment', 'Initial monthly repayment', 'Simple annual interest',
-  'Maturity unpublished', 'Eligibility / rate conditions unverified', 'Verify access',
+  'Maturity unpublished', 'Maturity estimate unavailable', 'Eligibility / rate conditions unverified', 'Verify access',
   'Staff', 'Occupation', 'Membership', 'Business / SMSF', 'Students', 'First-home buyers',
   'Youth', 'Pensioners', 'Region', 'Package / existing customers', 'Application channel',
   'Recorded result', 'Recorded criteria', 'Available', 'Not calculated', 'Clipboard unavailable',

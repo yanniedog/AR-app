@@ -124,10 +124,12 @@ def report(core, registry, read):
         for field in ("rate", "term", "payment", "balance"):
             counts[field + " " + row[field]] += 1
     differences = sum(any(row[k] == "differs" for k in ("rate", "term", "payment", "balance")) for row in observations)
-    incomplete = sum(row["rate"] == "unverified" for row in observations)
-    return dict(edition=core["run_date"], status="FAIL" if differences else "INCOMPLETE" if incomplete else "CHECKED",
+    unverified_rates = sum(row["rate"] == "unverified" for row in observations)
+    incomplete = sum(any(row[field] == "unverified" for field in ("rate", "term", "payment", "balance"))
+                     for row in observations)
+    return dict(edition=core["run_date"], status="FAIL" if differences else "INCOMPLETE" if incomplete or not observations else "CHECKED",
         providers=len({row["provider"] for row in observations}), rows=len(observations), differences=differences,
-        unverifiedRateRows=incomplete, banks=[dict(provider=k[0], section=k[1], **v) for k, v in sorted(by_bank.items())],
+        unverifiedRateRows=unverified_rates, unverifiedOfferRows=incomplete, banks=[dict(provider=k[0], section=k[1], **v) for k, v in sorted(by_bank.items())],
         observations=observations)
 
 

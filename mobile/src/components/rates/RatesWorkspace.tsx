@@ -1342,7 +1342,7 @@ export default function RatesWorkspace() {
           ListHeaderComponent={availability === 'listed' ? <View style={{ gap: 8 }}>
             <SavedRequirementsSummary section={section} catalogueRows={summaryCatalogueRows}
               visibleRates={section === 'Savings' && !searchPending && !preparedResults.error && !publicPricing.error && !task.intentError ? rows.length : undefined}
-              onShowMatches={showSavedSavingsMatches}
+              onShowMatches={effectiveFilters.includeLowSavingsRates ? undefined : showSavedSavingsMatches}
               onResetView={section === 'Savings' && effectiveFilters.includeLowSavingsRates ? resetRatesView : undefined} />
             {section === 'Mortgage' ? <MortgageComparisonControls collapsible open={scenarioOpen} onOpenChange={setScenarioOpen}
               catalogue={catalogue} rows={core.sections.Mortgage.rates} filters={effectiveFilters}
