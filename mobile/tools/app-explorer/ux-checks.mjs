@@ -304,13 +304,19 @@ function jargon({ screen, app, allowProse }) {
 function crowded({ screen, app, density, size }) {
   const dp = DP(density);
   const barTop = bottomBarTop(app, size);
-  // A control cut off by the tab bar reports only its visible sliver, which sits flush against the bar.
-  const underBar = n => n.bounds[3] >= barTop - 2 && n.bounds[1] > size[1] * 0.5 && !TAB_LABELS.test((n.text || n.desc || '').trim());
+  const scrollers = app.filter(n => n.scrollable && area(n.bounds) > 0);
+  const underBar = n => n.bounds[1] > size[1] * 0.5 && !TAB_LABELS.test((n.text || n.desc || '').trim())
+    && (n.bounds[3] > barTop || (n.bounds[3] >= barTop - 2 && clippedByScroller(n, scrollers, app)));
   const taps = app.filter(n => n.clickable && n.enabled && !n.scrollable && area(n.bounds) < 400000 && !underBar(n));
   const out = [];
   for (let i = 0; i < taps.length && out.length < 4; i++) {
     for (let j = i + 1; j < taps.length; j++) {
-      const a = taps[i].bounds, b = taps[j].bounds;
+      const left = taps[i], right = taps[j];
+      const a = left.bounds, b = right.bounds;
+      // Android exposes clipped content as a sliver immediately above fixed navigation.
+      // Keep comparisons between content controls while excluding that boundary pair.
+      if ((a[3] >= barTop - 2 && a[3] <= barTop && b[1] === barTop && TAB_LABELS.test((right.text || right.desc || '').trim())) ||
+          (b[3] >= barTop - 2 && b[3] <= barTop && a[1] === barTop && TAB_LABELS.test((left.text || left.desc || '').trim()))) continue;
       if (contains(a, b) || contains(b, a)) continue;
       const gapX = Math.max(b[0] - a[2], a[0] - b[2]);
       const gapY = Math.max(b[1] - a[3], a[1] - b[3]);
