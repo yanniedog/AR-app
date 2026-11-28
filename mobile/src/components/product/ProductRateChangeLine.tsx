@@ -19,15 +19,17 @@ function bpsMagnitude(bps: number): UiText {
 export function productRateChangeText(
   summary: ProductBestRateSummary | null,
   compact = false,
+  metric: RateMetric = 'rate',
 ): UiText | null {
   if (!summary) return null;
   if (summary.kind === 'tracking' || summary.kind === 'unchanged') return null;
 
   const arrow = summary.bps > 0 ? '↑' : '↓';
   const when = formatRateChangeDate(summary.observedOn);
+  const label = metric === 'comparison_rate' ? 'Comparison rate' : metric === 'ongoing_rate' ? 'Ongoing rate' : 'Advertised rate';
   return compact
-    ? uiJoin('Rate', ' ', arrow, ' ', bpsMagnitude(summary.bps), ' · ', when)
-    : uiJoin('Rate', ' ', arrow, ' ', bpsMagnitude(summary.bps), ' · ', when, ' · ', formatRate(summary.fromRate), ' → ', formatRate(summary.toRate));
+    ? uiJoin(label, ' ', arrow, ' ', bpsMagnitude(summary.bps), ' · ', when)
+    : uiJoin(label, ' ', arrow, ' ', bpsMagnitude(summary.bps), ' · ', when, ' · ', formatRate(summary.fromRate), ' → ', formatRate(summary.toRate));
 }
 
 export function useProductRateChangeSummary(
@@ -48,13 +50,15 @@ export function ProductRateChangeSummaryLine({
   section,
   compact = false,
   model,
+  metric,
 }: {
   section: SectionKey;
   compact?: boolean;
   model: ProductBestRateSummary | null;
+  metric?: RateMetric;
 }) {
   const theme = useTheme();
-  const text = productRateChangeText(model, compact);
+  const text = productRateChangeText(model, compact, metric);
   if (!text) return null;
 
   const tone = model?.kind === 'changed' ? moveTone(section, model.bps) : 'muted';
@@ -90,6 +94,6 @@ export function ProductRateChangeLine({
 }) {
   const summary = useProductRateChangeSummary(row, section, metric);
   return (
-    <ProductRateChangeSummaryLine model={summary} section={section} compact={compact} />
+    <ProductRateChangeSummaryLine model={summary} metric={metric} section={section} compact={compact} />
   );
 }

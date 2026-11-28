@@ -521,6 +521,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
                 bankSpreadHistoryError: null,
               } : {}),
               ...(bundle ? {
+                previousRateEdition: undefined,
                 core: bundle.core,
                 coreIntegrity: bundle.integrity,
                 coreAssetState: cachedAssetStateForProviderCoverage(

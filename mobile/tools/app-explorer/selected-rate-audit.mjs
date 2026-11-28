@@ -10,10 +10,12 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const out = 'explorer-out/anz-selected-rate';
 fs.mkdirSync(out, { recursive: true });
 const id = '2d41a5d3-0c8d-d5e9-cadc-195410627e08';
-const response = await fetch('https://api.anz/cds-au/v1/banking/products/' + id,
-  { headers: { 'x-v': '7', Accept: 'application/json' }, signal: AbortSignal.timeout(30000) });
-assert.ok(response.ok, 'ANZ disclosure unavailable: ' + response.status);
-const { data } = await response.json();
+// curl retries transient transport/HTTP failures. An unavailable live
+// source must not be reported as a successful current-rate verification.
+const disclosure = execFileSync('curl', ['--fail', '--silent', '--show-error', '--retry', '2',
+  '--max-time', '30', '--header', 'x-v: 7', '--header', 'Accept: application/json',
+  'https://api.anz/cds-au/v1/banking/products/' + id], { encoding: 'utf8' });
+const { data } = JSON.parse(disclosure);
 const matches = data.depositRates.map((row, index) => ({ row, index }))
   .filter(({ row }) => row.additionalInfo === '2-3 Months, Monthly Interest');
 assert.equal(matches.length, 1, 'ANZ two-month monthly offer must be uniquely identified');

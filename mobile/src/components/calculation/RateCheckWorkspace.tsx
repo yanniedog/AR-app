@@ -952,9 +952,10 @@ export function RateCheckWorkspace() {
           details?.products?.[c.row.product_key] ?? null,
           c.row.provider,
         );
+        const projectionMetric = section === 'Savings' && depositRankMetric === 'base' ? 'ongoing_rate' : 'rate';
         const rateDescriptor = section === 'Mortgage'
           ? uiJoin(formatRate(c.projectionRate),' ','Advertised',c.rate !== c.projectionRate ? uiJoin(' · ',formatRate(c.rate),' ','Comparison'):null)
-          : uiJoin(formatRate(c.projectionRate),' ',depositRankMetric === 'base' ? 'Ongoing':'Headline');
+          : uiJoin(formatRate(c.projectionRate),' ',projectionMetric === 'ongoing_rate' ? 'Ongoing':'Headline');
         return (
           <Pressable
             key={`${c.row.product_key}:${c.row.public_offer_id ?? c.row.rate_index ?? ''}`}
@@ -981,7 +982,7 @@ export function RateCheckWorkspace() {
                    </AppText>
                    <ProductRateChangeLine
                      row={c.row}
-                     metric={c.row.public_offer_id || c.projectionRate !== Number(c.row.rate) ? undefined : 'rate'}
+                     metric={c.row.public_offer_id || c.row[projectionMetric] == null || c.projectionRate !== Number(c.row[projectionMetric]) ? undefined : projectionMetric}
                      section={section}
                      compact
                    />

@@ -1,3 +1,7 @@
+import React from 'react';
+import TestRenderer, { act } from 'react-test-renderer';
+import { useStore } from '../src/data/store';
+import { ProductRateChangeLine } from '../src/components/product/ProductRateChangeLine';
 import { createHash } from 'node:crypto';
 import type { CorePayload, DetailsPayload, Manifest } from '../src/types';
 import { normalizeCoreWithIntegrity } from '../src/data/sectionIntegrity';
@@ -27,4 +31,19 @@ it('withholds the ANZ cross-tier badge and retains the BCU six-month monthly inc
   const change = selectedRateChange(before, after, bcu, 'TD', 'rate');
   expect(change).toMatchObject({ kind: 'changed', fromRate: 0.053, toRate: 0.0545, bps: 15 });
   expect(productRateChangeText(change)).toContain('5.30% → 5.45%');
+
+  const original = useStore.getState();
+  let tree: ReturnType<typeof TestRenderer.create> | undefined;
+  try {
+    useStore.setState({ core: after.core, coreIntegrity: after.coreIntegrity, details: after.details,
+      manifest: after.manifest, previousRateEdition: before });
+    const line = (row: typeof bcu) => React.createElement(ProductRateChangeLine, { row, section: 'TD', metric: 'rate' });
+    act(() => { tree = TestRenderer.create(line(bcu)); });
+    expect(JSON.stringify(tree!.toJSON())).toContain('5.30% → 5.45%');
+    act(() => tree!.update(line(anz)));
+    expect(tree!.toJSON()).toBeNull();
+  } finally {
+    act(() => tree?.unmount());
+    useStore.setState(original, true);
+  }
 });

@@ -486,8 +486,9 @@ export default function BankDetail() {
   }, [catalogsBySection, core?.run_date, productHistory, rawBankEvents]);
 
   const bankEvents = useMemo(
-    () => eventBreakdowns.map(({ event }) => event),
-    [eventBreakdowns],
+    () => visibleBankEvents.map(source => eventBreakdowns.find(({ event }) =>
+      event.date === source.date && event.section === source.section)?.event ?? source),
+    [eventBreakdowns, visibleBankEvents],
   );
 
   const focusBreakdown = useMemo(() => {
@@ -502,7 +503,10 @@ export default function BankDetail() {
     return { event, matched: breakdown.matched, moves: breakdown.moves };
   }, [catalogsBySection, core?.run_date, focusSection, focusSourceEvent, productHistory]);
 
-  const focusEvent = focusBreakdown?.event ?? null;
+  // A historical lender aggregate can stand on its own; only the exact
+  // breakdown below can attach a movement to an individual offer.
+  const focusEvent = focusBreakdown?.event ?? visibleBankEvents.find(event =>
+    event.date === focusDate && event.section === focusSection) ?? null;
   const focusedMoves = focusBreakdown?.moves ?? [];
   const focusHistoryState = useMemo(() => {
     if (!focusSourceEvent || !focusSection) return 'idle' as const;

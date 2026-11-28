@@ -198,9 +198,10 @@ function ProductCardView({
       : []),
     ...tags,
   ];
+  const changeMetric = showingComparisonRate ? 'comparison_rate' : rateLabel === 'Ongoing rate' ? 'ongoing_rate' : 'rate';
   const rateChange = useProductRateChangeSummary(row, section,
-    resolution || hasDisplayedRateOverride ? undefined : showingComparisonRate ? 'comparison_rate' : 'rate');
-  const rateChangeText = productRateChangeText(rateChange, true);
+    resolution || toFraction(row[changeMetric]) !== toFraction(rateValue) ? undefined : changeMetric);
+  const rateChangeText = productRateChangeText(rateChange, true, changeMetric);
   const receipt = rowVerificationReceipt(row);
   const freshnessLabel = ({ current: 'Current', overdue: 'Overdue', stale: 'Stale', unknown: 'Unknown' } as const)
   [rateFreshness(row, receipt, Date.now())];

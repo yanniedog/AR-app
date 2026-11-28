@@ -786,7 +786,7 @@ export default function ProductDetail() {
           ),
         }}
       />
-      <ProductPageLinks overview={detail?.links?.overview} productDetails={descriptiveDetail}><ScreenScrollView
+      <ProductPageLinks overview={detail?.links?.overview} productDetails={descriptiveDetail} fallbackUrl={publicProduct?.sourceEvidence?.url}><ScreenScrollView
         onLayout={() => setLayoutReady(true)}
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
       >

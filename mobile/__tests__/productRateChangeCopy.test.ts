@@ -23,7 +23,7 @@ describe('product rate-change copy', () => {
       fromRate: 0.06,
       toRate: 0.0595,
       bps: -5,
-    }, true)).toBe('Rate ↓ 5 bps · 1 Aug 2026');
+    }, true)).toBe('Advertised rate ↓ 5 bps · 1 Aug 2026');
   });
 
   it('keeps the full product-page line with the best advertised rate endpoints', () => {
@@ -35,6 +35,6 @@ describe('product rate-change copy', () => {
       fromRate: 0.0599,
       toRate: 0.0609,
       bps: 10,
-    })).toBe('Rate ↑ 10 bps · 1 Aug 2026 · 5.99% → 6.09%');
+    })).toBe('Advertised rate ↑ 10 bps · 1 Aug 2026 · 5.99% → 6.09%');
   });
 });

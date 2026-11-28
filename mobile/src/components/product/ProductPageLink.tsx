@@ -13,10 +13,24 @@ import { factDocumentActions, type ProductDocumentAction } from '../../data/prod
 import { uiJoin, type UiLabel } from '../../lib/uiCopy';
 
 const ProductPageContext = createContext<ProductDetail | null>(null);
-const ProductWebContext = createContext<string | null>(null);
+type ProductWebTarget = { url: string; kind: 'provider' | 'source' };
+const ProductWebContext = createContext<ProductWebTarget | null>(null);
 
 const WEB_KINDS = ['overview', 'fees', 'eligibility', 'terms', 'bundle'] as const;
-const NON_PAGE_URL = /\.(?:pdf|json|xml|ya?ml)\/?$/i;
+const NON_PAGE_URL = /\.(?:pdf|json|xml|ya?ml|csv|rss|atom|txt)\/?$|(?:^|\/)(?:feed|rss|atom)(?:\/|$)/i;
+const LANDING_PATH = /^\/(?:index\.(?:html?|php)\/?|home\/?|(?:en|en-au)\/?)?$/i;
+
+/** A web page the app may open: not a document, feed or API host, and a landing page only when allowed. */
+function pageUrl(url: string, allowLanding: boolean): string | null {
+  const result = trustedExternalUrl({ url, purpose: 'lender_source', label: 'Product' });
+  if (!result.ok) return null;
+  let hostname: string, pathname: string;
+  try { ({ hostname, pathname } = new StandardUrl(result.url)); pathname = decodeURIComponent(pathname); } catch { return null; }
+  if (NON_PAGE_URL.test(pathname) || /^(?:apis?|cdr|cds|open-?banking)[.-]/i.test(hostname)
+    || /(?:^|\/)(?:apis?|cds-au|open-?banking)(?:\/|$)/i.test(pathname)) return null;
+  if (!allowLanding && LANDING_PATH.test(pathname)) return null;
+  return result.url;
+}
 
 /** The lender's own web page for the product: the product overview when it is a
  * real page, otherwise any other approved lender link, otherwise the overview
@@ -24,21 +38,19 @@ const NON_PAGE_URL = /\.(?:pdf|json|xml|ya?ml)\/?$/i;
 export function productWebUrl(links: ProductDetail['links'] | undefined, preferred: string | null): string | null {
   if (preferred) return preferred;
   const candidates = WEB_KINDS.flatMap(kind => links?.[kind] ? [links[kind] as string] : []);
-  const landing = (path: string) => /^\/(?:index\.(?:html?|php)\/?|home\/?|(?:en|en-au)\/?)?$/i.test(path);
   for (const allowLanding of [false, true]) for (const url of candidates) {
-    const result = trustedExternalUrl({ url, purpose: 'lender_source', label: 'Product' });
-    if (!result.ok) continue;
-    let hostname: string, pathname: string;
-    try { ({ hostname, pathname } = new StandardUrl(result.url)); pathname = decodeURIComponent(pathname); } catch { continue; }
-    if (NON_PAGE_URL.test(pathname) || /^(?:apis?|cdr|cds|open-?banking)[.-]/i.test(hostname)
-      || /(?:^|\/)(?:apis?|cds-au|open-?banking)(?:\/|$)/i.test(pathname)) continue;
-    if (!allowLanding && landing(pathname)) continue;
-    return result.url;
+    const page = pageUrl(url, allowLanding);
+    if (page) return page;
   }
   return null;
 }
 
-export function ProductPageLinks({ overview, productDetails, children }: { overview?: string; productDetails?: ProductDetail | null; children: UiChild }) {
+/** A product with no lender links (public-only) falls back to the page its rate was read from, shown as a source. */
+export function productSourceUrl(url: string | null | undefined): string | null {
+  return url ? pageUrl(url, false) ?? pageUrl(url, true) : null;
+}
+
+export function ProductPageLinks({ overview, productDetails, fallbackUrl, children }: { overview?: string; productDetails?: ProductDetail | null; fallbackUrl?: string | null; children: UiChild }) {
   const link = useMemo(() => {
     if (!overview) return null;
     const result = trustedExternalUrl({ url: overview, purpose: 'lender_source', label: 'Product' });
@@ -50,25 +62,29 @@ export function ProductPageLinks({ overview, productDetails, children }: { overv
     } catch {
       return null;
     }
-    // A published overview can still be a bank landing page, document or API.
-    if (/^\/(?:index\.(?:html?|php)\/?|home\/?|(?:en|en-au)\/?)?$/i.test(path)
-      || /\.(?:pdf|json|xml|ya?ml)\/?$/i.test(path)
+    // A published overview can still be a bank landing page, document, feed or API.
+    if (LANDING_PATH.test(path) || NON_PAGE_URL.test(path)
       || /^(?:apis?|cdr|cds|open-?banking)[.-]/i.test(hostname)
       || /(?:^|\/)(?:apis?|cds-au|open-?banking)(?:\/|$)/i.test(path)) return null;
     return result.url;
   }, [overview]);
-  const webLink = useMemo(() => productWebUrl(productDetails?.links ?? (overview ? { overview } : undefined), link), [productDetails?.links, overview, link]);
-  useAuditExternalLinks(webLink ? [{ url: webLink, purpose: 'lender_source', label: 'Product' }] : []);
-  return <ProductPageContext.Provider value={productDetails ?? null}><ProductWebContext.Provider value={webLink}>{children}</ProductWebContext.Provider></ProductPageContext.Provider>;
+  const target = useMemo<ProductWebTarget | null>(() => {
+    const provider = productWebUrl(productDetails?.links ?? (overview ? { overview } : undefined), link);
+    if (provider) return { url: provider, kind: 'provider' };
+    const source = productSourceUrl(fallbackUrl);
+    return source ? { url: source, kind: 'source' } : null;
+  }, [productDetails?.links, overview, link, fallbackUrl]);
+  useAuditExternalLinks(target ? [{ url: target.url, purpose: 'lender_source', label: 'Product' }] : []);
+  return <ProductPageContext.Provider value={productDetails ?? null}><ProductWebContext.Provider value={target}>{children}</ProductWebContext.Provider></ProductPageContext.Provider>;
 }
 
-/** Opens the lender's product page. Hidden only when the lender publishes no usable page. */
+/** Opens the lender's product page, or the page its rate was read from. Hidden only when neither is usable. */
 export function ProductWebLink() {
-  const url = useContext(ProductWebContext);
+  const target = useContext(ProductWebContext);
   const { requestExternalUrl } = useTrustedExternalUrl();
-  if (!url) return null;
-  return <Row style={{ marginBottom: 12 }}><Button title="Provider website" variant="secondary" icon="open-outline"
-    onPress={() => requestExternalUrl({ url, purpose: 'lender_source', label: 'Product' })} /></Row>;
+  if (!target) return null;
+  return <Row style={{ marginBottom: 12 }}><Button title={target.kind === 'provider' ? 'Provider website' : 'Source page'} variant="secondary" icon="open-outline"
+    onPress={() => requestExternalUrl({ url: target.url, purpose: 'lender_source', label: 'Product' })} /></Row>;
 }
 
 function LinkedFact({ url, action, label, children }: { url: string; action: ProductDocumentAction; label: UiCopy; children: UiChild }) {
