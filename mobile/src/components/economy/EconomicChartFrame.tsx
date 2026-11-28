@@ -59,17 +59,27 @@ function nearestIndex(values: number[], target: number): number {
 export function holdDatesWithinSeriesWindow(
   points: EconomicPoint[],
   holdDates: string[] | undefined,
+  domainEndDate?: string,
 ): string[] {
   const times = points.map((point) => parseYmd(point.date)).filter((value) => value != null);
   if (!times.length) return [];
   const first = Math.min(...times);
-  const last = Math.max(...times);
+  const last = parseYmd(domainEndDate ?? '') ?? Math.max(...times);
   return (holdDates ?? [])
     .map((raw) => String(raw || '').slice(0, 10))
     .filter((date) => {
       const time = parseYmd(date);
       return time != null && time >= first && time <= last;
     });
+}
+
+export function extendSteppedSeriesThroughDate(
+  points: EconomicPoint[],
+  endDate: string | undefined,
+): EconomicPoint[] {
+  const latest = points.at(-1);
+  if (!latest || !endDate || validTime(endDate) <= validTime(latest.date)) return points;
+  return [...points, { date: endDate, value: latest.value }];
 }
 
 function buildStepPath(
@@ -106,19 +116,26 @@ export function EconomicChartFrame({
     () => series.flatMap((item) => item.points.map((point) => ({ ...point, seriesId: item.id }))),
     [series],
   );
-  const dates = useMemo(() => {
-    const values = new Set(allPoints.map((point) => point.date));
-    const holdSeries = holdSeriesId ? series.find((item) => item.id === holdSeriesId) : null;
-    if (holdSeries) {
-      for (const date of holdDatesWithinSeriesWindow(holdSeries.points, holdDates)) values.add(date);
-    }
-    return [...values].sort();
-  }, [allPoints, holdDates, holdSeriesId, series]);
-  const dateSet = useMemo(() => new Set(dates), [dates]);
   const holdSeries = useMemo(
     () => (holdSeriesId ? series.find((item) => item.id === holdSeriesId) ?? null : null),
     [holdSeriesId, series],
   );
+  const policyDomainEnd = useMemo(
+    () => [...allPoints].sort((a, b) => validTime(a.date) - validTime(b.date)).at(-1)?.date ?? '',
+    [allPoints],
+  );
+  const policyHoldDates = useMemo(
+    () => holdSeries
+      ? holdDatesWithinSeriesWindow(holdSeries.points, holdDates, policyDomainEnd)
+      : [],
+    [holdDates, holdSeries, policyDomainEnd],
+  );
+  const dates = useMemo(() => {
+    const values = new Set(allPoints.map((point) => point.date));
+    for (const date of policyHoldDates) values.add(date);
+    return [...values].sort();
+  }, [allPoints, policyHoldDates]);
+  const dateSet = useMemo(() => new Set(dates), [dates]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const activeDate = selectedDate && dates.includes(selectedDate)
     ? selectedDate
@@ -264,8 +281,11 @@ export function EconomicChartFrame({
               );
             })}
             {series.map((item) => {
+              const plottedPoints = item.id === holdSeriesId && item.stepped
+                ? extendSteppedSeriesThroughDate(item.points, policyHoldDates.at(-1))
+                : item.points;
               const path = item.stepped
-                ? buildStepPath(item.points, xForDate, yForValue)
+                ? buildStepPath(plottedPoints, xForDate, yForValue)
                 : buildLinePath(
                     item.points.map((point) => point.value),
                     (index) => xForDate(item.points[index].date),
@@ -292,7 +312,7 @@ export function EconomicChartFrame({
                 </React.Fragment>
               );
             })}
-            {(holdDates ?? []).map((raw) => {
+            {policyHoldDates.map((raw) => {
               const date = String(raw || '').slice(0, 10);
               const point = holdSeries ? economicPointAtOrBefore(holdSeries.points, date) : null;
               if (!point || !dateSet.has(date)) return null;
