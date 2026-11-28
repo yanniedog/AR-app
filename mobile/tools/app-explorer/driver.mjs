@@ -170,7 +170,6 @@ function looksLoading(nodes) {
   return nodes.some(n => n.cls === 'ProgressBar' || LOADING.test(n.text) || LOADING.test(n.desc));
 }
 
-/** Wait until two consecutive hierarchies match and no loading indicator remains. */
 const systemDialogs = [];
 /** Dismiss system "isn't responding" dialogs; an ANR in this app is recorded as a finding. */
 function dismissSystemDialog(nodes) {
@@ -233,39 +232,72 @@ function shiftedBetween(prevNodes, nodes) {
  * notice: time to first reaction to the input, time to first real content, the longest spinner,
  * layout jumps after content showed, and whether the screen ended blank or in an error state.
  * Samples are one UI dump apart (dumpMs). Scroll steps skip the layout jump count.
+ * Explicit back actions finish when a usable hierarchy confirms the requested
+ * destination without a loading indicator. Other actions wait for stability.
  */
 async function settle(timeoutMs, since = Date.now(), before = null, { scrolling = false, until } = {}) {
   const start = since;
+  const deadline = start + timeoutMs;
   let prev = null;
-  let last = { nodes: [] };
+  let last = { xml: '', nodes: [] };
   let stableSince = null;
   let firstSeen = start;
   let responseMs = null;
   let firstContentMs = null;
   let loadStart = null;
+  let lastObservedLoadingAt = null;
   let maxLoadingMs = 0;
+  let unverifiedLoadStart = null;
+  let loadingUnverifiedMs = 0;
   let shifts = 0;
   let dumps = 0;
   let dumpTotal = 0;
+  let failedDumps = 0;
+  let latestDumpUsable = false;
+  let finalBackSample = false;
   const metrics = () => {
-    if (loadStart != null) maxLoadingMs = Math.max(maxLoadingMs, Date.now() - loadStart);
+    if (loadStart != null) maxLoadingMs = Math.max(maxLoadingMs, lastObservedLoadingAt - loadStart);
     return {
       responseMs,
       firstContentMs,
       maxLoadingMs,
+      loadingUnverifiedMs: unverifiedLoadStart == null ? loadingUnverifiedMs
+        : Math.max(loadingUnverifiedMs, Date.now() - unverifiedLoadStart),
       shifts,
-      blank: isBlank(last.nodes),
-      errorState: errorStateOf(last.nodes),
+      blank: latestDumpUsable && isBlank(last.nodes),
+      errorState: latestDumpUsable ? errorStateOf(last.nodes) : null,
       waitedMs: Date.now() - start,
       dumpMs: dumps ? Math.round(dumpTotal / dumps) : 0,
+      failedDumps,
+      latestDumpUsable,
     };
   };
-  while (Date.now() - start < timeoutMs) {
+  while (Date.now() < deadline || (until && !finalBackSample)) {
     const dumpStarted = Date.now();
-    const prevNodes = last.nodes;
-    last = await dumpUi(until ? start + timeoutMs : undefined);
+    // A dump started near the deadline may spend its entire budget in adb.
+    // Allow one bounded observation to verify an explicit back destination.
+    const late = dumpStarted >= deadline;
+    if (late) finalBackSample = true;
+    const sample = await dumpUi(until ? (late ? dumpStarted + 5000 : deadline) : undefined);
     dumps += 1;
     dumpTotal += Date.now() - dumpStarted;
+    latestDumpUsable = Boolean(sample.xml && sample.nodes.length);
+    if (!latestDumpUsable) {
+      failedDumps += 1;
+      if (loadStart != null) {
+        maxLoadingMs = Math.max(maxLoadingMs, lastObservedLoadingAt - loadStart);
+        // The spinner may continue through a failed capture. Only a usable,
+        // non-loading hierarchy closes the period that could not be verified.
+        unverifiedLoadStart ??= loadStart;
+        loadStart = null;
+      }
+      prev = null;
+      stableSince = null;
+      if (!late) await sleep(150);
+      continue;
+    }
+    const prevNodes = last.nodes;
+    last = sample;
     if (dismissSystemDialog(last.nodes)) {
       prev = null;
       await sleep(800);
@@ -277,15 +309,27 @@ async function settle(timeoutMs, since = Date.now(), before = null, { scrolling 
     if (changed && responseMs == null) responseMs = Date.now() - start;
     if (changed && firstContentMs == null && contentful(last.nodes)) firstContentMs = Date.now() - start;
     else if (!scrolling && firstContentMs != null && prevNodes.length && fp !== prev && shiftedBetween(prevNodes, last.nodes) > 0) shifts += 1;
-    if (loading) loadStart ??= Date.now();
-    else if (loadStart != null) {
-      maxLoadingMs = Math.max(maxLoadingMs, Date.now() - loadStart);
-      loadStart = null;
+    if (loading) {
+      lastObservedLoadingAt = Date.now();
+      loadStart ??= lastObservedLoadingAt;
+    } else {
+      if (loadStart != null) {
+        maxLoadingMs = Math.max(maxLoadingMs, Date.now() - loadStart);
+        loadStart = null;
+      }
+      if (unverifiedLoadStart != null) {
+        loadingUnverifiedMs = Math.max(loadingUnverifiedMs, Date.now() - unverifiedLoadStart);
+        unverifiedLoadStart = null;
+      }
     }
     if (fp !== prev) firstSeen = dumpStarted;
+    if (until && !loading && until(last.nodes)) {
+      responseMs ??= Date.now() - start;
+      return { ...last, settleMs: Math.max(0, firstSeen - start), timedOut: false, ...metrics() };
+    }
     if (fp === prev && !loading && last.nodes.length > 0) {
       stableSince ??= Date.now();
-      if (Date.now() - stableSince >= 600 && (!until || until(last.nodes))) {
+      if (!until && Date.now() - stableSince >= 600) {
         return { ...last, settleMs: Math.max(0, firstSeen - start), timedOut: false, ...metrics() };
       }
     } else {
@@ -484,11 +528,11 @@ class Explorer {
     const before = this.current.nodes.length ? fingerprint(this.current.nodes) : null;
     const settled = await settle(settleTimeout, since, before, { scrolling: Boolean(this.scrollStep), until });
     const appAnr = systemDialogs.filter(d => d.ours).length > anrBefore;
-    this.current = settled;
+    this.current = settled.latestDumpUsable ? settled : { nodes: [] };
     const keyboard = this.captureScreen(slug);
-    const screen = summarize(settled.nodes);
+    const screen = summarize(this.current.nodes);
     fs.writeFileSync(path.join(this.out, 'ui', `${slug}.json`), JSON.stringify(screen, null, 1));
-    fs.writeFileSync(path.join(this.out, 'ui', `${slug}.nodes.json`), JSON.stringify(rawNodes(settled.nodes, this.size)));
+    fs.writeFileSync(path.join(this.out, 'ui', `${slug}.nodes.json`), JSON.stringify(rawNodes(this.current.nodes, this.size)));
     const log = drainLogcat();
     this.logAll += `\n===== ${slug} =====\n${log}`;
     const pid = appPid();
@@ -504,11 +548,13 @@ class Explorer {
       responseMs: settled.responseMs ?? undefined,
       firstContentMs: settled.firstContentMs ?? undefined,
       maxLoadingMs: settled.maxLoadingMs || undefined,
+      loadingUnverifiedMs: settled.loadingUnverifiedMs || undefined,
       blank: settled.blank || undefined,
       waitedMs: settled.waitedMs,
       shifts: settled.shifts || undefined,
       errorState: this.sessionFlag && settled.errorState ? settled.errorState : undefined,
       dumpMs: settled.dumpMs,
+      failedUiDumps: settled.failedDumps || undefined,
       session: this.sessionFlag || undefined,
       alive: Boolean(pid),
       anr: appAnr || undefined,
@@ -885,10 +931,11 @@ class Explorer {
       const t0 = Date.now();
       for (let i = 0; i < (step.times ?? 1); i += 1) sh('input keyevent 4');
       const rec = await this.record(label, {}, undefined, t0, until);
-      if (rec.alive && until && !until(this.current.nodes)) {
-        rec.error = 'Back destination was not observed';
+      const destinationObserved = until?.(this.current.nodes);
+      if (rec.alive && until && !destinationObserved) {
+        rec.error = this.current.xml ? 'Back destination was not observed' : 'UI hierarchy unavailable while verifying back destination';
       }
-      if (step.session && rec.responseMs == null && rec.alive) rec.deadEnd = true;
+      if (step.session && !destinationObserved && rec.responseMs == null && rec.alive && this.current.xml) rec.deadEnd = true;
       return rec;
     }
     if (step.key) {
@@ -1009,6 +1056,7 @@ function renderMarkdown(report, baseline) {
       !s.alive && 'CRASH',
       s.anr && 'ANR',
       s.settleTimedOut && 'no settle',
+      s.failedUiDumps && `${s.failedUiDumps} UI dump failures`,
       s.error,
       s.log.errors.length && `${s.log.errors.length} errors`,
       s.activityStartMs && `start ${s.activityStartMs}ms`,

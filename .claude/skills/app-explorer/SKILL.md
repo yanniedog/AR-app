@@ -70,7 +70,9 @@ JSON array. A `launch` step (cold: force-stop first; `"warm"`: Home then resume)
 ]
 ```
 
-Every step waits for the UI to settle (two identical hierarchy dumps, no progress indicator) before recording. Add `"name"` to any step for a readable label. Deep-linkable routes are those in `mobile/app/+native-intent.tsx`; screens such as the performance audit and debug log are reached by tapping.
+Ordinary steps wait for stable hierarchy dumps with no progress indicator. A back step with explicit destination selectors finishes when a usable, non-loading hierarchy matches those selectors. Add `"name"` to any step for a readable label. Deep-linkable routes are listed in `mobile/app/+native-intent.tsx`. Reach screens such as the performance audit and debug log by tapping.
+
+If a hierarchy capture fails while a spinner is visible, the session reports a spinner evidence gap when it cannot verify clearance within 15 seconds.
 
 ## Iterating
 

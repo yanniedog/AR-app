@@ -67,6 +67,7 @@ export function computeVerdict(report, baseline) {
     if (s.error) add('fail', 'journey', s, `"${s.name}" failed: ${s.error}`);
     if (s.deadEnd) add('fail', 'dead-end', s, `No way back on "${s.name}"`);
     if (s.maxLoadingMs >= t.stuckSpinnerMs) add('fail', 'stuck-spinner', s, `Spinner ${ms(s.maxLoadingMs)} on "${s.name}"`);
+    else if (s.loadingUnverifiedMs >= t.stuckSpinnerMs) add('fail', 'spinner-evidence-gap', s, `Could not verify that the spinner cleared within ${ms(t.stuckSpinnerMs)} on "${s.name}" because the UI hierarchy was unavailable`);
     else if (s.settleTimedOut && !s.error) add('fail', 'never-settled', s, `Screen never settled on "${s.name}"`);
     if (s.blank) add('fail', 'blank-screen', s, `Blank screen after "${s.name}"`);
     if ((s.visible || []).some(v => /Data unavailable/.test(v))) add('fail', 'data-unavailable', s, `Data unavailable on "${s.name}"`);

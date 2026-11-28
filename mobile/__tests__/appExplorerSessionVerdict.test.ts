@@ -47,6 +47,15 @@ describe('real-use session verdict', () => {
     expect(current.outcome).toBe('pass');
   });
 
+  it('reports missing spinner evidence separately from a verified stuck spinner', () => {
+    const unverified = step(1, 'leave removed product', { maxLoadingMs: 0, loadingUnverifiedMs: 18000, failedUiDumps: 1 });
+    const v = verdict(report([unverified]), null);
+    expect(v.outcome).toBe('fail');
+    expect(v.findings.map((f: { kind: string }) => f.kind)).toEqual(['spinner-evidence-gap']);
+    const confirmed = verdict(report([{ ...unverified, maxLoadingMs: 16000 }]), null);
+    expect(confirmed.findings.map((f: { kind: string }) => f.kind)).toEqual(['stuck-spinner']);
+  });
+
   it('does not fail on slow absolute timings alone', () => {
     const v = verdict(report([step(1, 'open app', { settleMs: 9000, firstContentMs: 8500, responseMs: 8000, activityStartMs: 900 })]), null);
     expect(v.outcome).toBe('pass');
