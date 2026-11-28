@@ -126,10 +126,13 @@ export function parseHierarchy(xml) {
     const b = /\[(\d+),(\d+)\]\[(\d+),(\d+)\]/.exec(attrs.bounds || '');
     if (!b) continue;
     const [x1, y1, x2, y2] = b.slice(1).map(Number);
+    const resourceId = (attrs['resource-id'] || '').replace(/^.*:id\//, '');
+    const rateCard = /^(rate-card-(?:Savings|TD))\|(\["rate-move",.*\])$/.exec(resourceId);
     nodes.push({
       text: attrs.text || '',
       desc: attrs['content-desc'] || '',
-      id: (attrs['resource-id'] || '').replace(/^.*:id\//, ''),
+      id: rateCard?.[1] ?? resourceId,
+      ...(rateCard ? { rateEvidence: rateCard[2] } : {}),
       cls: (attrs.class || '').split('.').pop(),
       clickable: attrs.clickable === 'true',
       scrollable: attrs.scrollable === 'true',

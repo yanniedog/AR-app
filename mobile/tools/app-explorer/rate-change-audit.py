@@ -117,7 +117,7 @@ def audit(directory):
         heroes = {}
         observed = {}
         for node in nodes:
-            marker = node.get("id", "")
+            marker = node.get("rateEvidence") or node.get("id", "")
             label = node.get("text") or node.get("desc") or ""
             match = re.search(r"(?:Best advertised|Advertised rate) [↑↓] ", label)
             if marker.startswith('["rate-evidence",'):

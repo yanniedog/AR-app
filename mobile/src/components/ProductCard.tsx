@@ -205,6 +205,9 @@ function ProductCardView({
   const rateChange = useProductRateChangeSummary(row, section,
     showingComparisonRate || rateLabel === 'Ongoing rate' ? null : advertisedValue);
   const rateChangeText = productRateChangeText(rateChange, true);
+  const cardId = section === 'Mortgage' ? undefined : `rate-card-${section}`;
+  const movementId = rateChangeText ? rateEvidenceId('rate-move', manifest, section, row) : undefined;
+  const cardTestId = cardId && movementId ? `${cardId}|${movementId}` : movementId ?? cardId;
   const receipt = rowVerificationReceipt(row);
   const freshnessLabel = ({ current: 'Current', overdue: 'Overdue', stale: 'Stale', unknown: 'Unknown' } as const)
   [rateFreshness(row, receipt, Date.now())];
@@ -363,14 +366,13 @@ function ProductCardView({
       ) : null}
       <View ref={detailsBubble.anchorRef} collapsable={false} style={{ flex: 1, minWidth: 0 }}>
         <PressFeedback
-          testID={section === 'Mortgage' ? undefined : `rate-card-${section}`}
+          testID={cardTestId}
           auditControlId={`rate-details:${row.product_key}:${row.rate_index ?? ''}`}
           onPressIn={() => { held.current = false; }}
           onPress={() => { if (!held.current) { detailsBubble.dismiss(); onPress?.(); } held.current = false; }}
           onLongPress={showRowWord}
           delayLongPress={350}
           accessibilityRole="button"
-          testID={rateChangeText ? rateEvidenceId('rate-move', manifest, section, row) : undefined}
           accessibilityLabel={cardA11yLabel}
           accessibilityState={selectMode ? { selected: !!selected } : undefined}
           android_ripple={androidRipple(theme.colors.primaryMuted)}
