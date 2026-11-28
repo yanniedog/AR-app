@@ -1,14 +1,16 @@
 import { uiDecimal, uiJoin } from '../lib/uiCopy';
-import { lvrRatioToPercent, parseLvrRange } from './lvrRange';
+import { parseLvrRange } from './lvrRange';
 
 export const DEFAULT_BENCHMARK_LVR = 80;
 
-/** The user's LVR as a percentage from a scenario value (ratio or percent). */
+/** The user's LVR as a percentage from a scenario ratio (0.8 is 80%). Scenario
+ * LVRs are always ratios, so a refinance above 100% is read as such, not as a
+ * small percentage, and gives no benchmark point. */
 export function userLvrPercent(value: string | number | null | undefined): number | null {
   const n = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
   if (!Number.isFinite(n) || n <= 0) return null;
-  const pct = lvrRatioToPercent(n);
-  return pct > 0 && pct <= 100 ? Math.round(pct * 100) / 100 : null;
+  const pct = Math.round(n * 10000) / 100;
+  return pct > 0 && pct <= 100 ? pct : null;
 }
 
 /** The market benchmark for a mortgage is every published rate whose LVR band
@@ -34,7 +36,7 @@ export function profileLvrPercent(tiers: readonly string[] | undefined): number 
   for (const tier of tiers ?? []) {
     const r = parseLvrRange(tier);
     if (!r) continue;
-    const point = r.hi !== Infinity ? r.hi : r.inclusive ? r.lo : Math.round((r.lo + 0.01) * 100) / 100;
+    const point = r.hi !== Infinity ? (r.hiInclusive === false ? Math.round((r.hi - 0.01) * 100) / 100 : r.hi) : r.inclusive ? r.lo : Math.round((r.lo + 0.01) * 100) / 100;
     if (point > 0 && point <= 100 && (best === null || point > best)) best = point;
   }
   return best;

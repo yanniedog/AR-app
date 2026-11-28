@@ -19,13 +19,16 @@ test('the benchmark LVR is the user LVR, moved inside the product band', () => {
 
 test('user LVR parsing and profile band', () => {
   expect(userLvrPercent('0.8')).toBe(80);
-  expect(userLvrPercent('85')).toBe(85);
+  expect(userLvrPercent('0.855')).toBe(85.5);
+  expect(userLvrPercent('1.05')).toBeNull();
+  expect(userLvrPercent('85')).toBeNull();
   expect(userLvrPercent('')).toBeNull();
   expect(userLvrPercent(undefined)).toBeNull();
   expect(profileLvrPercent(['lvr_80-90%', 'lvr_<=70%'])).toBe(90);
   expect(profileLvrPercent(['>90'])).toBe(90.01);
   expect(profileLvrPercent(['lvr_>=95%'])).toBe(95);
   expect(mortgageHistoryLvr('lvr_<=98%', profileLvrPercent(['>90']))).toBe('lvr_>=90.01-90.01%');
+  expect(profileLvrPercent(['<60'])).toBe(59.99);
   expect(profileLvrPercent([])).toBeNull();
 });
 
