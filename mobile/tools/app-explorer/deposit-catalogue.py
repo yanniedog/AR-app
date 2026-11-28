@@ -169,10 +169,10 @@ def collect(core, registry, read):
         return [r for group in pool.map(check, tasks) for r in group]
 
 
-def live_read(url):
+def live_read(url, versions=(7, 6, 5, 4, 3, 2, 1)):
     # Version negotiation is per data holder. Do not retry missing products.
     import subprocess
-    for version in (7, 6, 5, 4, 3, 2, 1):
+    for version in versions:
         response = subprocess.run(["curl", "--silent", "--show-error", "--compressed", "--location",
             "--proto", "=https", "--proto-redir", "=https", "--max-redirs", "3", "--connect-timeout", "8",
             "--max-time", "15", "--max-filesize", "8388608", "-H", f"x-v: {version}", "-H", "Accept: application/json",

@@ -2,6 +2,10 @@ name: Deposit disclosure audit
 on:
   release:
     types: [published]
+  workflow_run:
+    workflows: [mobile-android-apk]
+    branches: [main]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -9,9 +13,9 @@ permissions:
 
 jobs:
   compare-published-offers:
-    if: github.event_name == 'workflow_dispatch' || (startsWith(github.event.release.tag_name, 'app-v') && contains(github.event.release.assets.*.name, 'app-preview.apk'))
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') || (startsWith(github.event.release.tag_name, 'app-v') && contains(github.event.release.assets.*.name, 'app-preview.apk'))
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -21,6 +25,12 @@ jobs:
       - name: Compare Macquarie website offers and catalogue payment statements
         if: ${{ !cancelled() }}
         run: python3 mobile/tools/app-explorer/deposit-offers.py deposit-offers.json >> "$GITHUB_STEP_SUMMARY"
+      - name: Compare Goldfields Money Stow It with retail and CDR rates
+        if: ${{ !cancelled() }}
+        run: python3 mobile/tools/app-explorer/deposit-goldfields.py deposit-goldfields.json >> "$GITHUB_STEP_SUMMARY"
+      - name: Check the register for missing priced deposit products
+        if: ${{ !cancelled() }}
+        run: python3 mobile/tools/app-explorer/deposit-inventory.py deposit-inventory.json >> "$GITHUB_STEP_SUMMARY"
       - name: Save public deposit comparisons
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -29,5 +39,7 @@ jobs:
           path: |
             deposit-catalogue.json
             deposit-offers.json
+            deposit-inventory.json
+            deposit-goldfields.json
           if-no-files-found: error
           retention-days: 14
