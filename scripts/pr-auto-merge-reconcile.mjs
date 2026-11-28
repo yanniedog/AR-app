@@ -2,7 +2,7 @@
 /**
  * Unattended merge and release reconciler (run by .github/workflows/pr-auto-merge.yml).
  *
- *   node scripts/pr-auto-merge-reconcile.mjs prs [--pr N]   enable/disable auto-merge, update behind branches
+ *   node scripts/pr-auto-merge-reconcile.mjs prs [--pr N]   reconcile guarded merges and branch updates
  *   node scripts/pr-auto-merge-reconcile.mjs release        dispatch the APK release for unreleased main
  *   node scripts/pr-auto-merge-reconcile.mjs explore        dispatch the full explorer audit for the newest untested APK
  *
@@ -57,7 +57,9 @@ function reconcilePull(number) {
   }
   if (decision.action !== 'enable') return;
   if (needsBranchUpdate(pr)) {
-    if (process.env.OWNER_TOKEN_CONFIGURED === 'true') {
+    if (process.env.PR_AUTO_MERGE_SKIP_BRANCH_UPDATE === 'true') {
+      console.log(`#${number}: behind main; branch update skipped for this request`);
+    } else if (process.env.OWNER_TOKEN_CONFIGURED === 'true') {
       // An owner-token push fires the normal pull_request workflows, so every
       // required check (including dependency review) reruns on the new head.
       const updated = gh(['api', '-X', 'PUT', `repos/${REPO}/pulls/${number}/update-branch`,

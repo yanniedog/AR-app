@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { progressPullRequest, enableSquashAutoMerge } from './lib/pr-branch-sync.mjs';
-import { hasGh } from './lib/gh-pr-review-threads.mjs';
+import { hasGh, repoSlug } from './lib/gh-pr-review-threads.mjs';
+import { requestPullRequestReconciliation } from './lib/pr-merge.mjs';
 
 function parseArgs(argv) {
   const out = { pr: null, dryRun: false, enableOnly: false, noSync: false };
@@ -17,16 +17,20 @@ function parseArgs(argv) {
 
 function main() {
   const args = parseArgs(process.argv);
-  if (!hasGh() || !args.pr) { console.error('pr-merge: gh + --pr required'); process.exit(1); }
-  if (args.enableOnly) {
-    const auto = enableSquashAutoMerge(args.pr, { dryRun: args.dryRun });
-    console.log(`auto-merge ${auto.action}: ${auto.detail}`);
-    process.exit(auto.ok ? 0 : auto.exitCode || 1);
+  if (!hasGh() || !Number.isSafeInteger(args.pr) || args.pr < 1) {
+    console.error('pr-merge: gh and --pr <positive integer> are required');
+    process.exit(1);
   }
-  const r = progressPullRequest(args.pr, { dryRun: args.dryRun, syncBranch: !args.noSync, enableAuto: true });
-  if (r.sync && !args.noSync) console.log(`sync ${r.sync.action}: ${r.sync.detail}`);
-  if (r.autoMerge) console.log(`auto-merge ${r.autoMerge.action}: ${r.autoMerge.detail}`);
-  if (r.blocked) process.exit(r.sync?.exitCode === 2 ? 2 : 1);
-  process.exit(r.ok ? 0 : 1);
+  const { owner, name } = repoSlug();
+  const result = requestPullRequestReconciliation(args.pr, {
+    repo: `${owner}/${name}`,
+    dryRun: args.dryRun,
+    skipBranchUpdate: args.enableOnly || args.noSync,
+  });
+  if (!result.ok) {
+    console.error(result.stderr || result.stdout || 'Could not request PR reconciliation');
+    process.exit(result.exitCode || 1);
+  }
+  console.log(result.stdout || `Guarded reconciliation requested for PR #${args.pr}`);
 }
 main();

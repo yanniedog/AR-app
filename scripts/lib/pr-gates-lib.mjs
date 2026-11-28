@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hasGh, ghJson, repoSlug } from './gh-pr-review-threads.mjs';
 import { isReportsOnlyPr } from './pr-reports-only.mjs';
-import { fetchPrMergeMeta, gateAutoMergeEnabled, gateBranchFreshMeta } from './pr-branch-sync.mjs';
+import { fetchPrMergeMeta, gateBranchFreshMeta, gateNativeAutoMergeDisabled } from './pr-branch-sync.mjs';
 import { gateExemptReason } from './pr-gate-exempt.mjs';
 import { fetchRequiredCheckState } from './required-ci-checks.mjs';
 
@@ -392,11 +392,11 @@ export function evaluateGates(prNumber, options = {}) {
   }
 
   let branchFresh = { id: 'branch-fresh', pass: true, skipped: true };
-  let autoMergeGate = { id: 'auto-merge', pass: true, skipped: true };
+  let nativeAutoMerge = { id: 'native-auto-merge-disabled', pass: true, skipped: true };
   try {
     const meta = fetchPrMergeMeta(prNumber);
     branchFresh = gateBranchFreshMeta(meta);
-    autoMergeGate = gateAutoMergeEnabled(meta);
+    nativeAutoMerge = gateNativeAutoMergeDisabled(meta);
   } catch (e) {
     branchFresh = { id: 'branch-fresh', pass: false, detail: e.message };
   }
@@ -415,7 +415,7 @@ export function evaluateGates(prNumber, options = {}) {
   const gates = [
     { id: 'gh-auth', pass: true, detail: 'gh available' },
     branchFresh,
-    autoMergeGate,
+    nativeAutoMerge,
     ci,
     ghBot,
     wait,
