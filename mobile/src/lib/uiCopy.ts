@@ -48,7 +48,7 @@ export const UI_LABELS = [
   'Unverified details', 'Quarantined tiers', 'History days', 'Daily gaps', 'Rendered coverage', 'Chart gaps', 'Processing gaps', 'Source unavailable',
   '', '—', '·', ':', '/', '→', '↑', '↓', '%', '$', '#', '(', ')', '+', '−', '–', ' ', ' · ', ', ', ' — ', ' / ', ': ', '<', '>', '≤', '≥',
   'Rates', 'Saved', 'Market', 'Account', 'Profile', 'Settings', 'About',
-  'Saved requirements', 'Temporary filters', 'After saved requirements', 'All screens', 'Catalogue',
+  'Show saved matches', 'Visible rates', 'Include low savings rates', 'Saved requirements', 'Temporary filters', 'After saved requirements', 'All screens', 'Catalogue',
   'Edit saved requirements', 'Clear Home loans requirements', 'Clear all saved requirements',
   'Reset temporary filters', 'Reset Rates view', 'Other saved selections',
   'Updating', 'Previous results',

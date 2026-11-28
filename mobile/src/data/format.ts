@@ -78,6 +78,7 @@ const ENUM_LABEL_OVERRIDES: Readonly<Record<string, UiLabel>> = {
   INVESTOR: 'Investor', INVESTMENT: 'Investor', INV: 'Investor',
   VARIABLE: 'Variable', FIXED: 'Fixed', BASE: 'Ongoing', BONUS: 'Bonus rate', INTRO: 'Introductory', INTRODUCTORY: 'Introductory',
   BUNDLE_DISCOUNT_FIXED: 'Fixed · bundle', BUNDLE_DISCOUNT_VARIABLE: 'Variable · bundle',
+  QUARTERLY: 'Paid quarterly', SEMI_ANNUALLY: 'Paid semi-annually',
   ONLINE: 'Online', MONTHLY: 'Monthly', AT_MATURITY: 'at maturity', LVR: 'LVR', TD: 'TD',
   SAVINGS: 'Savings', STANDARD: 'Standard', ANNUALLY: 'Annually', BASIC: 'Basic',
   MIN_AGE: 'Minimum age', MAX_AGE: 'Maximum age', MIN_BALANCE: 'Minimum balance', MAX_BALANCE: 'Maximum balance',
@@ -149,7 +150,12 @@ export function formatBalanceRange(
 }
 
 export function formatTerm(row: RateRow): UiText {
-  // term_months is authoritative; otherwise parse the ISO `term` (e.g. "P36M" = 3 yrs).
+  const dayTerm = /^P(\d+)D$/.exec(row.term ?? '');
+  if (dayTerm && Number.isSafeInteger(Number(dayTerm[1])) && Number(dayTerm[1]) > 0) {
+    const days = Number(dayTerm[1]);
+    return uiJoin(uiNumber(days), ' ', days === 1 ? 'day' : 'days');
+  }
+  // For calendar terms, term_months is authoritative; otherwise parse the ISO `term` (e.g. "P36M" = 3 yrs).
   // NB: ribbon_fixed_term only mirrors the *number* in `term` (P3Y→3, P36M→36), so its
   // unit is ambiguous on its own — only fall back to it (as years) when nothing else.
   let months = toNumber(row.term_months);

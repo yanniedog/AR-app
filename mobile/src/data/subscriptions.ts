@@ -86,6 +86,7 @@ export function normalizeFilterSnapshot(filters: FilterSnapshot): FilterSnapshot
       .filter((criterion): criterion is NonNullable<typeof criterion> => criterion !== null)
       .sort((a, b) => factCriterionId(a).localeCompare(factCriterionId(b))),
     includeNonStandard: !!filters?.includeNonStandard,
+    ...(filters?.includeLowSavingsRates === true ? { includeLowSavingsRates: true } : {}),
     ...(filters?.factMatchMode === 'unknown' ? { factMatchMode: 'unknown' as const } : {}),
   };
 }

@@ -55,6 +55,7 @@ export interface Filters {
   factCriteria: FactCriterion[];
   factMatchMode?: 'matching' | 'unknown';
   includeNonStandard: boolean;
+  includeLowSavingsRates?: boolean;
 }
 
 export const EMPTY_FILTERS: Filters = {
@@ -572,7 +573,7 @@ export function prepareRowFilter(
 ): (row: RateRow) => boolean {
   return (row) => {
     if (!row) return false;
-    if (section && !passesDepositTokenFloor(row, section)) return false;
+    if (section && !(section === 'Savings' && filters.includeLowSavingsRates) && !passesDepositTokenFloor(row, section)) return false;
     if (!matchesSearch(row)) return false;
     if (!inList(row.provider, filters.providers)) return false;
     if (!inList(row.rate_type, filters.rateTypes)) return false;
