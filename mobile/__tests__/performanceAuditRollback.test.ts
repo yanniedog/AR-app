@@ -429,6 +429,19 @@ describe('performance audit rollback journal', () => {
     expect(beforeRetry.mock.calls.map(([attemptNumber]) => attemptNumber)).toEqual([2, 3]);
   });
 
+  it('retries rejected restoration attempts and retains their failure evidence', async () => {
+    const attempt = jest.fn()
+      .mockRejectedValueOnce(new Error('native storage unavailable'))
+      .mockResolvedValueOnce({ restored: false, error: 'verification failed' })
+      .mockResolvedValueOnce({ restored: true });
+
+    await expect(retryPerformanceAuditRollback(attempt, 3)).resolves.toEqual({
+      restored: true,
+      attempts: 3,
+    });
+    expect(attempt).toHaveBeenCalledTimes(3);
+  });
+
   it('retains all failure evidence when the bounded restoration attempts are exhausted', async () => {
     const attempt = jest.fn(async (attemptNumber: number) => ({
       restored: false,
