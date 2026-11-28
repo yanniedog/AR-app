@@ -103,7 +103,7 @@
     "name": "profile",
     "open": "/profile",
     "scroll": 0,
-    "why": "profile requirements as collapsed rows (label, current choice, chevron) instead of chip grids"
+    "why": "profile requirements as collapsed rows (label, current choice, chevron) and the mortgage comparison fields in fixed rows that no longer overlap; purpose, repayment and rate type take one choice"
   },
   {
     "name": "product-history",

@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View } from 'react-native';
 
 import { humanizeEnum } from '../data/format';
+import { chooseFilterValue, isSingleChoiceFilter } from '../data/filterChoice';
 import {
   PROFILE_FEATURE_OPTIONS,
   PROFILE_GROUPS,
@@ -67,11 +68,7 @@ export function ProfileEditor({
   }, [core, sections]);
 
   const toggle = (key: keyof ProfileFilters, option: string) => {
-    const list = value[key];
-    onChange({
-      ...value,
-      [key]: list.includes(option) ? list.filter((v) => v !== option) : [...list, option],
-    });
+    onChange({ ...value, [key]: chooseFilterValue(value[key], option, isSingleChoiceFilter(key)) });
   };
 
   const otherFeatures = otherProfileFeatures(value);
@@ -95,7 +92,8 @@ export function ProfileEditor({
               label={GROUP_LABELS[g.key]}
               options={items}
               value={value[g.key].filter(item => options.includes(item))}
-              multiple
+              // Values saved before this became single-choice show as ticks until the extras are removed.
+              multiple={!isSingleChoiceFilter(g.key) || value[g.key].length > 1}
               onChange={option => toggle(g.key, option)}
               onClear={() => onChange({ ...value, [g.key]: value[g.key].filter(item => !options.includes(item)) })}
               last={index === sectionGroups.length - 1}
