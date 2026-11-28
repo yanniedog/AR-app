@@ -80,11 +80,16 @@ def publication(tag, digest):
     if core_desc["sha256"] != digest:
         raise ValueError("Emulator and archive core editions differ")
     core = asset(core_desc)
-    archive = asset(manifest["bank_rate_history_catalogue"]["file"])
+    descriptor = manifest.get("bank_rate_history_catalogue") or manifest["bank_rate_history_catalogue_packed"]
+    archive = asset(descriptor["file"])
     if archive["core_sha256"] != digest:
         raise ValueError("Catalogue belongs to a different core")
     envelope = archive["catalogue"]
-    catalogue = json.loads(checked(gzip.decompress(base64.b64decode(envelope["gzip_base64"])), envelope["sha256"]))
+    data = checked(gzip.decompress(base64.b64decode(envelope["gzip_base64"])), envelope["sha256"])
+    catalogue = json.loads(data)
+    if "format" in catalogue:
+        decoder = Path(__file__).with_name("unpack-rate-history.mjs")
+        catalogue = json.loads(subprocess.check_output(["node", str(decoder)], input=data, timeout=120))
     moves = archive_moves(core, catalogue)
     published = core.get("exact_rate_moves")
     if published is not None:
