@@ -139,6 +139,8 @@ jobs:
           retention-days: 3
           compression-level: 0
           if-no-files-found: error
+      - name: Replay verified November ANZ and BCU offers with the candidate matcher
+        run: npx jest --runInBand __tests__/selectedRateEditions.test.ts
       - name: Enable KVM for the selected-offer regression
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules

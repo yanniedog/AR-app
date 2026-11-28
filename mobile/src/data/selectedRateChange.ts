@@ -10,7 +10,7 @@ export function selectedRateChange(previous: RateConditionContext | undefined, c
   if (!previous?.core || !current.core || previous.core.run_date >= current.core.run_date) return null;
   // A missing bound is not proof that two deposit amounts qualify for the same tier.
   if (section === 'TD' && (!(selected.term || selected.term_months) || !selected.interest_payment)) return null;
-  if (selected.balance_min == null && selected.balance_max == null && selected.exact_alert_eligible !== true) return null;
+  if (section !== 'Mortgage' && selected.balance_min == null && selected.balance_max == null) return null;
   const signature = rateTierSignature(selected);
   function observation(context: RateConditionContext) {
     const rows = rowsForProductKey(context.core!.sections[section].rates, selected.product_key);

@@ -981,7 +981,7 @@ export function RateCheckWorkspace() {
                    </AppText>
                    <ProductRateChangeLine
                      row={c.row}
-                     metric={section === 'Mortgage' && c.rate === c.projectionRate && c.rate === Number(c.row.rate) ? 'rate' : undefined}
+                     metric={c.row.public_offer_id || c.projectionRate !== Number(c.row.rate) ? undefined : 'rate'}
                      section={section}
                      compact
                    />

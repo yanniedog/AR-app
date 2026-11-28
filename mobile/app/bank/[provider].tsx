@@ -273,7 +273,9 @@ export default function BankDetail() {
   const rateManifest = useStore(s => s.manifest);
   const catalogsBySection = useMemo(() => {
     const out: Partial<Record<SectionKey, { matched: number; moves: ProductRateMove[] }>> = {};
-    if (!showBankInsights || !hasProductHistory || !previousEdition) return out;
+    const dates = bankInsights?.run_dates ?? [];
+    const end = core ? dates.indexOf(core.run_date) : -1;
+    if (!showBankInsights || !hasProductHistory || end < 1 || previousEdition?.core?.run_date !== dates[end - 1]) return out;
     const context = { core, details, manifest: rateManifest, coreIntegrity };
     for (const { section, rows } of rateGroups(false)) {
       const moves: ProductRateMove[] = [];
@@ -290,7 +292,7 @@ export default function BankDetail() {
       out[section] = { matched, moves };
     }
     return out;
-  }, [rateGroups, core, coreIntegrity, details, rateManifest, previousEdition, hasProductHistory, showBankInsights]);
+  }, [rateGroups, core, coreIntegrity, details, rateManifest, previousEdition, hasProductHistory, showBankInsights, bankInsights]);
 
   const heavyHistory =
     (core?.sections.Mortgage.rates.length ?? 0) > 400 ||

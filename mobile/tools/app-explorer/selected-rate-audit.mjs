@@ -36,6 +36,10 @@ const labels = name => {
 const offer = labels('offer'), facts = [...offer, ...labels('terms')];
 for (const text of [data.name, expected]) assert.ok(offer.includes(text), 'Missing selected offer field ' + text);
 for (const text of ['2 mo', 'Monthly']) assert.ok(facts.includes(text), 'Missing selected term field ' + text);
+// This selection discloses no balance bounds in AR's 28 November edition.
+if (data.lastUpdated === '2026-09-23T14:01:00.000Z' || (facts.includes('Unknown') && facts.includes('Balance'))) {
+  assert.ok(!offer.some(label => /[↑↓].*bps/i.test(label)), 'Unknown balance tier has a change badge');
+}
 for (const label of offer.filter(s => /[↑↓].*bps/i.test(s))) {
   assert.ok(!/Best advertised/i.test(label) && label.endsWith('→ ' + expected), 'Unmatched rate change: ' + label);
 }
