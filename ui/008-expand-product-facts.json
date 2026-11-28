@@ -1,0 +1,236 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Discounted Great Rate Home Loan - Variable Owner Occupied",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Home loans · 1 year · 61 Observed · 29 Nov 2026 · Discounted Great Rate Home Loan - Variable Owner Occupied 6.34% · Lead",
+  "at": [
+   360,
+   322
+  ]
+ },
+ {
+  "label": "History",
+  "at": [
+   396,
+   300
+  ]
+ },
+ {
+  "label": "29 Nov 2026",
+  "at": [
+   360,
+   478
+  ]
+ },
+ {
+  "label": "Previous date",
+  "flags": "tap",
+  "at": [
+   80,
+   598
+  ]
+ },
+ {
+  "label": "6.34% · Leading advertised · All tiers",
+  "at": [
+   360,
+   538
+  ]
+ },
+ {
+  "label": "Market rate range · 5.94% – 11.7%",
+  "at": [
+   360,
+   598
+  ]
+ },
+ {
+  "label": "Market median · 7.39%",
+  "at": [
+   360,
+   638
+  ]
+ },
+ {
+  "label": "Next date",
+  "flags": "tap,off",
+  "at": [
+   640,
+   598
+  ]
+ },
+ {
+  "label": "Market mean · 7.79%",
+  "at": [
+   360,
+   678
+  ]
+ },
+ {
+  "label": "RBA cash rate · 4.85%",
+  "at": [
+   360,
+   718
+  ]
+ },
+ {
+  "label": "Missing observations: 5 · Unknown",
+  "at": [
+   360,
+   758
+  ]
+ },
+ {
+  "label": "Product rate",
+  "at": [
+   165,
+   814
+  ]
+ },
+ {
+  "label": "Market rate range",
+  "at": [
+   430,
+   814
+  ]
+ },
+ {
+  "label": "Market median",
+  "at": [
+   181,
+   878
+  ]
+ },
+ {
+  "label": "Market mean",
+  "at": [
+   436,
+   878
+  ]
+ },
+ {
+  "label": "RBA cash rate",
+  "at": [
+   175,
+   942
+  ]
+ },
+ {
+  "label": "Hide Product facts",
+  "flags": "tap",
+  "at": [
+   360,
+   1171
+  ]
+ },
+ {
+  "label": "Product facts",
+  "at": [
+   328,
+   1171
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   360,
+   1271
+  ]
+ },
+ {
+  "label": "Cashback offer",
+  "at": [
+   190,
+   1327
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   1347
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

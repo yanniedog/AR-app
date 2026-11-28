@@ -1,0 +1,208 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Discounted Great Rate Home Loan - Variable Owner Occupied",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Notifications",
+  "at": [
+   190,
+   212
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   232
+  ]
+ },
+ {
+  "label": "Other feature",
+  "at": [
+   190,
+   307
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   327
+  ]
+ },
+ {
+  "label": "Redraw facility",
+  "at": [
+   190,
+   407
+  ]
+ },
+ {
+  "label": "Conditions apply · Conditions: Unverified",
+  "at": [
+   530,
+   427
+  ]
+ },
+ {
+  "label": "Show Documents",
+  "flags": "tap",
+  "at": [
+   360,
+   676
+  ]
+ },
+ {
+  "label": "Documents",
+  "at": [
+   328,
+   676
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   360,
+   840
+  ]
+ },
+ {
+  "label": "Conditions",
+  "at": [
+   286,
+   892
+  ]
+ },
+ {
+  "label": "Unverified",
+  "at": [
+   626,
+   892
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   273,
+   944
+  ]
+ },
+ {
+  "label": "Unassessed",
+  "at": [
+   613,
+   944
+  ]
+ },
+ {
+  "label": "Show Recorded criteria",
+  "flags": "tap",
+  "at": [
+   360,
+   1109
+  ]
+ },
+ {
+  "label": "Recorded criteria",
+  "at": [
+   328,
+   1109
+  ]
+ },
+ {
+  "label": "Show Mortgage · History",
+  "flags": "tap",
+  "at": [
+   360,
+   1339
+  ]
+ },
+ {
+  "label": "Mortgage · History",
+  "at": [
+   328,
+   1350
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]

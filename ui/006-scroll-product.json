@@ -1,0 +1,186 @@
+[
+ {
+  "label": "Navigate up",
+  "flags": "tap",
+  "at": [
+   56,
+   141
+  ]
+ },
+ {
+  "label": "Discounted Great Rate Home Loan - Variable Owner Occupied",
+  "at": [
+   318,
+   142
+  ]
+ },
+ {
+  "label": "Share",
+  "flags": "tap",
+  "at": [
+   540,
+   141
+  ]
+ },
+ {
+  "label": "Account",
+  "flags": "tap",
+  "at": [
+   640,
+   141
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   795
+  ]
+ },
+ {
+  "label": "Annual fee",
+  "at": [
+   291,
+   215
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   215
+  ]
+ },
+ {
+  "label": "$180 · Conditions: Unverified · Unknown · Conditions: Unverified · $350 · Conditions: Unverified · $500 · Conditions: Un",
+  "at": [
+   372,
+   344
+  ]
+ },
+ {
+  "label": "Offset account",
+  "at": [
+   291,
+   716
+  ]
+ },
+ {
+  "label": "Unknown",
+  "at": [
+   631,
+   716
+  ]
+ },
+ {
+  "label": "Availability",
+  "at": [
+   228,
+   768
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   568,
+   768
+  ]
+ },
+ {
+  "label": "Eligibility",
+  "at": [
+   268,
+   820
+  ]
+ },
+ {
+  "label": "Published · 6",
+  "at": [
+   608,
+   820
+  ]
+ },
+ {
+  "label": "Eligibility unverified",
+  "at": [
+   360,
+   972
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "flags": "tap",
+  "at": [
+   360,
+   1090
+  ]
+ },
+ {
+  "label": "Negotiation summary",
+  "at": [
+   386,
+   1090
+  ]
+ },
+ {
+  "label": "Show Fees",
+  "flags": "tap",
+  "at": [
+   360,
+   1316
+  ]
+ },
+ {
+  "label": "Fees",
+  "at": [
+   328,
+   1316
+  ]
+ },
+ {
+  "label": "Rates",
+  "flags": "tap,sel",
+  "at": [
+   120,
+   1473
+  ]
+ },
+ {
+  "label": "Rates",
+  "at": [
+   120,
+   1505
+  ]
+ },
+ {
+  "label": "Saved",
+  "flags": "tap",
+  "at": [
+   360,
+   1473
+  ]
+ },
+ {
+  "label": "Saved",
+  "at": [
+   360,
+   1505
+  ]
+ },
+ {
+  "label": "Market",
+  "flags": "tap",
+  "at": [
+   600,
+   1473
+  ]
+ },
+ {
+  "label": "Market",
+  "at": [
+   600,
+   1505
+  ]
+ }
+]
