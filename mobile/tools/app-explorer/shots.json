@@ -3,7 +3,7 @@
     "name": "browse",
     "open": "/browse",
     "scroll": 0,
-    "why": "home rates list, incl. early first page after eligibility is ready, then the settled page (rows must not shift); stacked product rows sit 8 dp apart"
+    "why": "home rates list, incl. early first page after eligibility is ready, then the settled page (rows must not shift); stacked product rows sit 8 dp apart; TD term and payment frequency are checked in the real-use session"
   },
   {
     "name": "watchlist",
@@ -31,9 +31,9 @@
   },
   {
     "name": "search",
-    "open": "/search",
+    "open": "/search?section=Savings",
     "scroll": 0,
-    "why": "search"
+    "why": "Savings list, saved requirement and visible counts, recovery action when all matches are hidden"
   },
   {
     "name": "bank-rates",

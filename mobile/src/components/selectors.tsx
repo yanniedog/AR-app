@@ -193,6 +193,7 @@ export function OptionSelect<T extends string>({
   const active = selected.length > 0;
   const trigger = variant === 'button' ? (
     <TouchTarget
+      testID={auditId ? `${auditId}:open` : undefined}
       auditControlId={auditId ? `${auditId}:open` : undefined}
       onPress={() => setOpen(true)}
       accessibilityRole="button"
@@ -213,7 +214,8 @@ export function OptionSelect<T extends string>({
   return (
     <>
       {trigger ?? <TouchTarget
-        auditControlId={auditId ? `${auditId}:open` : undefined}
+        testID={auditId ? `${auditId}:open` : undefined}
+      auditControlId={auditId ? `${auditId}:open` : undefined}
         onPress={() => setOpen(true)}
         accessibilityRole="button"
         accessibilityLabel={uiJoin(label, ': ', summary)}
