@@ -3787,7 +3787,11 @@ export function PerformanceAuditRunner() {
         });
         try {
           await Promise.allSettled(workers);
-          if (workerError) throw workerError;
+          if (workerError) {
+            // Preserve the completed portion before propagating a controlled worker failure.
+            await flushRecordedChecks();
+            throw workerError;
+          }
           assertSessionActive(watchdog);
           await flushRecordedChecks();
         } finally {
