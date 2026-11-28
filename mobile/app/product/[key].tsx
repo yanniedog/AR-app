@@ -316,7 +316,7 @@ export default function ProductDetail() {
   }, [found?.section, scenario, profile, row, fromRatesComparison, comparisonInputs, mortgageFilters]);
   const userLvr = found?.section === 'Mortgage'
     ? userLvrPercent(benchmarkScenarioLvr) ?? profileLvrPercent(profile?.lvrTiers) : null;
-  const mortgageLvr = found?.section === 'Mortgage' ? mortgageHistoryLvr(row?.lvr_tier, userLvr) : undefined;
+  const mortgageLvr = found?.section === 'Mortgage' ? mortgageHistoryLvr(userLvr) : undefined;
   const rateHistory = useBankRateHistory(historyEnabled && !!found && historySurfaceReady, mortgageLvr);
   const calculationScenario = useMemo(() => found ? scenarioWithLocalCurrentRate(found.section, scenario,
     resolveLocalCurrentRate(found.section, scenario, publicCatalogue.references, undefined, publicCatalogue, profile)) : scenario,
