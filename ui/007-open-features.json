@@ -1,0 +1,96 @@
+[
+ {
+  "label": "",
+  "flags": "tap",
+  "at": [
+   360,
+   800
+  ]
+ },
+ {
+  "label": "Features",
+  "at": [
+   300,
+   790
+  ]
+ },
+ {
+  "label": "Close Features",
+  "flags": "tap",
+  "at": [
+   640,
+   790
+  ]
+ },
+ {
+  "label": "",
+  "flags": "scroll",
+  "at": [
+   360,
+   1154
+  ]
+ },
+ {
+  "label": "Any",
+  "flags": "tap,sel",
+  "at": [
+   360,
+   904
+  ]
+ },
+ {
+  "label": "Offset account",
+  "flags": "tap",
+  "at": [
+   360,
+   1004
+  ]
+ },
+ {
+  "label": "Early / extra repayments",
+  "flags": "tap",
+  "at": [
+   360,
+   1104
+  ]
+ },
+ {
+  "label": "Redraw facility",
+  "flags": "tap",
+  "at": [
+   360,
+   1204
+  ]
+ },
+ {
+  "label": "Guarantor option",
+  "flags": "tap",
+  "at": [
+   360,
+   1304
+  ]
+ },
+ {
+  "label": "Cashback offer",
+  "flags": "tap",
+  "at": [
+   360,
+   1404
+  ]
+ },
+ {
+  "label": "Done",
+  "flags": "tap",
+  "at": [
+   360,
+   1502
+  ]
+ },
+ {
+  "label": "Done",
+  "at": [
+   360,
+   1503
+  ]
+ }
+]

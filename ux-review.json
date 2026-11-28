@@ -1,0 +1,457 @@
+{
+ "schemaVersion": 1,
+ "productDuplicates": {
+  "sourceRecordsRemoved": null,
+  "visible": {
+   "extraRows": null,
+   "captures": 0,
+   "rowObservations": 0,
+   "evidence": []
+  }
+ },
+ "screens": 16,
+ "findingsTotal": 12,
+ "major": 3,
+ "counts": {
+  "jargon": 2,
+  "accuracy": 2,
+  "slow": 1,
+  "tap-target": 2,
+  "crowded-targets": 4,
+  "slow-first-value": 1
+ },
+ "rubric": [
+  {
+   "key": "designConsistency",
+   "title": "Design consistency",
+   "score": 5,
+   "findings": 0,
+   "top": []
+  },
+  {
+   "key": "layout",
+   "title": "Layout",
+   "score": 5,
+   "findings": 0,
+   "top": []
+  },
+  {
+   "key": "easeOfUse",
+   "title": "Ease of use",
+   "score": 3.8,
+   "findings": 2,
+   "top": [
+    "major scroll down times 3: tap-target \"Digital banking\" (47x27 dp, minimum 48). Fix: Pad the control to 48 dp or add hitSlop",
+    "major profile-mortgage-fields: tap-target \"Digital banking\" (47x27 dp, minimum 48). Fix: Pad the control to 48 dp or add hitSlop"
+   ]
+  },
+  {
+   "key": "comfort",
+   "title": "Comfort",
+   "score": 3.1,
+   "findings": 3,
+   "top": [
+    "major launch true: slow (11.7 s to settle). Fix: Show content first and defer the slow work",
+    "major scroll down times 3: tap-target \"Digital banking\" (47x27 dp, minimum 48). Fix: Pad the control to 48 dp or add hitSlop",
+    "major profile-mortgage-fields: tap-target \"Digital banking\" (47x27 dp, minimum 48). Fix: Pad the control to 48 dp or add hitSlop"
+   ]
+  },
+  {
+   "key": "helpfulness",
+   "title": "Helpfulness",
+   "score": 5,
+   "findings": 0,
+   "top": []
+  },
+  {
+   "key": "appropriateness",
+   "title": "Appropriateness",
+   "score": 4.7,
+   "findings": 2,
+   "top": [
+    "minor launch true: accuracy \"CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank\" (comparison 6% is below advertised 6.54%). Fix: Fix the displayed figure or its sort",
+    "minor launch true: accuracy \"Owner Occupier P&I No Offset Mortgage, MoveBank\" (comparison 6.19% is below advertised 6.49%). Fix: Fix the displayed figure or its sort"
+   ]
+  },
+  {
+   "key": "onboarding",
+   "title": "Onboarding ease",
+   "score": 4.8,
+   "findings": 1,
+   "top": [
+    "minor cold start: slow-first-value (7.9 s from launch to rates showing). Fix: Show cached rates on launch before the refresh"
+   ]
+  },
+  {
+   "key": "barriers",
+   "title": "Barriers to entry and use",
+   "score": 4.8,
+   "findings": 1,
+   "top": [
+    "minor cold start: slow-first-value (7.9 s from launch to rates showing). Fix: Show cached rates on launch before the refresh"
+   ]
+  },
+  {
+   "key": "engagement",
+   "title": "Engagement hooks",
+   "score": 5,
+   "findings": 0,
+   "top": []
+  },
+  {
+   "key": "frustration",
+   "title": "Frustration and abandonment risk",
+   "score": 2,
+   "findings": 10,
+   "top": [
+    "major launch true: slow (11.7 s to settle). Fix: Show content first and defer the slow work",
+    "major scroll down times 3: tap-target \"Digital banking\" (47x27 dp, minimum 48). Fix: Pad the control to 48 dp or add hitSlop",
+    "major profile-mortgage-fields: tap-target \"Digital banking\" (47x27 dp, minimum 48). Fix: Pad the control to 48 dp or add hitSlop"
+   ]
+  }
+ ],
+ "tasks": [
+  {
+   "task": "Find the best rate",
+   "taps": 0,
+   "ms": 7920
+  },
+  {
+   "task": "Compare",
+   "taps": null,
+   "ms": null
+  },
+  {
+   "task": "Open a lender",
+   "taps": null,
+   "ms": null
+  },
+  {
+   "task": "Open a product",
+   "taps": null,
+   "ms": null
+  },
+  {
+   "task": "Save a rate",
+   "taps": null,
+   "ms": null
+  }
+ ],
+ "firstRun": {
+  "firstValueMs": 7920,
+  "ratesShown": true,
+  "gates": []
+ },
+ "hooks": {
+  "saveRow": true,
+  "savedTab": true,
+  "alerts": false
+ },
+ "perScreen": [
+  {
+   "slug": "001-launch-true",
+   "name": "launch true",
+   "elements": 52,
+   "tappable": 31,
+   "rows": 5,
+   "findings": 5,
+   "major": 1
+  },
+  {
+   "slug": "002-profile-top",
+   "name": "profile top",
+   "elements": 30,
+   "tappable": 13,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "003-profile-top",
+   "name": "profile-top",
+   "elements": 30,
+   "tappable": 13,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "004-open-account-type",
+   "name": "open account type",
+   "elements": 7,
+   "tappable": 6,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "005-account-type-sheet",
+   "name": "account-type-sheet",
+   "elements": 7,
+   "tappable": 6,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "006-back-true",
+   "name": "back true",
+   "elements": 30,
+   "tappable": 13,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "007-open-features",
+   "name": "open features",
+   "elements": 11,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "008-features-sheet",
+   "name": "features-sheet",
+   "elements": 11,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "009-back-true",
+   "name": "back true",
+   "elements": 30,
+   "tappable": 13,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "010-scroll-down-times-3",
+   "name": "scroll down times 3",
+   "elements": 24,
+   "tappable": 12,
+   "rows": 0,
+   "findings": 3,
+   "major": 1
+  },
+  {
+   "slug": "011-profile-mortgage-fields",
+   "name": "profile-mortgage-fields",
+   "elements": 24,
+   "tappable": 12,
+   "rows": 0,
+   "findings": 3,
+   "major": 1
+  },
+  {
+   "slug": "012-open-product-bank-20of-20queensland-20limited-7c59",
+   "name": "open /product/Bank%20of%20Queensland%20Limited%7C59906e88-5c03-ee11-8f6e-00224814d330%7CRESIDENTIAL_MORTGAGES%7CClear%20Path%20Variable%20Home%20Loan",
+   "elements": 27,
+   "tappable": 11,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "013-scroll-down-times-2",
+   "name": "scroll down times 2",
+   "elements": 26,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "014-mortgage-product",
+   "name": "mortgage-product",
+   "elements": 26,
+   "tappable": 9,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "015-scroll-down-times-6",
+   "name": "scroll down times 6",
+   "elements": 20,
+   "tappable": 11,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  },
+  {
+   "slug": "016-mortgage-product-links",
+   "name": "mortgage-product-links",
+   "elements": 20,
+   "tappable": 11,
+   "rows": 0,
+   "findings": 0,
+   "major": 0
+  }
+ ],
+ "findings": [
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "launch true",
+   "text": "Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI",
+   "at": [
+    384,
+    920
+   ],
+   "detail": "unexpanded LVR",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "jargon",
+   "severity": "minor",
+   "screen": "launch true",
+   "text": "MoveBank · Owner Occupier P&I No Offset Mortgage",
+   "at": [
+    384,
+    1064
+   ],
+   "detail": "unexpanded P&I",
+   "fix": "Replace the abbreviation with a plain label"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "launch true",
+   "text": "CLASSIC HOME LOAN VARIABLE 60-80 LVR PI, Cairns bank",
+   "at": [
+    384,
+    961
+   ],
+   "detail": "comparison 6% is below advertised 6.54%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "accuracy",
+   "severity": "minor",
+   "screen": "launch true",
+   "text": "Owner Occupier P&I No Offset Mortgage, MoveBank",
+   "at": [
+    384,
+    1361
+   ],
+   "detail": "comparison 6.19% is below advertised 6.49%",
+   "fix": "Fix the displayed figure or its sort"
+  },
+  {
+   "check": "slow",
+   "severity": "major",
+   "screen": "launch true",
+   "text": "",
+   "at": [
+    0,
+    0
+   ],
+   "detail": "11.7 s to settle",
+   "fix": "Show content first and defer the slow work"
+  },
+  {
+   "check": "tap-target",
+   "severity": "major",
+   "screen": "scroll down times 3",
+   "text": "Digital banking",
+   "at": [
+    641,
+    766
+   ],
+   "detail": "47x27 dp, minimum 48",
+   "fix": "Pad the control to 48 dp or add hitSlop"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll down times 3",
+   "text": "Navigate up / Account type: Any",
+   "at": [
+    56,
+    141
+   ],
+   "detail": "0 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "scroll down times 3",
+   "text": "Account / Account type: Any",
+   "at": [
+    640,
+    141
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "tap-target",
+   "severity": "major",
+   "screen": "profile-mortgage-fields",
+   "text": "Digital banking",
+   "at": [
+    641,
+    766
+   ],
+   "detail": "47x27 dp, minimum 48",
+   "fix": "Pad the control to 48 dp or add hitSlop"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "profile-mortgage-fields",
+   "text": "Navigate up / Account type: Any",
+   "at": [
+    56,
+    141
+   ],
+   "detail": "0 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "crowded-targets",
+   "severity": "minor",
+   "screen": "profile-mortgage-fields",
+   "text": "Account / Account type: Any",
+   "at": [
+    640,
+    141
+   ],
+   "detail": "4 dp apart",
+   "fix": "Add at least 8 dp between adjacent controls"
+  },
+  {
+   "check": "slow-first-value",
+   "severity": "minor",
+   "screen": "cold start",
+   "text": "",
+   "at": [
+    0,
+    0
+   ],
+   "detail": "7.9 s from launch to rates showing",
+   "fix": "Show cached rates on launch before the refresh"
+  }
+ ],
+ "sampleChecked": false,
+ "contrastMeasured": true,
+ "summaryLines": [
+  "UX review: 3 major, 9 minor across 16 screens. Weakest: Frustration and abandonment risk 2/5, Comfort 3.1/5, Ease of use 3.8/5.",
+  "Product details: duplicate source records removed across audited payload: unmeasured; confirmed extra rows visible in captured disclosures: unmeasured (0 measured captures).",
+  "First value 7.9 s, 0 gate taps. Taps: find the best rate 0, compare unknown, open a lender unknown, open a product unknown, save a rate unknown.",
+  "",
+  "Frustration and abandonment risk 2/5: 3 major, 7 minor.",
+  "- major | launch true: slow, 11.7 s to settle | Fix: Show content first and defer the slow work",
+  "- major | scroll down times 3: tap-target \"Digital banking\", 47x27 dp, minimum 48 | Fix: Pad the control to 48 dp or add hitSlop",
+  "- major | profile-mortgage-fields: tap-target \"Digital banking\", 47x27 dp, minimum 48 | Fix: Pad the control to 48 dp or add hitSlop",
+  "- minor | launch true: jargon \"Cairns · CLASSIC HOME LOAN VARIABLE 60-80 LVR PI\", unexpanded LVR | Fix: Replace the abbreviation with a plain label",
+  "- minor | scroll down times 3: crowded-targets \"Navigate up / Account type: Any\", 0 dp apart | Fix: Add at least 8 dp between adjacent controls",
+  "- minor | profile-mortgage-fields: crowded-targets \"Navigate up / Account type: Any\", 0 dp apart | Fix: Add at least 8 dp between adjacent controls"
+ ]
+}
