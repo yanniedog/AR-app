@@ -6,6 +6,7 @@ let mockPublicProduct: any;
 jest.mock('../src/data/publicRateCatalogue', () => ({ usePublicRateCatalogue: () => ({ getProduct: () => mockPublicProduct }) }));
 jest.mock('../src/hooks/useDetailsCatalogue', () => ({ useDetailsCatalogue: () => mockCatalogue }));
 jest.mock('expo-router', () => ({ Stack: { Screen: 'StackScreen' } }));
+jest.mock('../src/components/ExternalLinkConfirmation', () => ({ useTrustedExternalUrl: () => ({ requestExternalUrl: jest.fn() }) }));
 jest.mock('../src/components/Screen', () => ({ ScreenScrollView: 'ScreenScrollView' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button', Row: 'Row', Disclosure: 'Disclosure' }));
 jest.mock('../src/components/product/ProductDetailParts', () => ({ DetailGroup: 'DetailGroup', OfficialLinks: 'OfficialLinks', ProductFacts: 'ProductFacts' }));

@@ -100,7 +100,7 @@ describe('home-loans-ux improvements', () => {
       act(() => tree.root.findByProps({ accessibilityLabel: 'Edit' }).props.onPress());
       const text = JSON.stringify(tree.toJSON());
       expect(text).not.toContain('Required');
-      expect(text).toContain('"placeholder":"80%"');
+      expect(text).toContain('LVR 80.0%');
     } finally {
       act(() => tree.unmount());
     }
