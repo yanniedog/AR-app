@@ -22,6 +22,7 @@ import {
   parseAbsCpiCsv,
   parseCashForecastCsv,
   parseCashRateTargetCsv,
+  RbaCsvLineCache,
   parseRbaSeriesCsv,
   preferNewerSeries,
 } from './economicOutlookParse';
@@ -81,7 +82,7 @@ export function slowRefreshMessage(
   slowest?: { label: string; ms: number } | null,
 ): string | null {
   if (fetchMs <= SLOW_FETCH_MS && parseMs <= SLOW_PARSE_MS) return null;
-  const detail = slowest && parseMs > SLOW_PARSE_MS ? ` (slowest ${slowest.label} ${slowest.ms} ms)` : '';
+  const detail = slowest && parseMs > SLOW_PARSE_MS ? ` (slowest ${slowest.label} ${Math.round(slowest.ms)} ms)` : '';
   return `slow refresh: fetch ${fetchMs} ms, parse ${parseMs} ms${detail}`;
 }
 
@@ -289,6 +290,10 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
     const checkedAt = new Date().toISOString();
     const fetchStartedAt = monotonicNow();
     let parseMs = 0;
+    let fetchElapsedMs = 0;
+    const observeFetch = <T>(request: Promise<T>): Promise<T> => request.finally(() => {
+      fetchElapsedMs = monotonicNow() - fetchStartedAt;
+    });
     let slowest: { label: string; ms: number } | null = null;
     const timedParse = <T>(url: string, work: () => T): T => {
       const startedAt = monotonicNow();
@@ -297,7 +302,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       } finally {
         const elapsed = monotonicNow() - startedAt;
         parseMs += elapsed;
-        if (!slowest || elapsed > slowest.ms) slowest = { label: tableLabel(url), ms: Math.round(elapsed) };
+        if (!slowest || elapsed > slowest.ms) slowest = { label: tableLabel(url), ms: elapsed };
       }
     };
     // An audit can start while the thread is yielded, so re-check before the parse begins.
@@ -310,7 +315,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       Promise.all(
         SOURCE_KEYS.map(async (source) => {
           try {
-            return { source, text: await fetchText(URLS[source]), error: null as string | null };
+            return { source, text: await observeFetch(fetchText(URLS[source])), error: null as string | null };
           } catch (error) {
             return {
               source,
@@ -322,7 +327,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       ),
       (async () => {
         try {
-          const forecastText = await fetchText(URLS.cashForecast, 5_000);
+          const forecastText = await observeFetch(fetchText(URLS.cashForecast, 5_000));
           return {
             forecast: timedParse(URLS.cashForecast, () => parseOfficialData(URLS.cashForecast, () => parseCashForecastCsv(forecastText))),
             error: null as string | null,
@@ -337,7 +342,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       (async () => {
         try {
           return {
-            history: await fetchText(URLS.cashRate).then(async text => {
+            history: await observeFetch(fetchText(URLS.cashRate)).then(async text => {
               await beforeLargeParse(text);
               return timedParse(URLS.cashRate, () => parseOfficialData(URLS.cashRate, () => parseCashRateTargetCsv(text)));
             }),
@@ -352,7 +357,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       })(),
       (async () => {
         try {
-          const fetched = await fetchCsv(ABS_HEADLINE_CPI_URL);
+          const fetched = await observeFetch(fetchCsv(ABS_HEADLINE_CPI_URL));
           const publicationDate = httpDateToIso(fetched.lastModified)
             || checkedAt.slice(0, 10);
           return {
@@ -381,9 +386,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
         .map((entry) => [entry.source, entry.error!] as const),
     );
 
-    const allSettledAt = monotonicNow();
-    // Parsing done while the requests were in flight; indicator parsing below is not part of the fetch phase.
-    const parseMsWhileFetching = parseMs;
+    const tableCache = new RbaCsvLineCache();
     const indicatorEntries: Array<{
       definition: (typeof INDICATOR_DEFINITIONS)[number];
       indicator: EconomicIndicator | null;
@@ -407,7 +410,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
         };
       }
       try {
-        let parsed = timedParse(URLS[definition.source], () => parseOfficialData(URLS[definition.source], () => parseRbaSeriesCsv(text, definition.seriesId)));
+        let parsed = timedParse(URLS[definition.source], () => parseOfficialData(URLS[definition.source], () => parseRbaSeriesCsv(text, definition.seriesId, tableCache)));
         let sourceUrl: string = URLS[definition.source];
         let frequency = definition.frequency;
         let shortLabel = definition.shortLabel;
@@ -438,7 +441,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       })());
     }
 
-    const fetchMs = Math.max(0, Math.round(allSettledAt - fetchStartedAt - parseMsWhileFetching));
+    const fetchMs = Math.max(0, Math.round(fetchElapsedMs));
     parseMs = Math.round(parseMs);
     const slowRefresh = slowRefreshMessage(fetchMs, parseMs, slowest);
     if (slowRefresh) debugLog.warn('economic-outlook', slowRefresh);
