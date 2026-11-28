@@ -422,7 +422,7 @@ export default function RatesWorkspace() {
   // its index before the first viewport commits, so later edits settle at once.
   const mortgageIndex = useMortgageResultsIndex(core?.sections.Mortgage.rates ?? EMPTY_RATE_ROWS,
     catalogue, mortgageContext, effectiveIncludeNonStandard, suitabilityRevision,
-    isFocused && section === 'Mortgage' && availability === 'listed',
+    isFocused && suitabilityReady && !task.intentError && section === 'Mortgage' && availability === 'listed',
     sourceRates.length <= SMALL_MORTGAGE_BOOK_ROWS || !mortgagePricingReady || settledMortgageWork === mortgageWorkKey);
   const activeMortgageIndex = availability === 'listed' && section === 'Mortgage' && !task.intentError && mortgagePricingReady &&
     pricingMortgageFilters.loanPurposes.length === 1 && pricingMortgageFilters.repaymentTypes.length === 1
@@ -432,7 +432,7 @@ export default function RatesWorkspace() {
   [suitabilityReady, activeMortgageIndex, indexedScenarioKey, indexedInputsKey]);
   // The closed gate prevents even the leading page from painting. The pricing
   // request also depends on the gate's revision, so opening it discards that pass.
-  const pricingBlockedBySuitability = pricingActive && !suitabilityReady;
+  const pricingBlockedBySuitability = pricingActive && !task.intentError && !suitabilityReady;
   const needsCooperativePricing = pricingActive && !task.intentError && !indexedPricing && !pricingBlockedBySuitability;
   useEffect(() => {
     if (core && isFocused && pricingBlockedBySuitability) bootMark('pricing-wait-suitability');
@@ -536,7 +536,8 @@ export default function RatesWorkspace() {
     (row: RateRow) => publicRateScenario(section, scenario, prefs.profileFilters, row),
     [section, scenario, prefs.profileFilters],
   );
-  const needsProfilePricing = pricingActive && catalogue.status !== 'unavailable' && exploratoryMortgageActive && profileSectionCount(prefs.profileFilters, section) > 0 && !task.intentError;
+  const needsProfilePricing = pricingActive && suitabilityReady && !task.intentError
+    && catalogue.status !== 'unavailable' && exploratoryMortgageActive && profileSectionCount(prefs.profileFilters, section) > 0;
   const profilePricing = useResolvedPublicRankingRows({
     sourceRows: needsProfilePricing ? sourceRates : EMPTY_RATE_ROWS,
     candidates: needsProfilePricing ? null : EMPTY_RATE_ROWS,
@@ -571,7 +572,8 @@ export default function RatesWorkspace() {
     });
     if (applicable.length !== selected.length || applicable.some((token, index) => token !== selected[index])) setSelected(applicable);
   }, [comparisonCore, selected, catalogue, scenarioFor, mortgageInputs, mortgageCriteriaReady, core, details, manifest, coreIntegrity, suitabilityRevision, setSelected, section, publicPricing.ready]);
-  const summaryCatalogueRows = catalogue.status === 'unavailable' || (catalogue.status === 'ready' && catalogue.allLoaded)
+  const summaryCatalogueRows = suitabilityReady && !task.intentError
+    && (catalogue.status === 'unavailable' || (catalogue.status === 'ready' && catalogue.allLoaded))
     ? (catalogue.status === 'unavailable' ? sourceRates
       : exploratoryMortgageActive
       ? (profilePricing.ready ? profilePricing.resolution.rows : null)
@@ -850,9 +852,9 @@ export default function RatesWorkspace() {
     if (section === 'Mortgage') restoreSavedMortgageComparison();
   }, [includeNonStandard, section]);
   const intentPending = Boolean(intentKey && consumedIntent.current !== intentKey) || !session.initialized;
-  const searchPending = intentPending || (availability === 'unlisted' ? !catalogueDetails
+  const searchPending = intentPending || (!task.intentError && (availability === 'unlisted' ? !catalogueDetails
     : section === 'Mortgage' && !mortgageCriteriaReady && !isDefaultMortgageBrowse ? false
-    : detailFiltersPending || searchIndexLoading || !publicPricing.ready || !preparedResults.ready);
+    : detailFiltersPending || searchIndexLoading || !publicPricing.ready || !preparedResults.ready));
   useEffect(() => { if (core != null && preparedResults.ready) bootMark('rows-prepared'); }, [core, preparedResults.ready]);
   useEffect(() => { if (core != null && publicPricing.ready) bootMark('pricing-ready'); }, [core, publicPricing.ready]);
   useEffect(() => { if (core != null && !searchIndexLoading) bootMark('search-index-idle'); }, [core, searchIndexLoading]);
@@ -863,6 +865,7 @@ export default function RatesWorkspace() {
   const ratesSettled = core != null && !searchPending;
   // Mirrors the searchPending branches above so the last-blocker mark names the real condition.
   const blockers = (intentPending ? ['intent']
+    : task.intentError ? []
     : availability === 'unlisted' ? [!catalogueDetails && 'catalogue']
     : section === 'Mortgage' && !mortgageCriteriaReady && !isDefaultMortgageBrowse ? []
     : [detailFiltersPending && 'gate', searchIndexLoading && 'index', !publicPricing.ready && 'pricing', !preparedResults.ready && 'rows'])
@@ -1543,7 +1546,7 @@ export default function RatesWorkspace() {
             variant="ghost"
             onPress={() => void onToggleSearchAlert()}
           />
-          <SearchReportExport disabled={availability === 'unlisted' || searchPending || query !== debouncedQuery} request={{ section, path, hierarchyScoped, query: debouncedQuery, filters: effectiveFilters, sort: sortKey, depositMetric: depositRankMetric, mortgageMetric: mortgageRateMetric, deepSearch: deepSearchActive }} />
+          <SearchReportExport disabled={Boolean(task.intentError) || availability === 'unlisted' || searchPending || query !== debouncedQuery} request={{ section, path, hierarchyScoped, query: debouncedQuery, filters: effectiveFilters, sort: sortKey, depositMetric: depositRankMetric, mortgageMetric: mortgageRateMetric, deepSearch: deepSearchActive }} />
         </ScrollView>}
       </SheetSurface>
     </Screen>

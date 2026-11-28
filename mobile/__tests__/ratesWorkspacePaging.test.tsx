@@ -11,6 +11,8 @@ import { clearMortgageComparison, setMortgageComparisonInputs, useMortgageCompar
 
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
+import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
+import * as mortgageIndexes from '../src/hooks/useMortgageResultsIndex';
 import { buildDeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { openCompare, openProduct } from '../src/lib/nav';
@@ -870,12 +872,26 @@ test('entered comparison inputs select public pricing before ranking, cards and 
     prefs: { ...state.prefs, profileFilters: { ...state.prefs.profileFilters, rateTypes: ['VARIABLE'] } } }));
   useMortgageComparison.setState({ loanAmount: '600000', lvr: '75' });
   install();
+  const mortgageIndex = jest.spyOn(mortgageIndexes, 'useMortgageResultsIndex');
   const tree = mount(), list = () => tree.root.findByType('FlashList').props;
   try {
     expect(list().data.map((row: any) => [row.public_offer_id, row.rate])).toEqual([['high-lvr', '0.06']]);
     const savedFacts = () => tree.root.findAllByType('AppText').map((node: any) => node.props.children);
     expect(savedFacts()).toContain('Catalogue: 0 products · 0 banks · 0 rates');
     expect(savedFacts()).toContain('After saved requirements: 0 products · 0 banks · 0 rates');
+    try {
+      act(() => {
+        setSuitabilityAllowed(new Set(), { rebuildClosed: true });
+        updateRatesSection('Mortgage', { includeNonStandardOverride: false });
+      });
+      expect(savedFacts()).toContain('After saved requirements: Pending');
+      expect(mortgageIndex.mock.lastCall?.[5]).toBe(false);
+    } finally {
+      act(() => {
+        setSuitabilityAllowed(null);
+        updateRatesSection('Mortgage', { includeNonStandardOverride: null });
+      });
+    }
     expect(tree.root.findByType('ProductCard').props.rateScenario).toMatchObject({ amount: '600000', lvr: '0.75' });
     act(() => updateRatesSection('Mortgage', { selectMode: true }));
     act(() => tree.root.findByType('ProductCard').props.onPress());

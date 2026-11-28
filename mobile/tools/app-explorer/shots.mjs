@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { appNodes, bottomBarTop, keyboardTop } from './ux-checks.mjs';
+import { isShotRoute } from './shot-route.cjs';
 
 const out = process.argv[2] || 'explorer-out/shots';
 const here = path.dirname(new URL(import.meta.url).pathname);
@@ -14,10 +15,10 @@ const manifest = JSON.parse(fs.readFileSync(path.join(here, 'shots.json'), 'utf8
 const validLabel = label => typeof label === 'string' && /^[a-z0-9 &-]{1,60}$/i.test(label);
 for (const s of manifest) {
   if (!/^[a-z0-9-]{1,40}$/.test(s.name)) throw new Error(`bad shot name: ${s.name}`);
-  if (!/^\/[a-z0-9-]+(\/[a-z0-9-]+)*(\?[a-z0-9=&_-]*)?$/i.test(s.open)) throw new Error(`bad shot route: ${s.open}`);
+  if (!isShotRoute(s.open)) throw new Error(`bad shot route: ${s.open}`);
   if (s.scroll !== undefined && !(Number.isInteger(s.scroll) && s.scroll >= 0 && s.scroll <= 10)) throw new Error(`bad shot scroll: ${s.scroll}`);
   if (s.taps !== undefined && (!Array.isArray(s.taps) || s.taps.length > 3 || !s.taps.every(validLabel))) throw new Error(`bad shot taps: ${s.name}`);
-  if (s.visibleAction !== undefined && (!validLabel(s.visibleAction) || s.scroll)) throw new Error(`bad shot action: ${s.name}`);
+  if (s.visibleAction !== undefined && !validLabel(s.visibleAction)) throw new Error(`bad shot action: ${s.name}`);
 }
 const PKG = 'com.eyex.australianrates';
 const DIAGNOSTIC_FIELD = 'Device / network / rate / product / receipt / error';
@@ -31,9 +32,9 @@ if (!process.argv.includes('--analyze-only')) {
     for (const [i, tap] of (s.taps || []).entries()) {
       script.push({ tap: { text: tap }, scroll: true, name: `${s.name}-tap-${i + 1}` });
     }
+    if (s.scroll) script.push({ scroll: 'down', times: s.scroll, name: s.visibleAction ? `${s.name}-scroll` : s.name });
     if (s.visibleAction) script.push({ waitFor: { label: s.visibleAction, clickable: true, enabled: true }, timeout: 8000, name: s.name });
-    else if (s.scroll) script.push({ scroll: 'down', times: s.scroll, name: s.name });
-    else script.push({ wait: 600, name: s.name });
+    else if (!s.scroll) script.push({ wait: 600, name: s.name });
   }
   fs.mkdirSync(out, { recursive: true });
   const scriptPath = path.join(out, 'shots-script.json');

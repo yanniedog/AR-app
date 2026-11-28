@@ -192,6 +192,19 @@ test('a closed suitability gate defers pricing and row preparation and offers re
   } finally { act(() => tree.unmount()); }
 });
 
+test('a consumed invalid bank filter settles while suitability is closed', () => {
+  mockParams = { section: 'TD', providers: '%' };
+  let tree: any;
+  act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    expect(tree.root.findByType('EmptyState' as any).props.title).toBe('Scope unavailable');
+    const probe = mockSurfaces.get('rates.results').probes.find((entry: any) => entry.id === 'search.data');
+    expect(probe).toMatchObject({ status: 'error', error: 'Invalid bank filter',
+      datasetRevision: mockState.manifest?.files.core.sha256 ?? mockState.core.run_date });
+    expect(tree.root.findByType('SearchReportExport' as any).props.disabled).toBe(true);
+  } finally { act(() => tree.unmount()); }
+});
+
 test('a details warm keeps the closed gate in a loading state', () => {
   mockState.detailsLoading = true;
   let tree: any;
