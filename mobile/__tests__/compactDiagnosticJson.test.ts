@@ -44,6 +44,8 @@ test('gzip retries are byte-identical across clocks so upload deduplication surv
   const clock = jest.spyOn(Date, 'now').mockReturnValue(1_000);
   try {
     const first = encodeCompressedDiagnosticJson(source);
+    const gzip = Buffer.from(JSON.parse(first).gzip_base64, 'base64');
+    expect(gzip.readUInt32LE(4)).toBe(0);
     clock.mockReturnValue(9_000);
     expect(encodeCompressedDiagnosticJson(source)).toBe(first);
     expect(decodeCompactDiagnosticJson(first)).toEqual(source);

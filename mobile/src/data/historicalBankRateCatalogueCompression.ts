@@ -1,4 +1,5 @@
-import { DecodeUTF8, Gzip, Gunzip, gzipSync, strFromU8, strToU8 } from 'fflate';
+import { DecodeUTF8, Gzip, Gunzip, gzipSync, strToU8 } from 'fflate';
+import { decodePayloadUtf8 } from './payloadUtf8';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 
@@ -83,7 +84,7 @@ export function decompressCatalogue(value: CompressedCatalogue): unknown | null 
     });
     for (let i = 0; i < gzip.length; i += 4096) decoder.push(gzip.subarray(i, i + 4096), i + 4096 >= gzip.length);
     if (written !== value.bytes || bytesToHex(sha256(bytes)) !== value.sha256) return null;
-    return JSON.parse(strFromU8(bytes));
+    return JSON.parse(decodePayloadUtf8(bytes));
   } catch { return null; }
 }
 

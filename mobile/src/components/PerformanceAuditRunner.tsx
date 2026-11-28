@@ -3747,8 +3747,8 @@ export function PerformanceAuditRunner() {
         let workerError: unknown = null;
         let recordChain = Promise.resolve();
         const enqueueLinkRecord = (check: AuditCheck) => {
+          // This result finished before cancellation. Drain admitted records even after another worker fails.
           const step = recordChain.then(async () => {
-            if (workerError) return;
             await record(check, true);
             // Slow native/HTTP checks can consume the watchdog's budget before
             // a full batch accumulates. Flush before admitting another batch.
@@ -3787,7 +3787,11 @@ export function PerformanceAuditRunner() {
         });
         try {
           await Promise.allSettled(workers);
-          if (workerError) throw workerError;
+          if (workerError) {
+            // Preserve the completed portion before propagating a controlled worker failure.
+            await flushRecordedChecks();
+            throw workerError;
+          }
           assertSessionActive(watchdog);
           await flushRecordedChecks();
         } finally {

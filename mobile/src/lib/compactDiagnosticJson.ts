@@ -71,17 +71,62 @@ export function encodeCompactDiagnosticJson(value: unknown, header?: Record<stri
     strings, templates, data: compact(encoded) });
 }
 
+function overWireBudget(text: string): boolean {
+  if (text.length > MAX_COMPRESSED_DIAGNOSTIC_BYTES) return true;
+  if (text.length * 3 <= MAX_COMPRESSED_DIAGNOSTIC_BYTES) return false;
+  let bytes = 0;
+  for (const char of text) {
+    const code = char.codePointAt(0)!;
+    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code <= 0xffff ? 3 : 4;
+    if (bytes > MAX_COMPRESSED_DIAGNOSTIC_BYTES) return true;
+  }
+  return false;
+}
+
+// Oversized plain and dictionary reports remain readable. Scan only structural
+// tokens and short root keys/values so the large base64 string stays in place.
+function declaresGzipEnvelope(text: string): boolean {
+  let depth = 0;
+  let awaitingFormat = false;
+  let gzip = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === ':' || /\s/.test(c)) continue;
+    if (c === '"') {
+      const start = i;
+      while (++i < text.length && text[i] !== '"') if (text[i] === '\\') i++;
+      if (depth !== 1) continue;
+      const token: unknown = i - start <= 100 ? JSON.parse(text.slice(start, i + 1)) : undefined;
+      if (awaitingFormat) {
+        gzip = token === 'ar-audit-gzip-v1';
+        awaitingFormat = false;
+      } else if (token === 'format') {
+        let next = i + 1;
+        while (next < text.length && /\s/.test(text[next])) next++;
+        awaitingFormat = text[next] === ':';
+      }
+    } else {
+      if (awaitingFormat) { gzip = false; awaitingFormat = false; }
+      if (c === '{' || c === '[') depth++;
+      if (c === '}' || c === ']') depth--;
+    }
+  }
+  return gzip;
+}
+
 /** Accept gzip, dictionary and plain reports so existing pasted evidence stays readable. */
 export function decodeCompactDiagnosticJson(text: string): unknown {
+  const oversized = overWireBudget(text);
+  if (oversized && declaresGzipEnvelope(text)) throw new Error('Invalid compressed diagnostic report');
   const input = JSON.parse(text);
   if (input?.format === 'ar-audit-gzip-v1') {
     if (!Number.isSafeInteger(input.bytes) || input.bytes < 1 || input.bytes > MAX_DECODED_DIAGNOSTIC_BYTES ||
-      text.length > MAX_COMPRESSED_DIAGNOSTIC_BYTES || new TextEncoder().encode(text).length > MAX_COMPRESSED_DIAGNOSTIC_BYTES) {
+      oversized) {
       throw new Error('Invalid compressed diagnostic report');
     }
     const decoded = decompressCatalogue(input);
     // A diagnostic is an object; null is also the codec's invalid-input result.
-    if (!decoded || typeof decoded !== 'object') throw new Error('Invalid compressed diagnostic report');
+    if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) throw new Error('Invalid compressed diagnostic report');
     return decoded;
   }
   if (input?.format !== 'ar-audit-dict-v1') return input;

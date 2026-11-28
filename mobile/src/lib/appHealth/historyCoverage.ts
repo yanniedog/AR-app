@@ -251,6 +251,31 @@ function auditProductSource(core: CorePayload, history: ProductHistoryPayload,
     }
     for (const input of ready) {
       const accepted = new Set(input.acceptedDates);
+      // A source can omit products on an otherwise available day. Compare
+      // non-null model observations to that absence as well as to source rates.
+      const owned = input.ready.run_dates.flatMap((day, sourceIndex) => {
+        const position = dates.get(day);
+        return position !== undefined && accepted.has(day) && owns(day) ? [{ day, sourceIndex, position }] : [];
+      });
+      const spansByKey = new Map<string, [number, number][]>();
+      for (const section of SECTION_KEYS) for (const [key, spans] of input.ready.products[section]) {
+        const ranges = spansByKey.get(key) ?? [];
+        for (const [start, count] of spans) ranges.push([start, start + count]);
+        spansByKey.set(key, ranges);
+      }
+      for (const [key, series] of Object.entries(history.products)) {
+        const ranges = spansByKey.get(key) ?? [];
+        ranges.sort((a, b) => a[0] - b[0]);
+        let next = 0;
+        for (const { day, sourceIndex, position } of owned) {
+          if (series[position] == null) continue;
+          while (next < ranges.length && ranges[next][1] <= sourceIndex) next++;
+          if (next < ranges.length && ranges[next][0] <= sourceIndex) continue;
+          compared(result, 'processingComparisons');
+          result.processingMismatches++;
+          result.gaps.push([day, 'product-source-to-model-mismatch', null, 1, key]);
+        }
+      }
       for (const section of SECTION_KEYS) for (const [key, spans] of input.ready.products[section]) for (const [start, count, rate] of spans)
         for (let index = start; index < start + count; index++) {
           const day = input.ready.run_dates[index];
@@ -335,7 +360,6 @@ export function reconcileHistoryCoverage(result: HistoryCoverageEvidence, dates:
   compared(result, 'processingComparisons');
   if (!Number.isSafeInteger(length) || length < 1 || length > 5000) {
     result.available = false;
-    result.processingMismatches++;
     result.gaps.push([result.runDate, 'date-axis-unverifiable', null, Number.isFinite(length) ? length : 0]);
     return result;
   }
