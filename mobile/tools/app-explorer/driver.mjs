@@ -202,7 +202,7 @@ const ERROR_ACTION = /retry|try again|refresh|reload|clear|reset|edit|change|add
 /** A visible error or empty state, and whether the screen offers a way to act on it. */
 export function errorStateOf(nodes) {
   const body = bodyOf(nodes);
-  const hit = body.find(n => n.text && n.text.length < 120 && ERROR_TEXT.test(n.text));
+  const hit = body.find(n => n.text && n.text.length < 120 && n.text.trim() !== 'No saved rates' && ERROR_TEXT.test(n.text));
   if (!hit) return null;
   const action = body.some(n => n.clickable && ERROR_ACTION.test(`${n.text} ${n.desc}`));
   return { text: hit.text.slice(0, 80), action };
