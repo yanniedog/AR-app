@@ -358,6 +358,7 @@ function ProductCardView({
       ) : null}
       <View ref={detailsBubble.anchorRef} collapsable={false} style={{ flex: 1, minWidth: 0 }}>
         <PressFeedback
+          testID={section === 'Mortgage' ? undefined : `rate-card-${section}`}
           auditControlId={`rate-details:${row.product_key}:${row.rate_index ?? ''}`}
           onPressIn={() => { held.current = false; }}
           onPress={() => { if (!held.current) { detailsBubble.dismiss(); onPress?.(); } held.current = false; }}

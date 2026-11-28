@@ -284,17 +284,15 @@ describe('bank detail profile-filtered history', () => {
     } finally { act(() => tree.unmount()); }
   });
 
-  it('uses the same selected LVR profile for the product list and historical chart request', () => {
+  it('offers no LVR band control and keeps the product list and chart request unbanded', () => {
     const low = { ...row, product_key: 'low-band', rate_index: 0, rate: '0.04', lvr_tier: 'lvr_0-60%', account_class: 'standard' };
     const high = { ...low, product_key: 'high-band', rate_index: 1, rate: '0.05', lvr_tier: 'lvr_60-80%' };
     mockState.core = { ...core, sections: { ...core.sections, Mortgage: { ...core.sections.Mortgage, rates: [low, high] } } };
     const tree = mount();
     try {
-      act(() => tree.root.findAllByType('Chip').find(node => String(node.props.label).startsWith('LVR'))!.props.onPress());
-      const options = tree.root.findAllByType('Chip').filter(node => /60(?:\.0)?%/.test(String(node.props.label)));
-      act(() => options[0].props.onPress());
-      expect(tree.root.findAllByType('FlashList')[0].props.data.map((item: { row: RateRow }) => item.row.product_key)).toEqual(['low-band']);
-      expect(jest.mocked(useBankRateHistory).mock.calls.at(-1)?.[2]?.lvrTiers).toEqual(['lvr_0-60%']);
+      expect(tree.root.findAllByType('Chip').some(node => String(node.props.label).startsWith('LVR'))).toBe(false);
+      expect(tree.root.findAllByType('FlashList')[0].props.data.map((item: { row: RateRow }) => item.row.product_key)).toEqual(['low-band', 'high-band']);
+      expect(jest.mocked(useBankRateHistory).mock.calls.at(-1)?.[2]?.lvrTiers ?? []).toEqual([]);
     } finally { act(() => tree.unmount()); }
   });
 

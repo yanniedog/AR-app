@@ -2,12 +2,12 @@ import React, { useMemo } from 'react';
 import { View } from 'react-native';
 
 import { humanizeEnum } from '../data/format';
+import { chooseFilterValue, isSingleChoiceFilter } from '../data/filterChoice';
 import {
   PROFILE_FEATURE_OPTIONS,
   PROFILE_GROUPS,
   type ProfileFilters,
 } from '../data/profile';
-import { PROFILE_LVR_OPTIONS } from '../data/lvrTier';
 import { clearHomeLoanRequirements, otherProfileFeatures, profileAttributeOptions, sharedProfileFeatures } from '../data/profileRequirements';
 import { profileSectionCount } from '../data/profile';
 import { useStore } from '../data/store';
@@ -15,13 +15,7 @@ import type { SectionKey } from '../types';
 import { AppText, Button } from './ui';
 import { CompactToggle } from './controls';
 import { OptionSelect, OptionStrip } from './selectors';
-import { uiListedLvr } from '../lib/financialUiCopy';
-import { uiCount, uiJoin, uiLabel, uiSectionName, type UiLabel, type UiText } from '../lib/uiCopy';
-
-function lvrOptionLabel(option: string): UiText {
-  const canonical = PROFILE_LVR_OPTIONS.find((item) => item === option);
-  return canonical ? uiLabel(canonical) : uiListedLvr({ lvr_tier: option });
-}
+import { uiCount, uiJoin, uiLabel, uiSectionName, type UiLabel } from '../lib/uiCopy';
 
 type EditorGroup = {
   section: SectionKey;
@@ -52,9 +46,7 @@ export function ProfileEditor({
         section: g.section,
         title: g.title,
         key: g.key,
-        options: g.key === 'lvrTiers'
-          ? [...PROFILE_LVR_OPTIONS, ...value.lvrTiers.filter(t => !(PROFILE_LVR_OPTIONS as readonly string[]).includes(t))]
-          : profileAttributeOptions(core?.sections[g.section].rates ?? [], g.field, []),
+        options: profileAttributeOptions(core?.sections[g.section].rates ?? [], g.field, []),
       }));
 
     const featureGroups: EditorGroup[] = sections
@@ -76,11 +68,7 @@ export function ProfileEditor({
   }, [core, sections]);
 
   const toggle = (key: keyof ProfileFilters, option: string) => {
-    const list = value[key];
-    onChange({
-      ...value,
-      [key]: list.includes(option) ? list.filter((v) => v !== option) : [...list, option],
-    });
+    onChange({ ...value, [key]: chooseFilterValue(value[key], option, isSingleChoiceFilter(key)) });
   };
 
   const otherFeatures = otherProfileFeatures(value);
@@ -97,14 +85,15 @@ export function ProfileEditor({
             // Saved values remain removable even if absent from this catalogue.
             const options = g.key === 'accountFeatures' ? g.options : [...new Set([...value[g.key], ...g.options])];
             if (!options.length) return null;
-            const items = options.map(o => ({ value: o, label: g.key === 'lvrTiers' ? lvrOptionLabel(o) : humanizeEnum(o) }));
+            const items = options.map(o => ({ value: o, label: humanizeEnum(o) }));
             return <OptionSelect
               key={`${g.section}-${g.key}`}
               auditId={`profile:${g.section}:${g.key}`}
               label={GROUP_LABELS[g.key]}
               options={items}
               value={value[g.key].filter(item => options.includes(item))}
-              multiple
+              // Values saved before this became single-choice show as ticks until the extras are removed.
+              multiple={!isSingleChoiceFilter(g.key) || value[g.key].length > 1}
               onChange={option => toggle(g.key, option)}
               onClear={() => onChange({ ...value, [g.key]: value[g.key].filter(item => !options.includes(item)) })}
               last={index === sectionGroups.length - 1}

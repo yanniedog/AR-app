@@ -145,7 +145,6 @@ export const PROFILE_GROUPS: {
   { section: 'Mortgage', title: 'Purpose', field: 'loan_purpose', key: 'loanPurposes' },
   { section: 'Mortgage', title: 'Rate type', field: 'rate_type', key: 'rateTypes' },
   { section: 'Mortgage', title: 'Repayment', field: 'ribbon_repayment_type', key: 'repaymentTypes' },
-  { section: 'Mortgage', title: 'LVR tier', field: 'lvr_tier', key: 'lvrTiers' },
   { section: 'Savings', title: 'Account type', field: 'ribbon_deposit_kind', key: 'depositKinds' },
   { section: 'TD', title: 'Interest paid', field: 'interest_payment', key: 'interestPayments' },
 ];

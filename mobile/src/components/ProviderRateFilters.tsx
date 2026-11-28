@@ -3,19 +3,17 @@ import { Modal, ScrollView, View } from 'react-native';
 import type { RateRow } from '../types';
 import { humanizeEnum } from '../data/format';
 import type { ProfileFilters } from '../data/profile';
-import { uiListedLvrRange } from '../lib/financialUiCopy';
 import { uiJoin, type UiCopy } from '../lib/uiCopy';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Chip, Row } from './ui';
 
-type Dimension = 'lvrTiers' | 'loanPurposes' | 'repaymentTypes' | 'rateTypes';
+type Dimension = 'loanPurposes' | 'repaymentTypes' | 'rateTypes';
 export function ProviderRateFilters({ rows, profile, onChange }: {
   rows: RateRow[]; profile: ProfileFilters; onChange: (profile: ProfileFilters) => void;
 }) {
   const theme = useTheme();
   const [editing, setEditing] = useState<Dimension | null>(null);
   const dimensions: { key: Dimension; label: UiCopy; values: (readonly [string, UiCopy])[] }[] = [
-    { key: 'lvrTiers', label: 'LVR', values: [...new Map(rows.filter(row => row.lvr_tier).map(row => [row.lvr_tier!, uiListedLvrRange(row)])).entries()] },
     { key: 'loanPurposes', label: 'Purpose', values: [...new Set(rows.map(row => row.loan_purpose ?? row.security_purpose).filter((v): v is string => !!v))].map(value => [value, humanizeEnum(value)] as const) },
     { key: 'repaymentTypes', label: 'Repayment', values: [...new Set(rows.map(row => row.ribbon_repayment_type ?? row.repayment_type).filter((v): v is string => !!v))].map(value => [value, humanizeEnum(value)] as const) },
     { key: 'rateTypes', label: 'Rate type', values: [...new Set(rows.map(row => row.rate_type).filter((v): v is string => !!v))].map(value => [value, humanizeEnum(value)] as const) },

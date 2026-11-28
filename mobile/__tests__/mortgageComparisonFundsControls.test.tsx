@@ -15,6 +15,12 @@ jest.mock('../src/components/IconAction', () => ({ IconAction: 'IconAction' }));
 jest.mock('../src/components/PressFeedback', () => ({ PressFeedback: 'PressFeedback' }));
 jest.mock('../src/components/icons/AppIcon', () => ({ __esModule: true, default: 'Icon' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Chip: 'Chip', Row: 'Row', androidRipple: () => undefined }));
+// The slider's own behaviour is covered in lvrSlider.test; here it stands in as a text field.
+jest.mock('../src/components/LvrSlider', () => {
+  const { TextInput } = require('react-native');
+  return { LvrSlider: ({ value, onChange, onClear }: any) => <TextInput accessibilityLabel="LVR" keyboardType="decimal-pad"
+    value={value === null ? '' : String(value)} onChangeText={(text: string) => (text.trim() ? onChange(text) : onClear())} /> };
+});
 jest.mock('../src/lib/haptics', () => ({ hapticSelection: jest.fn() }));
 
 type TestNode = { props: Record<string, any>; findAllByType(type: any): TestNode[]; findByProps(props: object): TestNode; findAllByProps(props: object): TestNode[] };
@@ -229,7 +235,7 @@ test('computed money facts retain cents and rounded displayed LVR never overwrit
   } finally { act(() => tree.unmount()); }
 });
 
-test('large text retains wrapping fields and both labelled selectable tabs with 48dp targets', () => {
+test('large text keeps the fields in fixed rows and both labelled selectable tabs with 48dp targets', () => {
   mockDimensions = { width: 320, height: 800, scale: 3, fontScale: 3 };
   const tree = mount();
   try {
@@ -245,9 +251,11 @@ test('large text retains wrapping fields and both labelled selectable tabs with 
     const inputs = tree.root.findAllByType(TextInput);
     expect(inputs.map(node => node.props.accessibilityLabel)).toEqual(['Loan amount, thousands of dollars', 'Offset balance, thousands of dollars', 'Property value, thousands of dollars']);
     expect(inputs.every(node => node.props.style.minHeight >= 48 && node.props.allowFontScaling !== false)).toBe(true);
-    expect(tree.root.findAllByType(View).filter(node => node.props.style?.flexBasis === 220)).toHaveLength(3);
-    expect(tree.root.findAllByType('Row').some(node => node.props.style?.flexWrap === 'wrap'
-      && node.props.style?.alignItems === 'flex-end')).toBe(true);
+    // Fields sit in fixed two-column rows: wrapped flex-grow rows under-reported their height on Android.
+    const fieldRows = tree.root.findAllByType(View).filter(node => node.props.style?.flexDirection === 'row' && node.props.style?.alignItems === 'flex-end');
+    // At 320 dp with 3x text each amount takes its own row.
+    expect(fieldRows).toHaveLength(3);
+    expect(fieldRows.some(node => node.props.style?.flexWrap === 'wrap')).toBe(false);
     expect(tab(tree, 'Funds available').props.accessibilityState.selected).toBe(true);
     expect(tab(tree, 'LVR').props.accessibilityState.selected).toBe(false);
   } finally { act(() => tree.unmount()); }
@@ -344,14 +352,14 @@ test('property edits debounce and survive remount; external replacement clears e
   expect(useMortgageComparison.getState()).toEqual({ loanAmount: '600000', lvr: '', lvrMode: 'funds', fundsType: 'offset', fundsAvailable: '100000', propertyValue: '800000' });
 });
 
-test('offset inputs and type selector retain wrapping accessible controls at large text sizes', () => {
+test('offset inputs and type selector stay accessible in fixed rows at large text sizes', () => {
   mockDimensions = { width: 320, height: 800, scale: 3, fontScale: 3 };
   setMortgageComparisonInputs({ loanAmount: '', lvr: '', lvrMode: 'funds', fundsType: 'offset' });
   const tree = mount();
   try {
     expect(tree.root.findAllByType(TextInput).map(node => node.props.accessibilityLabel))
       .toEqual(['Loan amount, thousands of dollars', 'Offset balance, thousands of dollars', 'Property value, thousands of dollars']);
-    expect(tree.root.findAllByType(View).filter(node => node.props.style?.flexBasis === 220)).toHaveLength(3);
+    expect(tree.root.findAllByType(View).filter(node => node.props.style?.flexDirection === 'row' && node.props.style?.alignItems === 'flex-end')).toHaveLength(3);
     for (const label of ['Deposit', 'Offset account']) {
       const control = tab(tree, label), style = StyleSheet.flatten(control.props.style({ pressed: false }));
       expect(style.minHeight).toBeGreaterThanOrEqual(48);
@@ -404,5 +412,16 @@ test('a saved funds scenario without a type stays a deposit through edits and a 
     choose(tree, 'Funds available');
     expect(tab(tree, 'Deposit').props.accessibilityState.selected).toBe(true);
     expect(input(tree, 'Deposit')?.props.value).toBe('160');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('at normal text size two amounts share a fixed row', () => {
+  mockDimensions = { width: 400, height: 800, scale: 3, fontScale: 1 };
+  setMortgageComparisonInputs({ loanAmount: '', lvr: '', lvrMode: 'funds', fundsType: 'offset' });
+  const tree = mount();
+  try {
+    const fieldRows = tree.root.findAllByType(View).filter(node => node.props.style?.flexDirection === 'row' && node.props.style?.alignItems === 'flex-end');
+    expect(fieldRows).toHaveLength(2);
+    expect(fieldRows.some(node => node.props.style?.flexWrap === 'wrap')).toBe(false);
   } finally { act(() => tree.unmount()); }
 });

@@ -30,5 +30,21 @@
   {"journey": "Compare two rates", "name": "select first comparison rate", "think": 800, "tap": {"contains": ", Comparison rate ", "clickable": true, "index": 0, "selected": false}, "then": {"contains": ", Comparison rate ", "clickable": true, "index": 0, "selected": true}},
   {"journey": "Compare two rates", "name": "select second comparison rate", "think": 800, "tap": {"contains": ", Comparison rate ", "clickable": true, "index": 0, "selected": false}, "then": {"label": "Compare 2", "clickable": true}},
   {"journey": "Compare two rates", "name": "open two-rate comparison", "think": 800, "tap": {"label": "Compare 2", "clickable": true}, "then": [{"text": "Comparison rate"}, {"text": "Compare"}], "gone": "Minimum 2 rates"},
-  {"journey": "Compare two rates", "name": "return from two-rate comparison", "think": 800, "back": true, "then": [{"label": "Home loans", "selected": true}, {"label": "Temporary filters", "clickable": true}]}
+  {"journey": "Compare two rates", "name": "return from two-rate comparison", "think": 800, "back": true, "then": [{"label": "Home loans", "selected": true}, {"label": "Temporary filters", "clickable": true}]},
+  {"journey": "Saved Savings matches", "name": "open savings profile", "freshOnly": true, "open": "/profile"},
+  {"journey": "Saved Savings matches", "name": "open savings features", "freshOnly": true, "tap": {"id": "profile:Savings:accountFeatures:open"}, "scroll": true, "then": "Card access"},
+  {"journey": "Saved Savings matches", "name": "require Card access", "freshOnly": true, "tap": {"label": "Card access", "checked": false}, "then": {"label": "Card access", "checked": true}},
+  {"journey": "Saved Savings matches", "name": "require PayID", "freshOnly": true, "tap": {"label": "PayID", "checked": false}, "then": {"label": "PayID", "checked": true}},
+  {"journey": "Saved Savings matches", "name": "require Unlimited transactions", "freshOnly": true, "tap": {"label": "Unlimited transactions", "checked": false}, "then": {"label": "Unlimited transactions", "checked": true}},
+  {"journey": "Saved Savings matches", "name": "require Bill payment", "freshOnly": true, "tap": {"label": "Bill payment", "checked": false}, "then": {"label": "Bill payment", "checked": true}},
+  {"journey": "Saved Savings matches", "name": "save four savings features", "freshOnly": true, "tap": "Done", "gone": "Done"},
+  {"journey": "Saved Savings matches", "name": "open savings rate kinds", "freshOnly": true, "tap": {"id": "profile:Savings:depositKinds:open"}, "then": "Ongoing"},
+  {"journey": "Saved Savings matches", "name": "choose ongoing savings", "freshOnly": true, "tap": {"label": "Ongoing", "checked": false}, "then": {"label": "Ongoing", "checked": true}},
+  {"journey": "Saved Savings matches", "name": "save savings rate kind", "freshOnly": true, "tap": "Done", "gone": "Done"},
+  {"journey": "Saved Savings matches", "name": "reconcile saved savings matches", "freshOnly": true, "open": "/search?section=Savings", "then": {"contains": "After saved requirements:"}},
+  {"journey": "Saved Savings matches", "name": "show saved savings matches if hidden", "freshOnly": true, "tap": "Show saved matches", "optional": true, "gone": "Show saved matches"},
+  {"journey": "Saved Savings matches", "name": "open a priced matching account", "freshOnly": true, "tap": {"id": "rate-card-Savings", "contains": "%"}, "scroll": true, "gone": {"id": "rate-card-Savings"}},
+  {"journey": "Restore Savings profile", "name": "restore audit profile", "freshOnly": true, "open": "/profile"},
+  {"journey": "Restore Savings profile", "name": "clear audit requirements", "freshOnly": true, "tap": {"contains": "Clear all saved requirements"}, "scroll": true, "gone": {"contains": "Clear all saved requirements"}},
+  {"journey": "Restore Savings profile", "name": "leave savings profile", "freshOnly": true, "open": "/search?section=Mortgage"}
 ]

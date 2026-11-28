@@ -135,3 +135,35 @@ test('selecting the final facet flushes the latest amount and offset inputs befo
     expect(useMortgageComparison.getState()).toEqual({ loanAmount: '650000', lvr: '', lvrMode: 'funds', fundsType: 'offset', fundsAvailable: '100000', propertyValue: '900000' });
   } finally { act(() => tree.unmount()); jest.useRealTimers(); restoreRatesSession(original); clearMortgageComparison(); }
 });
+
+test('loan purpose and repayment take one choice each: another chip replaces it and the chosen chip clears it', () => {
+  jest.useFakeTimers();
+  const original = captureRatesSession(); initializeRatesSession(DEFAULT_PREFS, 'Mortgage'); clearMortgageComparison();
+  updateRatesSection('Mortgage', { filters: { ...EMPTY_FILTERS } });
+  const rows = [
+    { product_key: 'a', provider: 'Bank', product_name: 'A', rate: '0.06', loan_purpose: 'OWNER_OCCUPIED', ribbon_repayment_type: 'PRINCIPAL_AND_INTEREST' },
+    { product_key: 'b', provider: 'Bank', product_name: 'B', rate: '0.07', loan_purpose: 'INVESTMENT', ribbon_repayment_type: 'INTEREST_ONLY' },
+  ];
+  let tree!: ReactTestRenderer & { root: { findAllByType(type: any): { props: { label: string; onPress(): void } }[] } };
+  act(() => { tree = TestRenderer.create(<MortgageComparisonControls rows={rows} filters={{ ...EMPTY_FILTERS }} unverified={0} invalid={false} />) as typeof tree; });
+  const facets = () => useRatesSession.getState().sections.Mortgage.filters;
+  const press = (pattern: RegExp) => {
+    act(() => tree.root.findAllByType('Chip' as any).find(item => pattern.test(String(item.props.label)))!.props.onPress());
+    act(() => tree.update(<MortgageComparisonControls rows={rows} filters={facets()} unverified={0} invalid={false} />));
+  };
+  try {
+    press(/interest only/i);
+    expect(facets().repaymentTypes).toEqual(['INTEREST_ONLY']);
+    press(/principal/i);
+    expect(facets().repaymentTypes).toEqual(['PRINCIPAL_AND_INTEREST']);
+    press(/investor/i);
+    expect(facets().loanPurposes).toEqual(['INVESTMENT']);
+    press(/investor/i);
+    expect(facets().loanPurposes).toEqual([]);
+  } finally {
+    act(() => tree.unmount());
+    jest.useRealTimers();
+    restoreRatesSession(original);
+    clearMortgageComparison();
+  }
+});

@@ -567,7 +567,7 @@ export default function RatesWorkspace() {
       const priced = resolvedPublicRankingRows([entry.row], catalogue,
         row => scenarioFor(entry.section, row)).rows;
       return entry.section === 'Mortgage'
-        ? mortgageComparisonRows(priced, mortgageInputs, { core, details, manifest, coreIntegrity }).rows.length > 0
+        ? mortgageComparisonRows(priced, mortgageInputs, { core, details, manifest, coreIntegrity }, { upperBounds: false }).rows.length > 0
         : priced.length > 0;
     });
     if (applicable.length !== selected.length || applicable.some((token, index) => token !== selected[index])) setSelected(applicable);
@@ -768,6 +768,7 @@ export default function RatesWorkspace() {
         factCriteria: effectiveFilters.factCriteria,
         ...(effectiveFilters.factMatchMode === 'unknown' ? { factMatchMode: 'unknown' as const } : {}),
         includeNonStandard: effectiveFilters.includeNonStandard,
+        ...(effectiveFilters.includeLowSavingsRates ? { includeLowSavingsRates: true } : {}),
       },
     }),
     [section, path, hierarchyScoped, query, sortKey, effectiveFilters],
@@ -851,6 +852,10 @@ export default function RatesWorkspace() {
       filters: { ...EMPTY_FILTERS, includeNonStandard }, includeNonStandardOverride: null }, true);
     if (section === 'Mortgage') restoreSavedMortgageComparison();
   }, [includeNonStandard, section]);
+  const showSavedSavingsMatches = useCallback(() => {
+    updateRatesSection('Savings', { query: '', path: [], hierarchyScoped: false, intentError: null,
+      filters: { ...EMPTY_FILTERS, includeLowSavingsRates: true }, includeNonStandardOverride: true }, true);
+  }, []);
   const intentPending = Boolean(intentKey && consumedIntent.current !== intentKey) || !session.initialized;
   const searchPending = intentPending || (!task.intentError && (availability === 'unlisted' ? !catalogueDetails
     : section === 'Mortgage' && !mortgageCriteriaReady && !isDefaultMortgageBrowse ? false
@@ -1335,7 +1340,10 @@ export default function RatesWorkspace() {
           keyboardDismissMode="on-drag"
           data={displayedPageRows}
           ListHeaderComponent={availability === 'listed' ? <View style={{ gap: 8 }}>
-            <SavedRequirementsSummary section={section} catalogueRows={summaryCatalogueRows} />
+            <SavedRequirementsSummary section={section} catalogueRows={summaryCatalogueRows}
+              visibleRates={section === 'Savings' && !searchPending && !preparedResults.error && !publicPricing.error && !task.intentError ? rows.length : undefined}
+              onShowMatches={effectiveFilters.includeLowSavingsRates ? undefined : showSavedSavingsMatches}
+              onResetView={section === 'Savings' && effectiveFilters.includeLowSavingsRates ? resetRatesView : undefined} />
             {section === 'Mortgage' ? <MortgageComparisonControls collapsible open={scenarioOpen} onOpenChange={setScenarioOpen}
               catalogue={catalogue} rows={core.sections.Mortgage.rates} filters={effectiveFilters}
               unverified={mortgageCriteriaReady || isDefaultMortgageBrowse ? unverifiedResultCount : 0} invalid={mortgageScope.invalid} /> : null}

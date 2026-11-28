@@ -1,3 +1,4 @@
+import { chooseFilterValue, isSingleChoiceFilter } from '../data/filterChoice';
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
 import { ChipStrip } from './selectors';
@@ -6,7 +7,6 @@ import type { Filters } from '../data/selectors';
 import type { SearchFilterOptions } from '../data/searchFilterOptions';
 import { humanizeEnum } from '../data/format';
 import { uiLoanPurpose } from '../lib/financialUiCopy';
-import { lvrTierDisplay } from '../data/lvrTier';
 import {
   boundedPublishedFactFilterOptions,
   factCriterionId,
@@ -24,7 +24,6 @@ function filterGroupTitle(field: string): UiCopy {
     case 'loan_purpose': return uiLabel('Loan purpose');
     case 'rate_type': return uiLabel('Rate type');
     case 'ribbon_repayment_type': return uiLabel('Repayment');
-    case 'lvr_tier': return uiJoin('LVR', ' · ', 'Tier');
     case 'interest_payment': return uiLabel('Interest paid');
     case 'ribbon_deposit_kind': return uiLabel('Account type');
     default: return uiLabel('Filter');
@@ -143,9 +142,7 @@ function FilterSheetInner({
 
   const toggle = (key: keyof Filters, value: string) => {
     setDraft((d) => {
-      const list = (d[key] as string[]) ?? [];
-      const next = list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
-      return { ...d, [key]: next };
+      return { ...d, [key]: chooseFilterValue((d[key] as string[]) ?? [], value, isSingleChoiceFilter(key)) };
     });
   };
 
@@ -249,7 +246,7 @@ function FilterSheetInner({
                     groupKey: g.key,
                     options,
                     selected: draft[g.key] as string[],
-                    label: (o) => (g.field === 'lvr_tier' ? lvrTierDisplay(o) : g.field === 'loan_purpose' ? uiLoanPurpose({ loan_purpose: o }) : humanizeEnum(o)),
+                    label: (o) => (g.field === 'loan_purpose' ? uiLoanPurpose({ loan_purpose: o }) : humanizeEnum(o)),
                     onToggle: (o) => toggle(g.key, o),
                   })}
                 </View>

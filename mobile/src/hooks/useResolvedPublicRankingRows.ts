@@ -312,7 +312,7 @@ export function useResolvedPublicRankingRows(options: {
             const prefix = leadingSortedRowsInInputOrder(resolution.rows, leading.limit, leading.sortKey, req.section,
               leading.metric, leading.mortgageMetric);
             const early = await timing.measure('mortgageScopeMs', () =>
-              mortgageComparisonRowsCooperatively(prefix, req.mortgageInputs!, req.mortgageContext, control));
+              mortgageComparisonRowsCooperatively(prefix, req.mortgageInputs!, req.mortgageContext, { ...control, tierRows: resolution.rows }));
             if (cancelled || flightRef.current !== flight) return;
             if (requestRef.current !== req) { restart(); continue; }
             if (Date.now() >= validity.until()) { restart(); setLeadingSnapshot(null); continue; }

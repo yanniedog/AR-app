@@ -1,6 +1,6 @@
 import { useProductCriteria } from '../../src/hooks/useProductCriteria';
 import { ProductDocuments } from '../../src/components/product/ProductDocuments';
-import { ProductPageLinks } from '../../src/components/product/ProductPageLink';
+import { ProductPageLinks, ProductWebLink } from '../../src/components/product/ProductPageLink';
 import type { RateRow, SectionKey } from '../../src/types';
 import { useRatesSession } from '../../src/data/ratesSession';
 import { useMortgageComparison } from '../../src/data/mortgageComparison';
@@ -58,7 +58,7 @@ import { isMandatoryEligibilityReady, mandatoryProductAllowed } from '../../src/
 import { findEligibleByKey } from '../../src/data/selectors';
 import { rowsForProductKey } from '../../src/data/rateRowIndex';
 import { selectBankHistoryChartModel, selectBankHistoryChartModelCooperatively } from '../../src/data/historySelectors';
-import { mortgageHistoryLvr, mortgageHistoryLvrLabel } from '../../src/data/mortgageHistoryLvr';
+import { mortgageHistoryLvr, mortgageHistoryLvrLabel, profileLvrPercent, userLvrPercent } from '../../src/data/mortgageHistoryLvr';
 import { mergeProductHistoryTimeline, rateHistoryChartModel } from '../../src/data/rateHistoryCharts';
 import {
   countFiniteSeriesPoints,
@@ -308,7 +308,15 @@ export default function ProductDetail() {
     [boundRow, found, publicCatalogue, scenarioFor]);
   const row = useMemo(() => boundRow && publicResolution ? { ...boundRow, rate: publicResolution.status === 'exact' && publicResolution.verifiedCurrent ? publicResolution.payableRate ?? '' : '' } : boundRow,
     [boundRow, publicResolution]);
-  const mortgageLvr = found?.section === 'Mortgage' ? mortgageHistoryLvr(row?.lvr_tier) : undefined;
+  // The saved scenario sets the benchmark LVR whether or not the public catalogue lists this product.
+  const benchmarkScenarioLvr = useMemo(() => {
+    if (found?.section !== 'Mortgage') return undefined;
+    const saved = publicRateScenario('Mortgage', scenario, profile, row ?? undefined);
+    return (fromRatesComparison ? ratesComparisonScenario('Mortgage', saved, comparisonInputs, mortgageFilters) : saved).lvr;
+  }, [found?.section, scenario, profile, row, fromRatesComparison, comparisonInputs, mortgageFilters]);
+  const userLvr = found?.section === 'Mortgage'
+    ? userLvrPercent(benchmarkScenarioLvr) ?? profileLvrPercent(profile?.lvrTiers) : null;
+  const mortgageLvr = found?.section === 'Mortgage' ? mortgageHistoryLvr(userLvr) : undefined;
   const rateHistory = useBankRateHistory(historyEnabled && !!found && historySurfaceReady, mortgageLvr);
   const calculationScenario = useMemo(() => found ? scenarioWithLocalCurrentRate(found.section, scenario,
     resolveLocalCurrentRate(found.section, scenario, publicCatalogue.references, undefined, publicCatalogue, profile)) : scenario,
@@ -324,6 +332,12 @@ export default function ProductDetail() {
     }
     return best;
   }, [found]);
+  // A home loan's product history is its lowest rate across every tier. When the
+  // selected tier prices differently that line is not this loan's rate, so the
+  // chart shows the selected rate itself rather than another tier's history.
+  const selectedRate = row ? toFraction(row.rate) : null;
+  const plotSelectedOnly = found?.section === 'Mortgage' && selectedRate != null && selectedRate > 0
+    && currentBest != null && selectedRate !== currentBest;
   const auditProductError = core && isMandatoryEligibilityReady() && !row
     ? !mandatoryProductAllowed(productKey)
       ? 'The selected product does not meet the current mandatory profile requirements'
@@ -486,12 +500,14 @@ export default function ProductDetail() {
       : productSeriesRecordWithCurrent(productHistory, productKey, core?.run_date, currentBest)
   ), [historySurfaceReady, productHistory, productKey, core?.run_date, currentBest]);
   const productSeries = useMemo(() => ({
-    values: productSeriesRecordForChart(productHistory, productKey,
-      historyModel?.allDates ?? historyModel?.dates ?? [], core?.run_date, currentBest),
+    values: plotSelectedOnly
+      ? productSeriesRecordForChart(null, productKey, historyModel?.allDates ?? historyModel?.dates ?? [], core?.run_date, selectedRate)
+      : productSeriesRecordForChart(productHistory, productKey,
+        historyModel?.allDates ?? historyModel?.dates ?? [], core?.run_date, currentBest),
     label: row ? uiProductName(row) : uiLabel('Product'),
-    valueScope: uiJoin('Leading advertised', ' · ', 'All tiers'),
+    valueScope: plotSelectedOnly ? uiLabel('Selected rate') : uiJoin('Leading advertised', ' · ', 'All tiers'),
     color: theme.ledger.info,
-  }), [productHistory, productKey, historyModel, core?.run_date, currentBest, row, theme.ledger.info]);
+  }), [plotSelectedOnly, selectedRate, productHistory, productKey, historyModel, core?.run_date, currentBest, row, theme.ledger.info]);
 
   // Single-day fallback is a misleading solid RBA block; wait for multi-day context
   // when Standard-only mode is relying on bank insights that have not arrived yet.
@@ -718,7 +734,7 @@ export default function ProductDetail() {
   const presentation = ratePresentation(row, section, mortgageRateMetric);
 
   const observedProductPoints = countFiniteSeriesPoints(seededProductValues);
-  const selectedHistoryContext = currentBest !== null && toFraction(row.rate) !== currentBest
+  const selectedHistoryContext = !plotSelectedOnly && currentBest !== null && toFraction(row.rate) !== currentBest
     ? uiJoin('Selected rate', ' ', formatRate(row.rate), ' · ', 'Leading advertised', ' ', formatRate(currentBest), ' · ', 'All tiers')
     : null;
 
@@ -770,7 +786,7 @@ export default function ProductDetail() {
           ),
         }}
       />
-      <ProductPageLinks overview={detail?.links?.overview} productDetails={descriptiveDetail}><ScreenScrollView
+      <ProductPageLinks overview={detail?.links?.overview} productDetails={descriptiveDetail} fallbackUrl={publicProduct?.sourceEvidence?.url}><ScreenScrollView
         onLayout={() => setLayoutReady(true)}
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
       >
@@ -787,6 +803,7 @@ export default function ProductDetail() {
             <AppText variant="small" color="textMuted">{uiSectionName(section)}</AppText>
           </View>
         </Row>
+        <ProductWebLink />
 
         <View style={{ marginBottom: 16, gap: 4 }}>
           <AppText variant="small" color="textMuted">
@@ -952,7 +969,7 @@ export default function ProductDetail() {
                       onPress={() => void ensureProductHistory({ force: true })}
                     />
                   </Row>
-                ) : observedProductPoints < 2 ? (
+                ) : observedProductPoints < 2 && !plotSelectedOnly ? (
                   <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
                     {uiJoin('Leading advertised', ' ', formatRate(currentBest), ' · ', 'All tiers')}
                   </AppText>

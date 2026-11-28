@@ -68,11 +68,11 @@ test('all selected values remain visible beyond the old twelve-option limit and 
 });
 test('empty catalogue still exposes hidden saved values, unrecognised features and the scoped clear action', () => {
   mockCore = core([]); const onChange = jest.fn(); let tree: any;
-  const value: ProfileFilters = { ...EMPTY_PROFILE, lvrTiers: ['lvr_70-80%'], rateTypes: ['OLD_TYPE'],
+  const value: ProfileFilters = { ...EMPTY_PROFILE, rateTypes: ['OLD_TYPE'],
     depositKinds: ['BONUS'], accountFeatures: ['OFFSET', 'CARD_ACCESS', 'LEGACY_FEATURE'] };
   act(() => { tree = TestRenderer.create(<ProfileEditor sections={['Mortgage', 'Savings', 'TD']} value={value} onChange={onChange} />); });
   try {
-    expect(chips(tree.root).filter((n: any) => n.props.selected)).toHaveLength(6);
+    expect(chips(tree.root).filter((n: any) => n.props.selected)).toHaveLength(5);
     act(() => chips(tree.root).find((n: any) => n.props.label === 'LEGACY_FEATURE').props.onPress());
     expect(onChange.mock.calls[0][0].accountFeatures).toEqual(['OFFSET', 'CARD_ACCESS']);
     act(() => tree.root.findAllByType('Button').find((n: any) => n.props.title === 'Clear Home loans requirements').props.onPress());
@@ -114,11 +114,11 @@ test('shared features are edited once with both affected categories visible', ()
   } finally { act(() => tree.unmount()); }
 });
 
-test('LVR options in ProfileEditor are strictly the five canonical bands', () => {
+test('ProfileEditor offers no LVR band options', () => {
   mockCore = {
     sections: {
       Mortgage: {
-        rates: ['lvr_<=30%', 'lvr_0.01-35%', 'lvr_<=59.99%', 'lvr_<=60%', 'lvr_60-69.9999%', 'lvr_70-80%', 'lvr_85-90%', 'lvr_>=80.01-95%']
+        rates: ['lvr_<=30%', 'lvr_60-69.9999%', 'lvr_70-80%', 'lvr_85-90%', 'lvr_>=80.01-95%']
           .map((lvr_tier, index) => ({ lvr_tier, product_key: String(index), product_name: String(index), provider: 'A', rate: '0.05' })),
       },
       Savings: { rates: [] },
@@ -126,13 +126,25 @@ test('LVR options in ProfileEditor are strictly the five canonical bands', () =>
     },
   };
   let tree: any;
-  const onChange = jest.fn();
-  act(() => { tree = TestRenderer.create(<ProfileEditor sections={['Mortgage']} value={EMPTY_PROFILE} onChange={onChange} />); });
+  act(() => { tree = TestRenderer.create(<ProfileEditor sections={['Mortgage']} value={EMPTY_PROFILE} onChange={jest.fn()} />); });
   try {
-    const labels = chips(tree.root).map((node: any) => node.props.label);
-    expect(labels.filter((label: string) => label.includes('60') || label.includes('70') || label.includes('80') || label.includes('90') || label.includes('30')))
-      .toEqual(['<60', '60-70', '70-80', '80-90', '>90']);
-    act(() => chips(tree.root).find((node: any) => node.props.label === '70-80').props.onPress());
-    expect(onChange).toHaveBeenCalledWith({ ...EMPTY_PROFILE, lvrTiers: ['70-80'] });
+    const labels = chips(tree.root).map((node: any) => String(node.props.label));
+    expect(labels.filter(label => /^(<60|60-70|70-80|80-90|>90)$/.test(label) || label.includes('lvr_'))).toEqual([]);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('single-choice groups use radio rows; saved extras show as ticks until removed and Features stay ticks', () => {
+  mockCore = core(['FIXED', 'VARIABLE']);
+  const onChange = jest.fn(); let tree: any;
+  const field = (label: string) => tree.root.findAllByType('OptionSelect').find((n: any) => n.props.label === label);
+  act(() => { tree = TestRenderer.create(<ProfileEditor sections={['Mortgage']} value={{ ...EMPTY_PROFILE, rateTypes: ['FIXED'] }} onChange={onChange} />); });
+  try {
+    expect(field('Rate type').props.multiple).toBe(false);
+    act(() => tree.update(<ProfileEditor sections={['Mortgage']} value={{ ...EMPTY_PROFILE, rateTypes: ['FIXED', 'VARIABLE'] }} onChange={onChange} />));
+    expect(field('Rate type').props.multiple).toBe(true);
+    act(() => field('Rate type').props.onChange('VARIABLE'));
+    expect(onChange.mock.calls[0][0].rateTypes).toEqual(['FIXED']);
+    const features = field('Features');
+    if (features) expect(features.props.multiple).toBe(true);
   } finally { act(() => tree.unmount()); }
 });

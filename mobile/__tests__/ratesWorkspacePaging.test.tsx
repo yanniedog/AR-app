@@ -1051,7 +1051,7 @@ test.each([false, true])('public-only facet chips reveal an offer with saved leg
   } finally { act(() => tree.unmount()); }
 });
 
-test('multiple mortgage chips retain both public-only offers with exact row pricing scope', () => {
+test('saved multi-value mortgage facets retain both public-only offers with exact row pricing scope', () => {
   const options = [['owner-pi', 'OWNER_OCCUPIED', 'PRINCIPAL_AND_INTEREST', '0.05'], ['investor-io', 'INVESTMENT', 'INTEREST_ONLY', '0.06']];
   const programmes = options.map(([id, purpose, repayment, value]) => {
     const p = publicProgramme({ programmeId: id, offerId: id, sourceBindings: [], conditions: [
@@ -1072,10 +1072,9 @@ test('multiple mortgage chips retain both public-only offers with exact row pric
   try {
     act(() => tree.root.findByProps({ accessibilityLabel: 'Edit' }).props.onPress());
     const chips = () => tree.root.findByProps({ testID: 'mortgage-comparison-controls' }).findAllByType('Chip');
-    // The first explicit choice replaces each shown default; the next one adds.
-    for (const label of ['Investor', 'Owner occupied', 'Interest only', 'Principal & interest']) {
-      act(() => chips().find((chip: any) => chip.props.label === label)!.props.onPress());
-    }
+    // Facets saved before purpose and repayment became single-choice still price every saved combination.
+    act(() => updateRatesSection('Mortgage', current => ({ filters: { ...current.filters,
+      loanPurposes: ['INVESTMENT', 'OWNER_OCCUPIED'], repaymentTypes: ['INTEREST_ONLY', 'PRINCIPAL_AND_INTEREST'] } })));
     expect(tree.root.findByType('FlashList').props.data.map((row: any) => [row.public_offer_id, row.rate]))
       .toEqual([['owner-pi', '0.05'], ['investor-io', '0.06']]);
     expect(tree.root.findAllByType('ProductCard').map((card: any) => [card.props.rateScenario.purpose, card.props.rateScenario.repayment]))

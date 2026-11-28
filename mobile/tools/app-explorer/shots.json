@@ -3,7 +3,7 @@
     "name": "browse",
     "open": "/browse",
     "scroll": 0,
-    "why": "home rates list, incl. early first page after eligibility is ready, then the settled page (rows must not shift); stacked product rows sit 8 dp apart"
+    "why": "home rates list, incl. early first page after eligibility is ready, then the settled page (rows must not shift); stacked product rows sit 8 dp apart; TD term and payment frequency are checked in the real-use session"
   },
   {
     "name": "watchlist",
@@ -31,9 +31,9 @@
   },
   {
     "name": "search",
-    "open": "/search",
+    "open": "/search?section=Savings",
     "scroll": 0,
-    "why": "search"
+    "why": "Savings list, saved requirement and visible counts, recovery action when all matches are hidden"
   },
   {
     "name": "bank-rates",
@@ -106,7 +106,7 @@
     "name": "profile",
     "open": "/profile",
     "scroll": 0,
-    "why": "profile requirements as collapsed rows (label, current choice, chevron) instead of chip grids"
+    "why": "profile requirements as collapsed rows (label, current choice, chevron) and the mortgage comparison fields in fixed rows that no longer overlap; purpose, repayment and rate type take one choice"
   },
   {
     "name": "product-history",
@@ -123,9 +123,10 @@
     "why": "Bank of Sydney lender history: verify the timeframe strip fits the chart viewport and retains 48 dp controls"
   },
   {
-    "name": "catalogue",
-    "open": "/catalogue",
-    "scroll": 0,
-    "why": "catalogue"
+    "name": "mortgage-history",
+    "open": "/product/Bank%20of%20Queensland%20Limited%7C59906e88-5c03-ee11-8f6e-00224814d330%7CRESIDENTIAL_MORTGAGES%7CClear%20Path%20Variable%20Home%20Loan",
+    "scroll": 1,
+    "visibleAction": "1 year",
+    "why": "Home loan history: benchmark ribbon at the user's LVR and above (default 80%), 1 year default, product line at the selected rate (labelled Selected rate when another tier leads), missing observations counted from first observation, and the Provider website link"
   }
 ]
