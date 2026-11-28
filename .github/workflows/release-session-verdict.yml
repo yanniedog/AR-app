@@ -1,0 +1,25 @@
+name: Released APK session verdict
+on:
+  workflow_run:
+    workflows: [app-explorer]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      explorer_run:
+        description: Completed App Explorer run ID
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  session-verdict:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.event != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Check the current APK's archived real-use verdict
+        run: node mobile/tools/app-explorer/release-session-verdict.mjs >> "$GITHUB_STEP_SUMMARY"

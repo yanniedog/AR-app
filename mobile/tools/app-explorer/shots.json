@@ -3,7 +3,7 @@
     "name": "browse",
     "open": "/browse",
     "scroll": 0,
-    "why": "home rates list including selected-offer rate-change labels, incl. early first page after eligibility is ready, then the settled page (rows must not shift); stacked product rows sit 8 dp apart"
+    "why": "home rates list, incl. early first page after eligibility is ready, then the settled page (rows must not shift); stacked product rows sit 8 dp apart; TD term and payment frequency are checked in the real-use session"
   },
   {
     "name": "watchlist",
@@ -31,9 +31,9 @@
   },
   {
     "name": "search",
-    "open": "/search",
+    "open": "/search?section=Savings",
     "scroll": 0,
-    "why": "search"
+    "why": "Savings list, saved requirement and visible counts, recovery action when all matches are hidden"
   },
   {
     "name": "bank-rates",
@@ -110,7 +110,7 @@
     "open": "/product/Bank%20of%20Sydney%7Cterm_deposit%7CTERM_DEPOSITS%7CTerm%20Deposit",
     "scroll": 1,
     "visibleAction": "1 year",
-    "why": "Bank of Sydney term deposit history: verify the timeframe strip remains reachable and clear of adjacent content"
+    "why": "Bank of Sydney term deposit history and selected-offer rate-change labels: verify the timeframe strip remains reachable and clear of adjacent content"
   },
   {
     "name": "bank-history",
