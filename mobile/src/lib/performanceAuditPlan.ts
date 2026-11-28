@@ -4,7 +4,7 @@ import { rowsForProductKey } from '../data/rateRowIndex';
 import { isSuitabilityFilterReady } from '../data/suitabilityGate';
 import { savedRateId } from '../data/savedRates';
 import { publicOfferSelectionToken } from '../data/publicOfferIdentity';
-import { canonicalPurpose, canonicalRepayment } from '../data/mortgageFacets';
+import { rowRepaymentType, canonicalPurpose, canonicalRepayment } from '../data/mortgageFacets';
 import { parseLvrRange } from '../data/lvrRange';
 import { mortgageComparisonRows } from '../data/mortgageComparison';
 import type { RateConditionContext } from '../data/rateConditions';
@@ -318,7 +318,7 @@ function amountInsideBounds(row: RateRow, random: () => number): string {
 function sampleMortgageScope(rows: readonly RateRow[], random: () => number): DeepAuditMortgageScope {
   const candidates = shuffled(rows.filter(row => {
     const purpose = canonicalPurpose(row.loan_purpose ?? row.security_purpose);
-    const repayment = canonicalRepayment(row.ribbon_repayment_type ?? row.repayment_type);
+    const repayment = canonicalRepayment(rowRepaymentType(row));
     return Boolean(purpose?.trim() && repayment?.trim() && lvrInsideTier(row.lvr_tier, () => 0.5));
   }), random);
   const seed = candidates[0] ?? shuffled(rows, random)[0];
@@ -326,7 +326,7 @@ function sampleMortgageScope(rows: readonly RateRow[], random: () => number): De
     ? canonicalPurpose(seed.loan_purpose ?? seed.security_purpose)
     : null;
   const repayment = seed
-    ? canonicalRepayment(seed.ribbon_repayment_type ?? seed.repayment_type)
+    ? canonicalRepayment(rowRepaymentType(seed))
     : null;
   const lvr = (seed && lvrInsideTier(seed.lvr_tier, random))
     ?? String(50 + Math.floor(random() * 46));

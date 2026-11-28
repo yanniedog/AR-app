@@ -1,3 +1,4 @@
+import { rowRepaymentType } from './mortgageFacets';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
 import { yieldToUi } from '../lib/yieldToUi';
 import { distinctEligibilityCriteria } from './eligibility';
@@ -76,7 +77,7 @@ export async function prepareSearchFilterOptions(
     for (const row of batch) {
       if (row.provider) providers.add(row.provider);
       groups.forEach((group, index) => {
-        const raw = row[group.field];
+        const raw = group.key === 'repaymentTypes' ? rowRepaymentType(row) : row[group.field];
         if (raw === undefined || raw === null || raw === '') return;
         const key = String(raw);
         counts[index].set(key, (counts[index].get(key) ?? 0) + 1);

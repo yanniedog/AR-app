@@ -14,8 +14,8 @@ export function mortgageRepaymentBasis(row: Pick<RateRow, 'ribbon_repayment_type
 }
 
 /** Monthly repayment for an entered loan amount at a row's payable rate:
- * interest only for interest-only rows, otherwise principal and interest over
- * {@link LIST_REPAYMENT_TERM_YEARS} years. Null when either input is missing. */
+ * interest only for interest-only rows, or principal and interest over
+ * {@link LIST_REPAYMENT_TERM_YEARS} years. Null for missing inputs or an unspecified repayment basis. */
 export function mortgageMonthlyRepayment(
   row: Pick<RateRow, 'ribbon_repayment_type' | 'repayment_type'>,
   amount: number | null | undefined,

@@ -1,3 +1,4 @@
+import { rowRepaymentType } from '../data/mortgageFacets';
 import React, { useState } from 'react';
 import { Modal, ScrollView, View } from 'react-native';
 import type { RateRow } from '../types';
@@ -15,7 +16,7 @@ export function ProviderRateFilters({ rows, profile, onChange }: {
   const [editing, setEditing] = useState<Dimension | null>(null);
   const dimensions: { key: Dimension; label: UiCopy; values: (readonly [string, UiCopy])[] }[] = [
     { key: 'loanPurposes', label: 'Purpose', values: [...new Set(rows.map(row => row.loan_purpose ?? row.security_purpose).filter((v): v is string => !!v))].map(value => [value, humanizeEnum(value)] as const) },
-    { key: 'repaymentTypes', label: 'Repayment', values: [...new Set(rows.map(row => row.ribbon_repayment_type ?? row.repayment_type).filter((v): v is string => !!v))].map(value => [value, humanizeEnum(value)] as const) },
+    { key: 'repaymentTypes', label: 'Repayment', values: [...new Set(rows.map(row => rowRepaymentType(row)).filter((v): v is string => !!v))].map(value => [value, humanizeEnum(value)] as const) },
     { key: 'rateTypes', label: 'Rate type', values: [...new Set(rows.map(row => row.rate_type).filter((v): v is string => !!v))].map(value => [value, humanizeEnum(value)] as const) },
   ];
   const dimension = dimensions.find(item => item.key === editing);

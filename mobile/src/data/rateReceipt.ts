@@ -1,3 +1,4 @@
+import { rowRepaymentType } from './mortgageFacets';
 import { collectRowBatches, sortValuesCooperatively, type RowWorkControl } from './cooperativeRows';
 import { StandardUrl } from '../lib/standardUrl';
 import { SECTIONS } from '../constants';
@@ -200,7 +201,7 @@ export function buildRateReceipt(input: {
   addFact(tier, 'Rate type', humanizeEnum(row.rate_type));
   if (section === 'Mortgage') {
     addFact(tier, 'Rate structure', humanizeEnum(row.ribbon_rate_structure));
-    addFact(tier, 'Repayment', humanizeEnum(row.ribbon_repayment_type ?? row.repayment_type));
+    addFact(tier, 'Repayment', humanizeEnum(rowRepaymentType(row)));
     addFact(tier, 'Loan purpose', humanizeEnum(row.loan_purpose ?? row.security_purpose));
     addFact(tier, 'Listed LVR', uiListedLvrRange(row));
   } else {

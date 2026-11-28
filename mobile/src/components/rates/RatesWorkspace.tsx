@@ -1172,7 +1172,7 @@ export default function RatesWorkspace() {
   }, []);
   const { refFor: physicalCellRef, measure: measurePhysicalCells } = physicalVisibility;
   const { amount: enteredLoanAmount, invalid: repaymentInputsInvalid, incompleteFunds } = mortgageComparisonValues(mortgageInputs);
-  const repaymentAmount = section === 'Mortgage' && availability === 'listed' && !repaymentInputsInvalid
+  const repaymentAmount = section === 'Mortgage' && availability === 'listed' && !displayedProvisional && !repaymentInputsInvalid
     && !incompleteFunds && enteredLoanAmount !== null && enteredLoanAmount > 0 ? enteredLoanAmount : null;
   const renderProduct = useCallback(({ item, target }: { item: ResultRow; target?: string }) => <View collapsable={false}
     ref={target === 'Cell' && !displayedProvisional ? physicalCellRef(item) : undefined}
